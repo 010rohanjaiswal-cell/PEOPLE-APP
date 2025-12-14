@@ -168,11 +168,10 @@ router.post('/verify-otp', async (req, res) => {
     // Verify OTP with Firebase REST API
     try {
       const response = await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:verifyPhoneNumber?key=${process.env.FIREBASE_API_KEY}`,
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPhoneNumber?key=${process.env.FIREBASE_API_KEY}`,
         {
-          phoneNumber: formattedPhone,
-          code: otp,
-          sessionInfo: sessionInfo
+          sessionInfo: sessionInfo,
+          code: otp
         }
       );
 
