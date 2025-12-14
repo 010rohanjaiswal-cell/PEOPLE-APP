@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "713504655146",
+    "project_id": "freelancing-platform-v2",
+    "storage_bucket": "freelancing-platform-v2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:713504655146:android:62e7fed3246e74c6938053",
+        "android_client_info": {
+          "package_name": "com.company.people"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2nDFIh15WylAq4WkgKtBwXNDII7Ej81c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

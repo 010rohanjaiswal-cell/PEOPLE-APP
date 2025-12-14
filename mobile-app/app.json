@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "People App",
+    "slug": "people-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.company.people"
+    },
+    "android": {
+      "package": "com.company.people",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to upload profile pictures and documents.",
+          "cameraPermission": "The app needs access to your camera to take photos."
+        }
+      ]
+    ],
+    "scheme": "people-app",
+    "extra": {
+      "eas": {
+        "projectId": "50810881-f6fc-4e8d-a13a-3ba11a692b7c"
+      }
+    },
+    "owner": "010rohan"
+  }
+}
