@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
@@ -13,14 +13,13 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import LoginScreen from '../screens/auth/Login';
 import OTPScreen from '../screens/auth/OTP';
 import ProfileSetupScreen from '../screens/auth/ProfileSetup';
-import FirebaseTestScreen from '../screens/auth/FirebaseTestScreen';
 
 // Dashboard Screens (to be created in Phase 3 & 4)
 // import ClientDashboard from '../screens/client/ClientDashboard';
 // import FreelancerDashboard from '../screens/freelancer/FreelancerDashboard';
 // import VerificationScreen from '../screens/freelancer/Verification';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const { isAuthenticated, user, loading } = useAuth();
@@ -38,12 +37,6 @@ const AppNavigator = () => {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="OTP" component={OTPScreen} />
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-            {/* Test Screen - Remove in production */}
-            <Stack.Screen 
-              name="FirebaseTest" 
-              component={FirebaseTestScreen}
-              options={{ title: 'Firebase Test' }}
-            />
           </>
         ) : (
           // Authenticated Stack
