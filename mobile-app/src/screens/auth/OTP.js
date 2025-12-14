@@ -22,7 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const OTP = ({ navigation, route }) => {
   const { phoneNumber, selectedRole } = route?.params || {};
-  const { login } = useAuth();
+  const { loginWithToken } = useAuth();
   
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,12 +73,8 @@ const OTP = ({ navigation, route }) => {
       if (result.success) {
         console.log('✅ OTP verified! Authentication successful!');
         
-        // Store JWT token and user data
-        await AsyncStorage.setItem('authToken', result.token);
-        await AsyncStorage.setItem('userData', JSON.stringify(result.user));
-        
         // Update auth context (this will trigger navigation via AppNavigator)
-        await login(result.token);
+        await loginWithToken(result.token, result.user);
         
         // Check if user has profile
         const user = result.user;

@@ -68,6 +68,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Direct login with JWT token (for OTP verification)
+  const loginWithToken = async (jwtToken, userData) => {
+    try {
+      // Store token and user data
+      await AsyncStorage.setItem('authToken', jwtToken);
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+      setToken(jwtToken);
+      setUser(userData);
+      setIsAuthenticated(true);
+
+      return { success: true, user: userData };
+    } catch (error) {
+      console.error('Login with token error:', error);
+      return {
+        success: false,
+        error: error.message || 'Login failed',
+      };
+    }
+  };
+
   const logout = async () => {
     try {
       // Call backend logout
@@ -100,6 +121,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated,
     login,
+    loginWithToken,
     logout,
     updateUser,
   };
