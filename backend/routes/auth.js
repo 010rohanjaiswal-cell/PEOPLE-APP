@@ -224,31 +224,41 @@ router.post('/verify-otp', async (req, res) => {
 
     } catch (firebaseError) {
       console.error('Firebase verification error:', firebaseError.response?.data || firebaseError);
+      console.error('Firebase error details:', {
+        message: firebaseError.message,
+        code: firebaseError.code,
+        response: firebaseError.response?.data,
+        status: firebaseError.response?.status,
+      });
       
-      if (firebaseError.response?.data?.error?.message?.includes('INVALID_CODE')) {
+      const errorMessage = firebaseError.response?.data?.error?.message || '';
+      
+      if (errorMessage.includes('INVALID_CODE') || errorMessage.includes('INVALID_VERIFICATION_CODE')) {
         return res.status(400).json({
           success: false,
           error: 'Invalid OTP. Please check and try again.'
         });
       }
 
-      if (firebaseError.response?.data?.error?.message?.includes('EXPIRED')) {
+      if (errorMessage.includes('EXPIRED') || errorMessage.includes('CODE_EXPIRED')) {
         return res.status(400).json({
           success: false,
           error: 'OTP has expired. Please request a new one.'
         });
       }
 
-      if (firebaseError.response?.data?.error?.message?.includes('SESSION_EXPIRED')) {
+      if (errorMessage.includes('SESSION_EXPIRED') || errorMessage.includes('SESSION_INFO_EXPIRED')) {
         return res.status(400).json({
           success: false,
           error: 'OTP session expired. Please request a new OTP.'
         });
       }
 
+      // Return more detailed error for debugging
       res.status(500).json({
         success: false,
-        error: 'Failed to verify OTP. Please try again.'
+        error: errorMessage || 'Failed to verify OTP. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? firebaseError.message : undefined,
       });
     }
 

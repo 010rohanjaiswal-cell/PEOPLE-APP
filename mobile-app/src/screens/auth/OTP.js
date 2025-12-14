@@ -18,9 +18,11 @@ import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent } fro
 import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 const OTP = ({ navigation, route }) => {
   const { phoneNumber, selectedRole } = route?.params || {};
+  const { login } = useAuth();
   
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -75,22 +77,19 @@ const OTP = ({ navigation, route }) => {
         await AsyncStorage.setItem('authToken', result.token);
         await AsyncStorage.setItem('userData', JSON.stringify(result.user));
         
+        // Update auth context (this will trigger navigation via AppNavigator)
+        await login(result.token);
+        
         // Check if user has profile
         const user = result.user;
         
         if (!user.fullName || !user.profilePhoto) {
           // Navigate to profile setup
-          navigation.replace('ProfileSetup');
+          navigation.replace('ProfileSetup', { user: result.user });
         } else {
-          // Navigate to appropriate dashboard based on role
-          if (user.role === 'client') {
-            navigation.replace('ClientDashboard');
-          } else if (user.role === 'freelancer') {
-            navigation.replace('FreelancerDashboard');
-          } else {
-            // Fallback to login if role is invalid
-            navigation.replace('Login');
-          }
+          // AuthContext will handle navigation based on role
+          // The AppNavigator will automatically redirect based on auth state
+          console.log('✅ User authenticated, navigation will be handled by AppNavigator');
         }
       } else {
         throw new Error(result.error || 'Verification failed');
@@ -307,7 +306,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: spacing.md,
     backgroundColor: colors.card,
-    color: colors.foreground,
+    color: '#000000', // Explicit black color for visibility
     paddingHorizontal: spacing.md,
   },
   submitButton: {
