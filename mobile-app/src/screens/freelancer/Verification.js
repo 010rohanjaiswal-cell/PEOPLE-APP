@@ -12,6 +12,7 @@ import {
   Alert,
   TouchableOpacity,
   Image,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -37,6 +38,14 @@ const Verification = ({ navigation }) => {
   const [docFrontUri, setDocFrontUri] = useState(null);
   const [docBackUri, setDocBackUri] = useState(null);
   const [panCardUri, setPanCardUri] = useState(null);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedDay, setSelectedDay] = useState('');
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 70 }, (_, i) => `${currentYear - i}`);
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const days = Array.from({ length: 31 }, (_, i) => `${i + 1}`.padStart(2, '0'));
 
   useEffect(() => {
     checkVerificationStatus();
@@ -55,12 +64,12 @@ const Verification = ({ navigation }) => {
 
   const pickImage = async (setterUri, label) => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Allow gallery access to upload documents.');
+        Alert.alert('Permission denied', 'Allow camera access to take a photo.');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
@@ -231,18 +240,34 @@ const Verification = ({ navigation }) => {
         value={fullName}
         onChangeText={setFullName}
       />
-      <Input
-        label="Date of Birth"
-        placeholder="DD/MM/YYYY"
-        value={dob}
-        onChangeText={setDob}
-      />
-      <Input
-        label="Gender"
-        placeholder="Male / Female"
-        value={gender}
-        onChangeText={setGender}
-      />
+      {/* Date Picker */}
+      <TouchableOpacity style={styles.selector} onPress={() => setDatePickerVisible(true)}>
+        <Text style={styles.selectorLabel}>Date of Birth</Text>
+        <Text style={styles.selectorValue}>{dob || 'Select date'}</Text>
+      </TouchableOpacity>
+
+      {/* Gender Selector */}
+      <View style={styles.genderRow}>
+        {['Male', 'Female'].map((g) => (
+          <TouchableOpacity
+            key={g}
+            style={[
+              styles.genderButton,
+              gender === g && styles.genderButtonActive,
+            ]}
+            onPress={() => setGender(g)}
+          >
+            <Text
+              style={[
+                styles.genderText,
+                gender === g && styles.genderTextActive,
+              ]}
+            >
+              {g}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <Input
         label="Address"
         placeholder="Enter your address"
@@ -368,6 +393,66 @@ const Verification = ({ navigation }) => {
           </CardContent>
         </Card>
       </ScrollView>
+      <Modal visible={datePickerVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select Date of Birth</Text>
+            <View style={styles.datePickers}>
+              <ScrollView style={styles.pickerColumn}>
+                {years.map((y) => (
+                  <TouchableOpacity
+                    key={y}
+                    style={[styles.pickerItem, selectedYear === y && styles.pickerItemActive]}
+                    onPress={() => setSelectedYear(y)}
+                  >
+                    <Text style={[styles.pickerItemText, selectedYear === y && styles.pickerItemTextActive]}>{y}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView style={styles.pickerColumn}>
+                {months.map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.pickerItem, selectedMonth === m && styles.pickerItemActive]}
+                    onPress={() => setSelectedMonth(m)}
+                  >
+                    <Text style={[styles.pickerItemText, selectedMonth === m && styles.pickerItemTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView style={styles.pickerColumn}>
+                {days.map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.pickerItem, selectedDay === d && styles.pickerItemActive]}
+                    onPress={() => setSelectedDay(d)}
+                  >
+                    <Text style={[styles.pickerItemText, selectedDay === d && styles.pickerItemTextActive]}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={styles.modalActions}>
+              <Button variant="ghost" onPress={() => setDatePickerVisible(false)} style={styles.modalButton}>
+                Cancel
+              </Button>
+              <Button
+                onPress={() => {
+                  if (selectedYear && selectedMonth && selectedDay) {
+                    setDob(`${selectedYear}-${selectedMonth}-${selectedDay}`);
+                    setDatePickerVisible(false);
+                  } else {
+                    Alert.alert('Select date', 'Please select year, month, and day.');
+                  }
+                }}
+                style={styles.modalButton}
+              >
+                Confirm
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -490,6 +575,102 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: spacing.sm,
+  },
+  selector: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: colors.cardBackground,
+  },
+  selectorLabel: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  selectorValue: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  genderButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.sm,
+    alignItems: 'center',
+    backgroundColor: colors.cardBackground,
+  },
+  genderButtonActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  genderText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  genderTextActive: {
+    color: colors.primary.main,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  datePickers: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    height: 160,
+    marginBottom: spacing.md,
+  },
+  pickerColumn: {
+    flex: 1,
+  },
+  pickerItem: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  pickerItemActive: {
+    backgroundColor: colors.primary.light,
+  },
+  pickerItemText: {
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  pickerItemTextActive: {
+    color: colors.primary.main,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  modalButton: {
+    minWidth: 100,
   },
   errorContainer: {
     flexDirection: 'row',
