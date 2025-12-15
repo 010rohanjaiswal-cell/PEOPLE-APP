@@ -28,41 +28,49 @@ const AppNavigator = () => {
     return <LoadingSpinner />;
   }
 
+  // Determine initial route based on auth state and user data
+  const getInitialRouteName = () => {
+    if (!isAuthenticated) {
+      return 'Login';
+    }
+    
+    if (!user?.fullName) {
+      return 'ProfileSetup';
+    }
+    
+    if (user?.role === 'client') {
+      return 'ClientDashboard';
+    }
+    
+    if (user?.role === 'freelancer') {
+      return 'Verification';
+    }
+    
+    // Fallback
+    return 'Login';
+  };
+
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          // Auth Stack
+      <Stack.Navigator 
+        screenOptions={{ headerShown: false }}
+        initialRouteName={getInitialRouteName()}
+      >
+        {/* Auth Screens - Always available */}
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="OTP" component={OTPScreen} />
+        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+        
+        {/* Client Dashboard - Available when authenticated */}
+        {isAuthenticated && (
+          <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
+        )}
+        
+        {/* Freelancer Screens - Available when authenticated */}
+        {isAuthenticated && (
           <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="OTP" component={OTPScreen} />
-            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-          </>
-        ) : (
-          // Authenticated Stack
-          <>
-            {/* Profile Setup - shown if user doesn't have fullName */}
-            {!user?.fullName && (
-              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-            )}
-            
-            {/* Dashboards - shown if user has fullName (profilePhoto is optional for now) */}
-            {user?.fullName && (
-              <>
-                {user?.role === 'client' ? (
-                  // Client Dashboard
-                  <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
-                ) : user?.role === 'freelancer' ? (
-                  // Freelancer navigation: Check verification status
-                  // Verification screen will check status and navigate to dashboard if approved
-                  // For now, show both screens - Verification will handle navigation
-                  <>
-                    <Stack.Screen name="Verification" component={VerificationScreen} />
-                    <Stack.Screen name="FreelancerDashboard" component={FreelancerDashboard} />
-                  </>
-                ) : null}
-              </>
-            )}
+            <Stack.Screen name="Verification" component={VerificationScreen} />
+            <Stack.Screen name="FreelancerDashboard" component={FreelancerDashboard} />
           </>
         )}
       </Stack.Navigator>
