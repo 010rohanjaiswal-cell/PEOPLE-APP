@@ -3,7 +3,7 @@
  * Main navigation structure
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +23,7 @@ const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const { isAuthenticated, user, loading } = useAuth();
+  const navigationRef = useRef(null);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -50,8 +51,35 @@ const AppNavigator = () => {
     return 'Login';
   };
 
+  // Navigate when auth state changes
+  useEffect(() => {
+    if (!loading && navigationRef.current?.isReady()) {
+      const currentRoute = navigationRef.current.getCurrentRoute()?.name;
+      let targetRoute = null;
+
+      if (!isAuthenticated) {
+        targetRoute = 'Login';
+      } else if (!user?.fullName) {
+        targetRoute = 'ProfileSetup';
+      } else if (user?.role === 'client') {
+        targetRoute = 'ClientDashboard';
+      } else if (user?.role === 'freelancer') {
+        targetRoute = 'Verification';
+      }
+
+      // Only navigate if we have a target and we're not already there
+      if (targetRoute && currentRoute !== targetRoute) {
+        console.log(`🔄 Navigating from ${currentRoute} to ${targetRoute}`);
+        navigationRef.current.reset({
+          index: 0,
+          routes: [{ name: targetRoute }],
+        });
+      }
+    }
+  }, [isAuthenticated, user, loading]);
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator 
         screenOptions={{ headerShown: false }}
         initialRouteName={getInitialRouteName()}
