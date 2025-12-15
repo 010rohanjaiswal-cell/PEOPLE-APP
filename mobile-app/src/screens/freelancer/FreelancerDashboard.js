@@ -253,7 +253,8 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   tabBarContent: {
-    paddingHorizontal: spacing.sm,
+    paddingLeft: spacing.sm,
+    paddingRight: 0,
     paddingVertical: spacing.xs,
     alignItems: 'center',
   },
