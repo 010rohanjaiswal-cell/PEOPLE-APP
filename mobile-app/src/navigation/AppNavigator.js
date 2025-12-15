@@ -14,8 +14,8 @@ import LoginScreen from '../screens/auth/Login';
 import OTPScreen from '../screens/auth/OTP';
 import ProfileSetupScreen from '../screens/auth/ProfileSetup';
 
-// Dashboard Screens (to be created in Phase 3 & 4)
-// import ClientDashboard from '../screens/client/ClientDashboard';
+// Dashboard Screens
+import ClientDashboard from '../screens/client/ClientDashboard';
 // import FreelancerDashboard from '../screens/freelancer/FreelancerDashboard';
 // import VerificationScreen from '../screens/freelancer/Verification';
 
@@ -50,10 +50,8 @@ const AppNavigator = () => {
             {user?.fullName && user?.profilePhoto && (
               <>
                 {user?.role === 'client' ? (
-                  // Client Stack - Placeholder will be replaced in Phase 3
-                  <Stack.Screen name="ClientDashboard">
-                    {() => <LoadingSpinner />}
-                  </Stack.Screen>
+                  // Client Dashboard
+                  <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
                 ) : user?.role === 'freelancer' ? (
                   // Freelancer Stack - Placeholder will be replaced in Phase 4
                   <>
