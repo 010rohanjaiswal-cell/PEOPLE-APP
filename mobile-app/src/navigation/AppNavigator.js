@@ -16,8 +16,8 @@ import ProfileSetupScreen from '../screens/auth/ProfileSetup';
 
 // Dashboard Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
+import VerificationScreen from '../screens/freelancer/Verification';
 // import FreelancerDashboard from '../screens/freelancer/FreelancerDashboard';
-// import VerificationScreen from '../screens/freelancer/Verification';
 
 const Stack = createNativeStackNavigator();
 
@@ -53,15 +53,9 @@ const AppNavigator = () => {
                   // Client Dashboard
                   <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
                 ) : user?.role === 'freelancer' ? (
-                  // Freelancer Stack - Placeholder will be replaced in Phase 4
-                  <>
-                    <Stack.Screen name="Verification">
-                      {() => <LoadingSpinner />}
-                    </Stack.Screen>
-                    <Stack.Screen name="FreelancerDashboard">
-                      {() => <LoadingSpinner />}
-                    </Stack.Screen>
-                  </>
+                  // Freelancer must complete verification before accessing dashboard
+                  // Verification screen checks status and shows appropriate UI
+                  <Stack.Screen name="Verification" component={VerificationScreen} />
                 ) : null}
               </>
             )}
