@@ -33,6 +33,7 @@ const Verification = ({ navigation }) => {
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('');
   const [address, setAddress] = useState('');
+  const [profilePhotoUri, setProfilePhotoUri] = useState(null);
   const [docFrontUri, setDocFrontUri] = useState(null);
   const [docBackUri, setDocBackUri] = useState(null);
   const [panCardUri, setPanCardUri] = useState(null);
@@ -184,8 +185,8 @@ const Verification = ({ navigation }) => {
 
   const handleSubmitVerification = async () => {
     // Basic validation
-    if (!fullName || !dob || !gender || !address || !docFrontUri || !docBackUri || !panCardUri) {
-      Alert.alert('Missing info', 'Please fill all required fields and upload all documents.');
+    if (!fullName || !dob || !gender || !address || !profilePhotoUri || !docFrontUri || !docBackUri || !panCardUri) {
+      Alert.alert('Missing info', 'Please fill all required fields and upload all documents (including profile photo).');
       return;
     }
     setSubmitting(true);
@@ -197,6 +198,7 @@ const Verification = ({ navigation }) => {
         dob,
         gender,
         address,
+        profilePhoto: profilePhotoUri,
         aadhaarFront: docFrontUri,
         aadhaarBack: docBackUri,
         panCard: panCardUri,
@@ -248,6 +250,21 @@ const Verification = ({ navigation }) => {
         onChangeText={setAddress}
         multiline
       />
+      {/* Profile Photo */}
+      <View style={styles.uploadSection}>
+        <Text style={styles.uploadLabel}>Profile Photo (Required)</Text>
+        <TouchableOpacity
+          style={styles.uploadBox}
+          onPress={() => pickImage(setProfilePhotoUri, 'Profile Photo')}
+        >
+          {profilePhotoUri ? (
+            <Image source={{ uri: profilePhotoUri }} style={styles.uploadPreview} />
+          ) : (
+            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Document Uploads with preview and upload button */}
       <View style={styles.uploadSection}>
         <Text style={styles.uploadLabel}>Aadhaar Front (Required)</Text>
