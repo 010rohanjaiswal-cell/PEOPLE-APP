@@ -4,12 +4,15 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
 
 // Tab Screens
 import PostJobScreen from './PostJob';
@@ -21,6 +24,8 @@ const ClientDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('PostJob');
   const [logoutError, setLogoutError] = useState('');
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
 
   const tabs = [
     { key: 'PostJob', label: 'Post Job', icon: 'add-circle', component: PostJobScreen },
@@ -31,7 +36,35 @@ const ClientDashboard = () => {
 
   const ActiveScreen = tabs.find(tab => tab.key === activeTab)?.component || PostJobScreen;
 
+  const toggleDrawer = () => {
+    if (drawerVisible) {
+      // Close drawer
+      Animated.timing(drawerAnimation, {
+        toValue: -DRAWER_WIDTH,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setDrawerVisible(false));
+    } else {
+      // Open drawer
+      setDrawerVisible(true);
+      Animated.timing(drawerAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const closeDrawer = () => {
+    Animated.timing(drawerAnimation, {
+      toValue: -DRAWER_WIDTH,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setDrawerVisible(false));
+  };
+
   const handleLogout = async () => {
+    closeDrawer();
     try {
       // TODO: Check for active jobs before logout
       // For now, just logout
@@ -50,27 +83,13 @@ const ClientDashboard = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Navigation Bar */}
       <View style={styles.topNav}>
-          <View style={styles.leftSection}>
-            <Text style={styles.logo}>People</Text>
-            <View style={styles.userInfo}>
-              {user.profilePhoto ? (
-                <Image source={{ uri: user.profilePhoto }} style={styles.profilePhoto} />
-              ) : (
-                <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
-                  <MaterialIcons name="person" size={20} color={colors.text.secondary} />
-                </View>
-              )}
-              <View style={styles.userDetails}>
-                <Text style={styles.userName}>{user.fullName || 'User'}</Text>
-                <Text style={styles.userPhone}>{user.phone || ''}</Text>
-              </View>
-            </View>
-          </View>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-            <MaterialIcons name="logout" size={20} color={colors.error.main} />
-            <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.leftSection}>
+          <TouchableOpacity onPress={toggleDrawer} style={styles.menuButton}>
+            <MaterialIcons name="menu" size={24} color={colors.text.primary} />
           </TouchableOpacity>
+          <Text style={styles.logo}>People</Text>
         </View>
+      </View>
 
         {/* Error Message */}
         {logoutError ? (
@@ -81,7 +100,12 @@ const ClientDashboard = () => {
 
         {/* Top Tab Bar */}
         <View style={styles.tabBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarContent}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.tabBarContent}
+            style={styles.tabBarScroll}
+          >
             {tabs.map((tab) => (
               <TouchableOpacity
                 key={tab.key}
@@ -93,7 +117,7 @@ const ClientDashboard = () => {
               >
                 <MaterialIcons
                   name={tab.icon}
-                  size={20}
+                  size={18}
                   color={activeTab === tab.key ? colors.primary.main : colors.text.secondary}
                 />
                 <Text
@@ -101,6 +125,7 @@ const ClientDashboard = () => {
                     styles.tabLabel,
                     activeTab === tab.key && styles.tabLabelActive,
                   ]}
+                  numberOfLines={1}
                 >
                   {tab.label}
                 </Text>
@@ -113,6 +138,64 @@ const ClientDashboard = () => {
       <View style={styles.tabContent}>
         <ActiveScreen />
       </View>
+
+      {/* Drawer Menu */}
+      <Modal
+        visible={drawerVisible}
+        transparent={true}
+        animationType="none"
+        onRequestClose={closeDrawer}
+      >
+        <TouchableOpacity 
+          style={styles.drawerOverlay} 
+          activeOpacity={1}
+          onPress={closeDrawer}
+        >
+          <Animated.View
+            style={[
+              styles.drawer,
+              {
+                transform: [{ translateX: drawerAnimation }],
+              },
+            ]}
+          >
+            <SafeAreaView style={styles.drawerContent} edges={['top', 'bottom']}>
+              {/* Drawer Header */}
+              <View style={styles.drawerHeader}>
+                <TouchableOpacity onPress={closeDrawer} style={styles.drawerCloseButton}>
+                  <MaterialIcons name="close" size={24} color={colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* User Info */}
+              <View style={styles.drawerUserInfo}>
+                {user.profilePhoto ? (
+                  <Image source={{ uri: user.profilePhoto }} style={styles.drawerProfilePhoto} />
+                ) : (
+                  <View style={[styles.drawerProfilePhoto, styles.drawerProfilePhotoPlaceholder]}>
+                    <MaterialIcons name="person" size={32} color={colors.text.secondary} />
+                  </View>
+                )}
+                <Text style={styles.drawerUserName}>{user.fullName || 'User'}</Text>
+                <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
+              </View>
+
+              {/* Drawer Menu Items */}
+              <View style={styles.drawerMenuItems}>
+                <TouchableOpacity 
+                  onPress={handleLogout} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="logout" size={24} color={colors.error.main} />
+                  <Text style={[styles.drawerMenuItemText, { color: colors.error.main }]}>
+                    Logout
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -127,7 +210,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     backgroundColor: colors.cardBackground,
     borderBottomWidth: 1,
@@ -138,51 +221,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  menuButton: {
+    padding: spacing.xs,
+    marginRight: spacing.sm,
+  },
   logo: {
     ...typography.h2,
     fontWeight: 'bold',
     color: colors.primary.main,
-    marginRight: spacing.md,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profilePhoto: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: spacing.sm,
-  },
-  profilePhotoPlaceholder: {
-    backgroundColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userDetails: {
-    flex: 1,
-  },
-  userName: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  userPhone: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-  },
-  logoutText: {
-    ...typography.small,
-    color: colors.error.main,
-    marginLeft: spacing.xs,
-    fontWeight: '600',
   },
   errorContainer: {
     backgroundColor: colors.error.light,
@@ -199,18 +245,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBackground,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    maxHeight: 50,
+  },
+  tabBarScroll: {
+    flexGrow: 0,
   },
   tabBarContent: {
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
   },
   tabButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     marginHorizontal: spacing.xs,
     borderRadius: spacing.sm,
     gap: spacing.xs,
+    minWidth: 70,
+    justifyContent: 'center',
   },
   tabButtonActive: {
     backgroundColor: colors.primary.light,
@@ -219,6 +273,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     ...typography.small,
+    fontSize: 11,
     color: colors.text.secondary,
     fontWeight: '500',
   },
@@ -229,6 +284,78 @@ const styles = StyleSheet.create({
   tabContent: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  // Drawer Styles
+  drawerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  drawer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: DRAWER_WIDTH,
+    backgroundColor: colors.cardBackground,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  drawerContent: {
+    flex: 1,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  drawerCloseButton: {
+    padding: spacing.xs,
+  },
+  drawerUserInfo: {
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  drawerProfilePhoto: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: spacing.md,
+  },
+  drawerProfilePhotoPlaceholder: {
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  drawerUserName: {
+    ...typography.h3,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  drawerUserPhone: {
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  drawerMenuItems: {
+    padding: spacing.md,
+  },
+  drawerMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: spacing.sm,
+    gap: spacing.md,
+  },
+  drawerMenuItemText: {
+    ...typography.body,
+    fontWeight: '500',
   },
 });
 
