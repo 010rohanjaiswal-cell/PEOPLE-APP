@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
+const FreelancerVerification = require('../models/FreelancerVerification');
 
 /**
  * Get verification status for freelancer
@@ -75,34 +76,83 @@ router.post('/verification', authenticate, async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: 'User not found'
+        error: 'User not found',
       });
     }
 
     if (user.role !== 'freelancer') {
       return res.status(403).json({
         success: false,
-        error: 'This endpoint is only for freelancers'
+        error: 'This endpoint is only for freelancers',
       });
     }
 
-    // Mark as pending; store rejection reason cleared
+    const {
+      fullName,
+      dob,
+      gender,
+      address,
+      profilePhoto,
+      aadhaarFront,
+      aadhaarBack,
+      panCard,
+    } = req.body || {};
+
+    // Basic validation to mirror mobile form
+    if (
+      !fullName ||
+      !dob ||
+      !gender ||
+      !address ||
+      !profilePhoto ||
+      !aadhaarFront ||
+      !aadhaarBack ||
+      !panCard
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required verification fields',
+      });
+    }
+
+    // Upsert verification record for this freelancer
+    const verification = await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        fullName,
+        dob,
+        gender,
+        address,
+        profilePhoto,
+        aadhaarFront,
+        aadhaarBack,
+        panCard,
+        status: 'pending',
+        rejectionReason: null,
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    // Keep a simple status mirror on User for quick checks
     user.verificationStatus = 'pending';
     user.verificationRejectionReason = null;
     await user.save();
 
-    // In a full implementation, you'd persist document URLs and details.
-    // Here we acknowledge receipt and set status to pending.
     res.json({
       success: true,
       status: 'pending',
       message: 'Verification submitted. Pending admin review.',
+      verification,
     });
   } catch (error) {
     console.error('Error submitting verification:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to submit verification'
+      error: error.message || 'Failed to submit verification',
     });
   }
 });
