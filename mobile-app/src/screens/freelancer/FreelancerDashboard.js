@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     backgroundColor: colors.cardBackground,
     borderBottomWidth: 1,
@@ -223,51 +223,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  menuButton: {
+    padding: spacing.xs,
+    marginRight: spacing.sm,
+  },
   logo: {
     ...typography.h2,
     fontWeight: 'bold',
     color: colors.primary.main,
-    marginRight: spacing.md,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profilePhoto: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: spacing.sm,
-  },
-  profilePhotoPlaceholder: {
-    backgroundColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userDetails: {
-    flex: 1,
-  },
-  userName: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  userPhone: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-  },
-  logoutText: {
-    ...typography.small,
-    color: colors.error.main,
-    marginLeft: spacing.xs,
-    fontWeight: '600',
   },
   errorContainer: {
     backgroundColor: colors.error.light,
