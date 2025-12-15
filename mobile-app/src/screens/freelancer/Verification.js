@@ -72,6 +72,9 @@ const Verification = ({ navigation }) => {
       // If 404 or no verification found, status is null (not submitted)
       if (error.response?.status === 404) {
         setStatus(null);
+      } else if (error.code === 'ERR_NETWORK') {
+        setError('Network error: Unable to reach server. Please retry.');
+        setStatus(null);
       } else {
         setError(error.response?.data?.message || 'Failed to check verification status');
       }
