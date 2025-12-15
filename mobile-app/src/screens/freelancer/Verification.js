@@ -264,6 +264,13 @@ const Verification = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Back to Login */}
+        <View style={styles.topAction}>
+          <Button variant="ghost" onPress={() => navigation.replace('Login')} style={styles.backButton}>
+            Back to Login
+          </Button>
+        </View>
+
         <Card style={styles.card}>
           <CardContent>
             {/* Error Display */}
@@ -274,16 +281,19 @@ const Verification = ({ navigation }) => {
               </View>
             )}
 
-            {/* Status Screens */}
-            {status === VERIFICATION_STATUS.PENDING && renderPendingStatus()}
-            {status === VERIFICATION_STATUS.APPROVED && renderApprovedStatus()}
-            {status === VERIFICATION_STATUS.REJECTED && (
+            {/* Approved */}
+            {status === VERIFICATION_STATUS.APPROVED ? (
+              renderApprovedStatus()
+            ) : (
               <>
-                {renderRejectedStatus()}
+                {/* Pending / Rejected info */}
+                {status === VERIFICATION_STATUS.PENDING && renderPendingStatus()}
+                {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
+
+                {/* Form for not submitted or resubmit */}
                 {renderVerificationForm()}
               </>
             )}
-            {status === null && renderVerificationForm()}
           </CardContent>
         </Card>
       </ScrollView>
@@ -305,6 +315,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+  },
+  topAction: {
+    alignItems: 'flex-end',
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  backButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   statusContainer: {
     alignItems: 'center',
