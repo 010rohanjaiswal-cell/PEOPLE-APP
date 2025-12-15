@@ -237,18 +237,32 @@ const ProfileSetup = ({ navigation }) => {
                 {user?.fullName ? 'Update Profile' : 'Complete Setup'}
               </Button>
               
-              {/* Skip Button - Only show if user already has fullName */}
-              {user?.fullName && !profilePhoto && (
+              {/* Skip Button - Only show if user already has fullName but no photo */}
+              {user?.fullName && !user?.profilePhoto && !profilePhoto && (
                 <Button
                   variant="ghost"
                   onPress={async () => {
-                    // Skip photo upload, just update name if changed
-                    if (fullName !== user.fullName) {
-                      await updateUser({ ...user, fullName });
+                    setLoading(true);
+                    try {
+                      // Skip photo upload, just update name if changed
+                      const updatedUser = {
+                        ...user,
+                        fullName: fullName || user.fullName,
+                        // Keep existing profilePhoto or set to null
+                        profilePhoto: user.profilePhoto || null,
+                      };
+                      await updateUser(updatedUser);
+                      // Navigation will be handled by AppNavigator automatically
+                      console.log('✅ Profile updated (skipped photo), navigation will be handled by AppNavigator');
+                    } catch (error) {
+                      console.error('Error updating profile:', error);
+                      setError('Failed to update profile. Please try again.');
+                    } finally {
+                      setLoading(false);
                     }
-                    // Navigation will be handled by AppNavigator
                   }}
                   style={styles.skipButton}
+                  disabled={loading}
                 >
                   Skip Photo (Continue to Dashboard)
                 </Button>
