@@ -27,19 +27,28 @@ async function authenticate(req, res, next) {
     // Verify token
     const decoded = verifyJWT(token);
 
-    // Get user from database
-    const user = await User.findById(decoded.userId);
+    // Admin tokens may not have a DB user; allow admin bypass
+    if (decoded.role === 'admin' && decoded.userId === 'admin') {
+      req.user = {
+        id: 'admin',
+        role: 'admin',
+        email: decoded.email || null,
+      };
+      req.userId = 'admin';
+    } else {
+      // Get user from database
+      const user = await User.findById(decoded.userId);
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not found. Please login again.'
-      });
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not found. Please login again.'
+        });
+      }
+
+      req.user = user;
+      req.userId = decoded.userId;
     }
-
-    // Attach user to request object
-    req.user = user;
-    req.userId = decoded.userId;
 
     next();
   } catch (error) {
