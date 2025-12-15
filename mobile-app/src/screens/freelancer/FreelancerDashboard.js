@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
@@ -16,9 +17,6 @@ import MyJobsScreen from './MyJobs';
 import WalletScreen from './Wallet';
 import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DASHBOARD_HEIGHT = SCREEN_WIDTH * (9 / 16); // 16:9 aspect ratio
 
 const FreelancerDashboard = () => {
   const { user, logout } = useAuth();
@@ -51,10 +49,9 @@ const FreelancerDashboard = () => {
   }
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.container}>
-        {/* Top Navigation Bar */}
-        <View style={styles.topNav}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Top Navigation Bar */}
+      <View style={styles.topNav}>
           <View style={styles.leftSection}>
             <Text style={styles.logo}>People</Text>
             <View style={styles.userInfo}>
@@ -114,29 +111,19 @@ const FreelancerDashboard = () => {
           </ScrollView>
         </View>
 
-        {/* Tab Content */}
-        <View style={styles.tabContent}>
-          <ActiveScreen />
-        </View>
+      {/* Tab Content */}
+      <View style={styles.tabContent}>
+        <ActiveScreen />
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  wrapper: {
+  container: {
     flex: 1,
     backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    width: SCREEN_WIDTH,
-    height: DASHBOARD_HEIGHT,
-    maxWidth: SCREEN_WIDTH,
-    maxHeight: DASHBOARD_HEIGHT,
-    backgroundColor: colors.background,
-    overflow: 'hidden',
+    width: '100%',
   },
   topNav: {
     flexDirection: 'row',
