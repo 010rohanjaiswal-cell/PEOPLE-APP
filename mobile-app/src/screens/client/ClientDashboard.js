@@ -115,7 +115,7 @@ const ClientDashboard = () => {
         {/* Top Tab Bar - only show for PostJob/MyJobs */}
         {tabs.some(tab => tab.key === activeTab) && (
           <View style={styles.tabBar}>
-            <View style={styles.tabBarContent}>
+            <View style={styles.tabRow}>
               {tabs.map((tab) => (
                 <TouchableOpacity
                   key={tab.key}
@@ -199,6 +199,17 @@ const ClientDashboard = () => {
 
               {/* Drawer Menu Items */}
               <View style={styles.drawerMenuItems}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    closeDrawer();
+                    setActiveTab('PostJob');
+                  }} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="dashboard" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Dashboard</Text>
+                </TouchableOpacity>
+                <View style={styles.drawerMenuDivider} />
                 <TouchableOpacity 
                   onPress={() => {
                     closeDrawer();
