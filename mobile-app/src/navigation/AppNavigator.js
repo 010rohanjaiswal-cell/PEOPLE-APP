@@ -41,22 +41,32 @@ const AppNavigator = () => {
         ) : (
           // Authenticated Stack
           <>
-            {user?.role === 'client' ? (
-              // Client Stack - Placeholder will be replaced in Phase 3
-              <Stack.Screen name="ClientDashboard">
-                {() => <LoadingSpinner />}
-              </Stack.Screen>
-            ) : user?.role === 'freelancer' ? (
-              // Freelancer Stack - Placeholder will be replaced in Phase 4
+            {/* Profile Setup - shown if user doesn't have complete profile */}
+            {(!user?.fullName || !user?.profilePhoto) && (
+              <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+            )}
+            
+            {/* Dashboards - shown if user has complete profile */}
+            {user?.fullName && user?.profilePhoto && (
               <>
-                <Stack.Screen name="Verification">
-                  {() => <LoadingSpinner />}
-                </Stack.Screen>
-                <Stack.Screen name="FreelancerDashboard">
-                  {() => <LoadingSpinner />}
-                </Stack.Screen>
+                {user?.role === 'client' ? (
+                  // Client Stack - Placeholder will be replaced in Phase 3
+                  <Stack.Screen name="ClientDashboard">
+                    {() => <LoadingSpinner />}
+                  </Stack.Screen>
+                ) : user?.role === 'freelancer' ? (
+                  // Freelancer Stack - Placeholder will be replaced in Phase 4
+                  <>
+                    <Stack.Screen name="Verification">
+                      {() => <LoadingSpinner />}
+                    </Stack.Screen>
+                    <Stack.Screen name="FreelancerDashboard">
+                      {() => <LoadingSpinner />}
+                    </Stack.Screen>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </>
         )}
       </Stack.Navigator>

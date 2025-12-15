@@ -79,14 +79,13 @@ const OTP = ({ navigation, route }) => {
         // Check if user has profile
         const user = result.user;
         
-        if (!user.fullName || !user.profilePhoto) {
-          // Navigate to profile setup
-          navigation.replace('ProfileSetup', { user: result.user });
-        } else {
-          // AuthContext will handle navigation based on role
-          // The AppNavigator will automatically redirect based on auth state
-          console.log('✅ User authenticated, navigation will be handled by AppNavigator');
-        }
+        // Note: Navigation will be handled automatically by AppNavigator
+        // based on auth state and user profile completeness
+        // We don't need to manually navigate here
+        console.log('✅ User authenticated, navigation will be handled by AppNavigator');
+        
+        // If user needs profile setup, AppNavigator will show ProfileSetup
+        // If user has complete profile, AppNavigator will show appropriate dashboard
       } else {
         throw new Error(result.error || 'Verification failed');
       }
