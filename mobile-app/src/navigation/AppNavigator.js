@@ -30,19 +30,21 @@ const AppNavigator = () => {
     if (!isAuthenticated) {
       return 'Login';
     }
-    
-    if (!user?.fullName) {
-      return 'ProfileSetup';
-    }
-    
-    if (user?.role === 'client') {
-      return 'ClientDashboard';
-    }
-    
+
+    // Freelancer: go straight to Verification flow (handles approved/pending/rejected)
     if (user?.role === 'freelancer') {
       return 'Verification';
     }
-    
+
+    // Client: require profile setup if fullName missing
+    if (user?.role === 'client' && !user?.fullName) {
+      return 'ProfileSetup';
+    }
+
+    if (user?.role === 'client') {
+      return 'ClientDashboard';
+    }
+
     // Fallback
     return 'Login';
   };
@@ -55,12 +57,12 @@ const AppNavigator = () => {
 
       if (!isAuthenticated) {
         targetRoute = 'Login';
-      } else if (!user?.fullName) {
+      } else if (user?.role === 'freelancer') {
+        targetRoute = 'Verification';
+      } else if (user?.role === 'client' && !user?.fullName) {
         targetRoute = 'ProfileSetup';
       } else if (user?.role === 'client') {
         targetRoute = 'ClientDashboard';
-      } else if (user?.role === 'freelancer') {
-        targetRoute = 'Verification';
       }
 
       // Only navigate if we have a target and we're not already there
@@ -87,15 +89,17 @@ const AppNavigator = () => {
         {/* Auth Screens - Always available */}
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="OTP" component={OTPScreen} />
-        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+        {user?.role === 'client' && (
+          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+        )}
         
         {/* Client Dashboard - Available when authenticated */}
-        {isAuthenticated && (
+        {isAuthenticated && user?.role === 'client' && (
           <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
         )}
         
         {/* Freelancer Screens - Available when authenticated */}
-        {isAuthenticated && (
+        {isAuthenticated && user?.role === 'freelancer' && (
           <>
             <Stack.Screen name="Verification" component={VerificationScreen} />
             <Stack.Screen name="FreelancerDashboard" component={FreelancerDashboard} />
