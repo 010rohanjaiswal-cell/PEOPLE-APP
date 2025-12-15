@@ -286,8 +286,9 @@ const Verification = ({ navigation }) => {
               renderApprovedStatus()
             ) : (
               <>
-                {/* Pending / Rejected info */}
+                {/* Only show pending banner if already submitted and pending */}
                 {status === VERIFICATION_STATUS.PENDING && renderPendingStatus()}
+                {/* Show rejection info and form */}
                 {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
 
                 {/* Form for not submitted or resubmit */}
