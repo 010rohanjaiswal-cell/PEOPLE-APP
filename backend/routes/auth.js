@@ -192,19 +192,15 @@ router.post('/verify-otp', async (req, res) => {
           role: role,
           createdAt: new Date(),
           updatedAt: new Date(),
-          verificationStatus: role === 'freelancer' ? 'pending' : undefined,
+          // verificationStatus left undefined for new freelancers until they submit
         });
       } else {
         // Update role if it was changed during login
         if (user.role !== role) {
           user.role = role;
           user.updatedAt = new Date();
+          await user.save();
         }
-        // If freelancer and no verificationStatus, set to pending
-        if (role === 'freelancer' && !user.verificationStatus) {
-          user.verificationStatus = 'pending';
-        }
-        await user.save();
       }
 
       // Generate JWT token

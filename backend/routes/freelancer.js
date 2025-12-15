@@ -41,9 +41,8 @@ router.get('/verification/status', authenticate, async (req, res) => {
     // If the user exists and is a freelancer, we'll check for verification status
     
     // TODO: In production, check Verification collection for actual status
-    // Default to 'pending' when no status is set to avoid auto-approving new users
-    // You should create a Verification model/collection and persist real status
-    const verificationStatus = user.verificationStatus || 'pending';
+    // Default to null so new freelancers see "Verification Required" until they submit
+    const verificationStatus = user.verificationStatus || null;
 
     res.json({
       success: true,

@@ -23,6 +23,7 @@ const Verification = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -66,6 +67,8 @@ const Verification = ({ navigation }) => {
         // No verification submitted yet
         setStatus(null);
       }
+      // If status is pending from backend, mark as submitted
+      setIsSubmitted(response.status === VERIFICATION_STATUS.PENDING || response.verificationStatus === VERIFICATION_STATUS.PENDING);
     } catch (error) {
       console.error('Error checking verification status:', error);
       
@@ -174,6 +177,7 @@ const Verification = ({ navigation }) => {
         panCard,
       });
       setStatus(VERIFICATION_STATUS.PENDING);
+      setIsSubmitted(true);
       Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
     } catch (err) {
       console.error('Verification submit error:', err);
@@ -286,8 +290,8 @@ const Verification = ({ navigation }) => {
               renderApprovedStatus()
             ) : (
               <>
-                {/* Only show pending banner if already submitted and pending */}
-                {status === VERIFICATION_STATUS.PENDING && renderPendingStatus()}
+                {/* Show pending only if backend says pending and user has submitted */}
+                {status === VERIFICATION_STATUS.PENDING && isSubmitted && renderPendingStatus()}
                 {/* Show rejection info and form */}
                 {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
 
