@@ -23,9 +23,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ProfileSetup = ({ navigation }) => {
   const { user, updateUser } = useAuth();
-  const [fullName, setFullName] = useState('');
+  const [fullName, setFullName] = useState(user?.fullName || '');
   const [profilePhoto, setProfilePhoto] = useState(null);
-  const [profilePhotoUri, setProfilePhotoUri] = useState(null);
+  const [profilePhotoUri, setProfilePhotoUri] = useState(user?.profilePhoto || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -117,17 +117,19 @@ const ProfileSetup = ({ navigation }) => {
       return;
     }
 
-    if (!profilePhoto) {
-      setError('Please upload a profile photo');
-      return;
-    }
+    // Profile photo is optional for now (for testing)
+    // In production, make it required
 
     setLoading(true);
     setError('');
 
     try {
-      // Upload profile photo to Cloudinary
-      const profilePhotoUrl = await uploadImageToCloudinary(profilePhotoUri);
+      let profilePhotoUrl = user?.profilePhoto || null;
+      
+      // Upload profile photo to Cloudinary if a new one was selected
+      if (profilePhotoUri && profilePhotoUri !== user?.profilePhoto) {
+        profilePhotoUrl = await uploadImageToCloudinary(profilePhotoUri);
+      }
 
       // TODO: Submit profile data to backend
       // In production, you'll need to:
@@ -135,24 +137,18 @@ const ProfileSetup = ({ navigation }) => {
       // 2. Include fullName and profilePhotoUrl
       // 3. Update user context with new data
 
-      // For now, we'll update local user data
-      await updateUser({
+      // Update local user data
+      const updatedUser = {
+        ...user,
         fullName,
         profilePhoto: profilePhotoUrl,
-      });
+      };
+      
+      await updateUser(updatedUser);
 
-      // Navigate based on role
-      // Note: Verification and Dashboard screens will be created in Phase 4
-      if (role === 'client') {
-        // ClientDashboard will be created in Phase 3
-        navigation.replace('ClientDashboard');
-      } else if (role === 'freelancer') {
-        // Verification screen will be created in Phase 4
-        navigation.replace('Verification');
-      } else {
-        // Default to client dashboard
-        navigation.replace('ClientDashboard');
-      }
+      // Navigation will be handled automatically by AppNavigator
+      // based on updated user state
+      console.log('✅ Profile updated, navigation will be handled by AppNavigator');
 
       setLoading(false);
     } catch (error) {
@@ -234,12 +230,29 @@ const ProfileSetup = ({ navigation }) => {
               {/* Submit Button */}
               <Button
                 onPress={handleCompleteSetup}
-                disabled={!validateRequired(fullName) || !profilePhoto || loading}
+                disabled={!validateRequired(fullName) || loading}
                 loading={loading}
                 style={styles.submitButton}
               >
-                Complete Setup
+                {user?.fullName ? 'Update Profile' : 'Complete Setup'}
               </Button>
+              
+              {/* Skip Button - Only show if user already has fullName */}
+              {user?.fullName && !profilePhoto && (
+                <Button
+                  variant="ghost"
+                  onPress={async () => {
+                    // Skip photo upload, just update name if changed
+                    if (fullName !== user.fullName) {
+                      await updateUser({ ...user, fullName });
+                    }
+                    // Navigation will be handled by AppNavigator
+                  }}
+                  style={styles.skipButton}
+                >
+                  Skip Photo (Continue to Dashboard)
+                </Button>
+              )}
 
               {/* Error Display */}
               {error && (
@@ -346,8 +359,18 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     textAlign: 'center',
   },
+  photoLabel: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
   submitButton: {
     marginTop: spacing.lg,
+  },
+  skipButton: {
+    marginTop: spacing.sm,
   },
   errorContainer: {
     backgroundColor: colors.error.light,

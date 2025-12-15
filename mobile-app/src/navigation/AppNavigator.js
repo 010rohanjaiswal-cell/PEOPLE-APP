@@ -41,13 +41,13 @@ const AppNavigator = () => {
         ) : (
           // Authenticated Stack
           <>
-            {/* Profile Setup - shown if user doesn't have complete profile */}
-            {(!user?.fullName || !user?.profilePhoto) && (
+            {/* Profile Setup - shown if user doesn't have fullName */}
+            {!user?.fullName && (
               <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
             )}
             
-            {/* Dashboards - shown if user has complete profile */}
-            {user?.fullName && user?.profilePhoto && (
+            {/* Dashboards - shown if user has fullName (profilePhoto is optional for now) */}
+            {user?.fullName && (
               <>
                 {user?.role === 'client' ? (
                   // Client Dashboard
