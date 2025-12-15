@@ -28,6 +28,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  // Verification status for freelancers
+  verificationStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: null,
+  },
+  verificationRejectionReason: {
+    type: String,
+    default: null,
+    trim: true,
+  },
   email: {
     type: String,
     trim: true,

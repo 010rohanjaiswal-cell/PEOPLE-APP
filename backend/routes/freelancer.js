@@ -49,7 +49,7 @@ router.get('/verification/status', authenticate, async (req, res) => {
       status: verificationStatus,
       verification: {
         status: verificationStatus,
-        // Add more fields as needed when Verification model is created
+        rejectionReason: user.verificationRejectionReason || null,
       }
     });
 
@@ -58,6 +58,51 @@ router.get('/verification/status', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get verification status'
+    });
+  }
+});
+
+/**
+ * Submit verification
+ * POST /api/freelancer/verification
+ * Requires authentication
+ */
+router.post('/verification', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'This endpoint is only for freelancers'
+      });
+    }
+
+    // Mark as pending; store rejection reason cleared
+    user.verificationStatus = 'pending';
+    user.verificationRejectionReason = null;
+    await user.save();
+
+    // In a full implementation, you'd persist document URLs and details.
+    // Here we acknowledge receipt and set status to pending.
+    res.json({
+      success: true,
+      status: 'pending',
+      message: 'Verification submitted. Pending admin review.',
+    });
+  } catch (error) {
+    console.error('Error submitting verification:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to submit verification'
     });
   }
 });
