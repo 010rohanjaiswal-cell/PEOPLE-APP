@@ -27,6 +27,17 @@ const Verification = ({ navigation }) => {
     checkVerificationStatus();
   }, []);
 
+  // Auto-navigate to dashboard if verification is approved
+  useEffect(() => {
+    if (status === VERIFICATION_STATUS.APPROVED && !loading) {
+      // Small delay to show the approved message briefly
+      const timer = setTimeout(() => {
+        navigation.replace('FreelancerDashboard');
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status, loading]);
+
   const checkVerificationStatus = async () => {
     try {
       setLoading(true);
@@ -92,12 +103,8 @@ const Verification = ({ navigation }) => {
       </Text>
       <Button
         onPress={() => {
-          // TODO: Navigate to Freelancer Dashboard (Phase 4)
-          Alert.alert(
-            'Dashboard Coming Soon',
-            'Freelancer Dashboard will be available in Phase 4.',
-            [{ text: 'OK' }]
-          );
+          // Navigate to Freelancer Dashboard
+          navigation.replace('FreelancerDashboard');
         }}
         style={styles.dashboardButton}
       >
