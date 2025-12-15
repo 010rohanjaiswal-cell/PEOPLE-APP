@@ -163,6 +163,16 @@ const ProfileSetup = ({ navigation }) => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Quick Login Link */}
+      <View style={styles.topAction}>
+        <Button
+          variant="ghost"
+          onPress={() => navigation.replace('Login')}
+          style={styles.loginButton}
+        >
+          Back to Login
+        </Button>
+      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -286,6 +296,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  topAction: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    alignItems: 'flex-end',
+  },
+  loginButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   scrollContent: {
     flexGrow: 1,

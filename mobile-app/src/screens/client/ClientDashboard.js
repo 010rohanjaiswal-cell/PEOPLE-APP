@@ -303,10 +303,15 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   tabBarContent: {
-    paddingLeft: spacing.sm,
-    paddingRight: 0,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     alignItems: 'center',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   tabButton: {
     flexDirection: 'row',
@@ -316,7 +321,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xs,
     borderRadius: spacing.sm,
     gap: spacing.xs,
-    minWidth: 70,
+    minWidth: 64,
     justifyContent: 'center',
   },
   tabButtonActive: {

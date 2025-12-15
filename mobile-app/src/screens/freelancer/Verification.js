@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
-import { Button, Card, CardContent } from '../../components/common';
+import { Button, Card, CardContent, Input } from '../../components/common';
 import { verificationAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -22,6 +22,16 @@ const Verification = ({ navigation }) => {
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form state
+  const [fullName, setFullName] = useState('');
+  const [dob, setDob] = useState('');
+  const [gender, setGender] = useState('');
+  const [address, setAddress] = useState('');
+  const [docFront, setDocFront] = useState('');
+  const [docBack, setDocBack] = useState('');
+  const [panCard, setPanCard] = useState('');
 
   useEffect(() => {
     checkVerificationStatus();
@@ -141,25 +151,94 @@ const Verification = ({ navigation }) => {
     </View>
   );
 
-  // No Verification Submitted Screen
-  const renderNoVerification = () => (
-    <View style={styles.statusContainer}>
+  const handleSubmitVerification = async () => {
+    // Basic validation
+    if (!fullName || !dob || !gender || !address) {
+      Alert.alert('Missing info', 'Please fill all required fields.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      // Submit minimal payload; backend can extend later
+      await verificationAPI.submitVerification({
+        fullName,
+        dob,
+        gender,
+        address,
+        aadhaarFront: docFront,
+        aadhaarBack: docBack,
+        panCard,
+      });
+      setStatus(VERIFICATION_STATUS.PENDING);
+      Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
+    } catch (err) {
+      console.error('Verification submit error:', err);
+      setError(err.response?.data?.message || 'Failed to submit verification');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Verification Form
+  const renderVerificationForm = () => (
+    <View style={styles.formContainer}>
       <View style={[styles.iconContainer, styles.pendingIcon]}>
         <MaterialIcons name="verified-user" size={48} color={colors.primary.main} />
       </View>
       <Text style={styles.statusTitle}>Verification Required</Text>
       <Text style={styles.statusMessage}>
-        You need to complete verification before accessing the dashboard. Please submit your documents.
+        Submit your details and documents to get approved.
       </Text>
+
+      <Input
+        label="Full Name"
+        placeholder="Enter your full name"
+        value={fullName}
+        onChangeText={setFullName}
+      />
+      <Input
+        label="Date of Birth"
+        placeholder="DD/MM/YYYY"
+        value={dob}
+        onChangeText={setDob}
+      />
+      <Input
+        label="Gender"
+        placeholder="Male / Female"
+        value={gender}
+        onChangeText={setGender}
+      />
+      <Input
+        label="Address"
+        placeholder="Enter your address"
+        value={address}
+        onChangeText={setAddress}
+        multiline
+      />
+      <Input
+        label="Aadhaar Front (URL or note)"
+        placeholder="Paste link or leave note"
+        value={docFront}
+        onChangeText={setDocFront}
+      />
+      <Input
+        label="Aadhaar Back (URL or note)"
+        placeholder="Paste link or leave note"
+        value={docBack}
+        onChangeText={setDocBack}
+      />
+      <Input
+        label="PAN Card (URL or note)"
+        placeholder="Paste link or leave note"
+        value={panCard}
+        onChangeText={setPanCard}
+      />
+
       <Button
-        onPress={() => {
-          // TODO: Show verification form (Phase 4)
-          Alert.alert(
-            'Verification Form Coming Soon',
-            'Verification form will be available in Phase 4.',
-            [{ text: 'OK' }]
-          );
-        }}
+        onPress={handleSubmitVerification}
+        loading={submitting}
+        disabled={submitting}
         style={styles.submitButton}
       >
         <Text style={styles.submitButtonText}>Submit Verification</Text>
@@ -195,8 +274,13 @@ const Verification = ({ navigation }) => {
             {/* Status Screens */}
             {status === VERIFICATION_STATUS.PENDING && renderPendingStatus()}
             {status === VERIFICATION_STATUS.APPROVED && renderApprovedStatus()}
-            {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
-            {status === null && renderNoVerification()}
+            {status === VERIFICATION_STATUS.REJECTED && (
+              <>
+                {renderRejectedStatus()}
+                {renderVerificationForm()}
+              </>
+            )}
+            {status === null && renderVerificationForm()}
           </CardContent>
         </Card>
       </ScrollView>
