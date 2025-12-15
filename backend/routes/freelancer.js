@@ -8,6 +8,25 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
+const multer = require('multer');
+const streamifier = require('streamifier');
+const cloudinary = require('../config/cloudinary');
+
+// Use memory storage; we'll stream buffers to Cloudinary
+const upload = multer({ storage: multer.memoryStorage() });
+
+async function uploadToCloudinary(buffer, folder) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
 
 /**
  * Get verification status for freelancer
@@ -68,7 +87,16 @@ router.get('/verification/status', authenticate, async (req, res) => {
  * POST /api/freelancer/verification
  * Requires authentication
  */
-router.post('/verification', authenticate, async (req, res) => {
+router.post(
+  '/verification',
+  authenticate,
+  upload.fields([
+    { name: 'profilePhoto', maxCount: 1 },
+    { name: 'aadhaarFront', maxCount: 1 },
+    { name: 'aadhaarBack', maxCount: 1 },
+    { name: 'panCard', maxCount: 1 },
+  ]),
+  async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
@@ -92,11 +120,12 @@ router.post('/verification', authenticate, async (req, res) => {
       dob,
       gender,
       address,
-      profilePhoto,
-      aadhaarFront,
-      aadhaarBack,
-      panCard,
     } = req.body || {};
+
+    const profilePhotoFile = req.files?.profilePhoto?.[0];
+    const aadhaarFrontFile = req.files?.aadhaarFront?.[0];
+    const aadhaarBackFile = req.files?.aadhaarBack?.[0];
+    const panCardFile = req.files?.panCard?.[0];
 
     // Basic validation to mirror mobile form
     if (
@@ -104,16 +133,23 @@ router.post('/verification', authenticate, async (req, res) => {
       !dob ||
       !gender ||
       !address ||
-      !profilePhoto ||
-      !aadhaarFront ||
-      !aadhaarBack ||
-      !panCard
+      !profilePhotoFile ||
+      !aadhaarFrontFile ||
+      !aadhaarBackFile ||
+      !panCardFile
     ) {
       return res.status(400).json({
         success: false,
         error: 'Missing required verification fields',
       });
     }
+
+    // Upload images to Cloudinary
+    const folderBase = `people-app/freelancers/${user._id.toString()}`;
+    const profilePhoto = await uploadToCloudinary(profilePhotoFile.buffer, `${folderBase}/profile`);
+    const aadhaarFront = await uploadToCloudinary(aadhaarFrontFile.buffer, `${folderBase}/aadhaar`);
+    const aadhaarBack = await uploadToCloudinary(aadhaarBackFile.buffer, `${folderBase}/aadhaar`);
+    const panCard = await uploadToCloudinary(panCardFile.buffer, `${folderBase}/pan`);
 
     // Upsert verification record for this freelancer
     const verification = await FreelancerVerification.findOneAndUpdate(

@@ -201,17 +201,38 @@ const Verification = ({ navigation }) => {
     setSubmitting(true);
     setError('');
     try {
-      // Submit minimal payload; backend can extend later
-      await verificationAPI.submitVerification({
-        fullName,
-        dob,
-        gender,
-        address,
-        profilePhoto: profilePhotoUri,
-        aadhaarFront: docFrontUri,
-        aadhaarBack: docBackUri,
-        panCard: panCardUri,
+      // Build multipart form data for Cloudinary upload via backend
+      const formData = new FormData();
+      formData.append('fullName', fullName);
+      formData.append('dob', dob);
+      formData.append('gender', gender);
+      formData.append('address', address);
+
+      formData.append('profilePhoto', {
+        uri: profilePhotoUri,
+        name: 'profile-photo.jpg',
+        type: 'image/jpeg',
       });
+
+      formData.append('aadhaarFront', {
+        uri: docFrontUri,
+        name: 'aadhaar-front.jpg',
+        type: 'image/jpeg',
+      });
+
+      formData.append('aadhaarBack', {
+        uri: docBackUri,
+        name: 'aadhaar-back.jpg',
+        type: 'image/jpeg',
+      });
+
+      formData.append('panCard', {
+        uri: panCardUri,
+        name: 'pan-card.jpg',
+        type: 'image/jpeg',
+      });
+
+      await verificationAPI.submitVerification(formData);
       setStatus(VERIFICATION_STATUS.PENDING);
       setIsSubmitted(true);
       Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
@@ -386,8 +407,8 @@ const Verification = ({ navigation }) => {
                 {/* Show rejection info and form */}
                 {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
 
-                {/* Form for not submitted or resubmit */}
-                {renderVerificationForm()}
+                {/* Show form only when not yet submitted and not pending */}
+                {(!isSubmitted && status !== VERIFICATION_STATUS.PENDING) && renderVerificationForm()}
               </>
             )}
           </CardContent>

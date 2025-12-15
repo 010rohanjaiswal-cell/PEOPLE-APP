@@ -11,7 +11,20 @@ export const verificationAPI = {
    * @returns {Promise}
    */
   submitVerification: async (verificationData) => {
-    const response = await apiClient.post('/api/freelancer/verification', verificationData);
+    const isFormData =
+      typeof FormData !== 'undefined' && verificationData instanceof FormData;
+
+    const response = await apiClient.post(
+      '/api/freelancer/verification',
+      verificationData,
+      isFormData
+        ? {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        : undefined
+    );
     return response.data;
   },
 
