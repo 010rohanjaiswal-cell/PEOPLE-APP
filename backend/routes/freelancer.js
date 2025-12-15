@@ -41,16 +41,9 @@ router.get('/verification/status', authenticate, async (req, res) => {
     // If the user exists and is a freelancer, we'll check for verification status
     
     // TODO: In production, check Verification collection for actual status
-    // For now, since the user mentioned verification is already approved in web version,
-    // we'll return 'approved' as default for existing freelancers
-    // You should create a Verification model/collection and check it here
-    
-    // Check if there's a verification field in user model (if you add it later)
-    // For now, return 'approved' as default if user exists (since user said it's approved in web)
-    // You can enhance this later with actual verification collection
-    
-    // Default to 'approved' for existing freelancers (since user confirmed it's approved in web)
-    const verificationStatus = user.verificationStatus || 'approved';
+    // Default to 'pending' when no status is set to avoid auto-approving new users
+    // You should create a Verification model/collection and persist real status
+    const verificationStatus = user.verificationStatus || 'pending';
 
     res.json({
       success: true,
