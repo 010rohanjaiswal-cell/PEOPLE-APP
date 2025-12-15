@@ -25,10 +25,6 @@ const AppNavigator = () => {
   const { isAuthenticated, user, loading } = useAuth();
   const navigationRef = useRef(null);
 
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
   // Determine initial route based on auth state and user data
   const getInitialRouteName = () => {
     if (!isAuthenticated) {
@@ -77,6 +73,10 @@ const AppNavigator = () => {
       }
     }
   }, [isAuthenticated, user, loading]);
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <NavigationContainer ref={navigationRef}>
