@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 
@@ -12,9 +13,9 @@ const History = () => {
   return (
     <View style={styles.container}>
       <EmptyState
-        icon="history"
+        icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
         title="No completed jobs yet"
-        message="Completed jobs will appear here"
+        description="Completed jobs will appear here"
       />
     </View>
   );
