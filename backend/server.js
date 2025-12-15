@@ -11,6 +11,7 @@ const { connectDB } = require('./config/database');
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const freelancerRoutes = require('./routes/freelancer');
 
 // Initialize Express app
 const app = express();
@@ -37,6 +38,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/freelancer', freelancerRoutes);
 
 // 404 handler
 app.use((req, res) => {

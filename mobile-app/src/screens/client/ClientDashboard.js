@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -21,6 +22,7 @@ const Tab = createBottomTabNavigator();
 
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
+  const navigation = useNavigation();
   const [logoutError, setLogoutError] = useState('');
 
   const handleLogout = async () => {
@@ -58,10 +60,23 @@ const ClientDashboard = () => {
             </View>
           </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <MaterialIcons name="logout" size={20} color={colors.error.main} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.rightSection}>
+          <TouchableOpacity 
+            onPress={() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            }} 
+            style={styles.loginButton}
+          >
+            <Text style={styles.loginText}>Login</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <MaterialIcons name="logout" size={20} color={colors.error.main} />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Error Message */}
@@ -187,6 +202,20 @@ const styles = StyleSheet.create({
   userPhone: {
     ...typography.small,
     color: colors.text.secondary,
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  loginButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  loginText: {
+    ...typography.body,
+    color: colors.primary.main,
+    fontWeight: '600',
   },
   logoutButton: {
     flexDirection: 'row',
