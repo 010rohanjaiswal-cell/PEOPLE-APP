@@ -10,8 +10,11 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Card, CardContent, Input } from '../../components/common';
 import { verificationAPI } from '../../api';
@@ -30,9 +33,9 @@ const Verification = ({ navigation }) => {
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('');
   const [address, setAddress] = useState('');
-  const [docFront, setDocFront] = useState('');
-  const [docBack, setDocBack] = useState('');
-  const [panCard, setPanCard] = useState('');
+  const [docFrontUri, setDocFrontUri] = useState(null);
+  const [docBackUri, setDocBackUri] = useState(null);
+  const [panCardUri, setPanCardUri] = useState(null);
 
   useEffect(() => {
     checkVerificationStatus();
@@ -48,6 +51,28 @@ const Verification = ({ navigation }) => {
       return () => clearTimeout(timer);
     }
   }, [status, loading]);
+
+  const pickImage = async (setterUri, label) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Allow gallery access to upload documents.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]?.uri) {
+        setterUri(result.assets[0].uri);
+      }
+    } catch (err) {
+      console.error(`Error picking ${label}:`, err);
+      Alert.alert('Upload failed', `Could not select ${label}. Please try again.`);
+    }
+  };
 
   const checkVerificationStatus = async () => {
     try {
@@ -159,8 +184,8 @@ const Verification = ({ navigation }) => {
 
   const handleSubmitVerification = async () => {
     // Basic validation
-    if (!fullName || !dob || !gender || !address) {
-      Alert.alert('Missing info', 'Please fill all required fields.');
+    if (!fullName || !dob || !gender || !address || !docFrontUri || !docBackUri || !panCardUri) {
+      Alert.alert('Missing info', 'Please fill all required fields and upload all documents.');
       return;
     }
     setSubmitting(true);
@@ -172,9 +197,9 @@ const Verification = ({ navigation }) => {
         dob,
         gender,
         address,
-        aadhaarFront: docFront,
-        aadhaarBack: docBack,
-        panCard,
+        aadhaarFront: docFrontUri,
+        aadhaarBack: docBackUri,
+        panCard: panCardUri,
       });
       setStatus(VERIFICATION_STATUS.PENDING);
       setIsSubmitted(true);
@@ -223,24 +248,48 @@ const Verification = ({ navigation }) => {
         onChangeText={setAddress}
         multiline
       />
-      <Input
-        label="Aadhaar Front (URL or note)"
-        placeholder="Paste link or leave note"
-        value={docFront}
-        onChangeText={setDocFront}
-      />
-      <Input
-        label="Aadhaar Back (URL or note)"
-        placeholder="Paste link or leave note"
-        value={docBack}
-        onChangeText={setDocBack}
-      />
-      <Input
-        label="PAN Card (URL or note)"
-        placeholder="Paste link or leave note"
-        value={panCard}
-        onChangeText={setPanCard}
-      />
+      {/* Document Uploads with preview and upload button */}
+      <View style={styles.uploadSection}>
+        <Text style={styles.uploadLabel}>Aadhaar Front (Required)</Text>
+        <TouchableOpacity
+          style={styles.uploadBox}
+          onPress={() => pickImage(setDocFrontUri, 'Aadhaar Front')}
+        >
+          {docFrontUri ? (
+            <Image source={{ uri: docFrontUri }} style={styles.uploadPreview} />
+          ) : (
+            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.uploadSection}>
+        <Text style={styles.uploadLabel}>Aadhaar Back (Required)</Text>
+        <TouchableOpacity
+          style={styles.uploadBox}
+          onPress={() => pickImage(setDocBackUri, 'Aadhaar Back')}
+        >
+          {docBackUri ? (
+            <Image source={{ uri: docBackUri }} style={styles.uploadPreview} />
+          ) : (
+            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.uploadSection}>
+        <Text style={styles.uploadLabel}>PAN Card (Required)</Text>
+        <TouchableOpacity
+          style={styles.uploadBox}
+          onPress={() => pickImage(setPanCardUri, 'PAN Card')}
+        >
+          {panCardUri ? (
+            <Image source={{ uri: panCardUri }} style={styles.uploadPreview} />
+          ) : (
+            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
+          )}
+        </TouchableOpacity>
+      </View>
 
       <Button
         onPress={handleSubmitVerification}
@@ -398,6 +447,32 @@ const styles = StyleSheet.create({
   submitButtonText: {
     ...typography.button,
     color: '#FFFFFF',
+  },
+  uploadSection: {
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  uploadLabel: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  uploadBox: {
+    height: 120,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderStyle: 'dashed',
+    borderRadius: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.cardBackground,
+    marginBottom: spacing.sm,
+  },
+  uploadPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: spacing.sm,
   },
   errorContainer: {
     flexDirection: 'row',
