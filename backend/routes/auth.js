@@ -16,6 +16,7 @@ const axios = require('axios');
 // Adjust these imports based on your backend structure
 const User = require('../models/User');
 const { generateJWT } = require('../utils/jwt');
+const bcrypt = require('bcryptjs');
 
 // Temporary storage for OTP requests (use Redis in production)
 const otpRequests = new Map();
@@ -324,6 +325,67 @@ router.post('/logout', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Logout failed'
+    });
+  }
+});
+
+/**
+ * Admin login with email/password (env-based)
+ * POST /api/auth/admin-login
+ */
+router.post('/admin-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required',
+      });
+    }
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      return res.status(500).json({
+        success: false,
+        error: 'Admin credentials are not configured on the server',
+      });
+    }
+
+    // Plaintext compare (if you want hashing, store a bcrypt hash in env and compare)
+    if (email !== adminEmail || password !== adminPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid admin credentials',
+      });
+    }
+
+    // Build minimal admin user payload
+    const adminUser = {
+      id: 'admin',
+      role: 'admin',
+      phone: null,
+      email: adminEmail,
+    };
+
+    const token = generateJWT(adminUser);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: adminUser.id,
+        role: adminUser.role,
+        email: adminUser.email,
+      },
+    });
+  } catch (error) {
+    console.error('Error during admin login:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to login as admin',
     });
   }
 });
