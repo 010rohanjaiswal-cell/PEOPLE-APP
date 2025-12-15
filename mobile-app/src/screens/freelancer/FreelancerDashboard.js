@@ -4,11 +4,9 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -19,12 +17,23 @@ import WalletScreen from './Wallet';
 import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
 
-const Tab = createBottomTabNavigator();
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const DASHBOARD_HEIGHT = SCREEN_WIDTH * (9 / 16); // 16:9 aspect ratio
 
 const FreelancerDashboard = () => {
   const { user, logout } = useAuth();
-  const navigation = useNavigation();
+  const [activeTab, setActiveTab] = useState('AvailableJobs');
   const [logoutError, setLogoutError] = useState('');
+
+  const tabs = [
+    { key: 'AvailableJobs', label: 'Available', icon: 'work', component: AvailableJobsScreen },
+    { key: 'MyJobs', label: 'My Jobs', icon: 'check-circle', component: MyJobsScreen },
+    { key: 'Wallet', label: 'Wallet', icon: 'account-balance-wallet', component: WalletScreen },
+    { key: 'Orders', label: 'Orders', icon: 'receipt', component: OrdersScreen },
+    { key: 'Profile', label: 'Profile', icon: 'person', component: ProfileScreen },
+  ];
+
+  const ActiveScreen = tabs.find(tab => tab.key === activeTab)?.component || AvailableJobsScreen;
 
   const handleLogout = async () => {
     try {
@@ -42,129 +51,92 @@ const FreelancerDashboard = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Top Navigation Bar */}
-      <View style={styles.topNav}>
-        <View style={styles.leftSection}>
-          <Text style={styles.logo}>People</Text>
-          <View style={styles.userInfo}>
-            {user.profilePhoto ? (
-              <Image source={{ uri: user.profilePhoto }} style={styles.profilePhoto} />
-            ) : (
-              <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
-                <MaterialIcons name="person" size={20} color={colors.text.secondary} />
+    <View style={styles.wrapper}>
+      <View style={styles.container}>
+        {/* Top Navigation Bar */}
+        <View style={styles.topNav}>
+          <View style={styles.leftSection}>
+            <Text style={styles.logo}>People</Text>
+            <View style={styles.userInfo}>
+              {user.profilePhoto ? (
+                <Image source={{ uri: user.profilePhoto }} style={styles.profilePhoto} />
+              ) : (
+                <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
+                  <MaterialIcons name="person" size={20} color={colors.text.secondary} />
+                </View>
+              )}
+              <View style={styles.userDetails}>
+                <Text style={styles.userName}>{user.fullName || 'Freelancer'}</Text>
+                <Text style={styles.userPhone}>{user.phone || ''}</Text>
               </View>
-            )}
-            <View style={styles.userDetails}>
-              <Text style={styles.userName}>{user.fullName || 'Freelancer'}</Text>
-              <Text style={styles.userPhone}>{user.phone || ''}</Text>
             </View>
           </View>
-        </View>
-        <View style={styles.rightSection}>
-          <TouchableOpacity 
-            onPress={() => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            }} 
-            style={styles.loginButton}
-          >
-            <Text style={styles.loginText}>Login</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <MaterialIcons name="logout" size={20} color={colors.error.main} />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Error Message */}
-      {logoutError ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{logoutError}</Text>
+        {/* Error Message */}
+        {logoutError ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{logoutError}</Text>
+          </View>
+        ) : null}
+
+        {/* Top Tab Bar */}
+        <View style={styles.tabBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarContent}>
+            {tabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key)}
+                style={[
+                  styles.tabButton,
+                  activeTab === tab.key && styles.tabButtonActive,
+                ]}
+              >
+                <MaterialIcons
+                  name={tab.icon}
+                  size={20}
+                  color={activeTab === tab.key ? colors.primary.main : colors.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    activeTab === tab.key && styles.tabLabelActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      ) : null}
 
-      {/* Tab Navigation */}
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: colors.primary.main,
-          tabBarInactiveTintColor: colors.text.secondary,
-          tabBarStyle: {
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            height: 60,
-            paddingBottom: 8,
-            paddingTop: 8,
-          },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: '500',
-          },
-        }}
-      >
-        <Tab.Screen
-          name="AvailableJobs"
-          component={AvailableJobsScreen}
-          options={{
-            tabBarLabel: 'Available',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="work" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="MyJobs"
-          component={MyJobsScreen}
-          options={{
-            tabBarLabel: 'My Jobs',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="check-circle" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Wallet"
-          component={WalletScreen}
-          options={{
-            tabBarLabel: 'Wallet',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="account-balance-wallet" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Orders"
-          component={OrdersScreen}
-          options={{
-            tabBarLabel: 'Orders',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="receipt" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Profile"
-          component={ProfileScreen}
-          options={{
-            tabBarLabel: 'Profile',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="person" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tab.Navigator>
+        {/* Tab Content */}
+        <View style={styles.tabContent}>
+          <ActiveScreen />
+        </View>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
     backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    width: SCREEN_WIDTH,
+    height: DASHBOARD_HEIGHT,
+    maxWidth: SCREEN_WIDTH,
+    maxHeight: DASHBOARD_HEIGHT,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
   },
   topNav: {
     flexDirection: 'row',
@@ -214,20 +186,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
   },
-  rightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  loginButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  loginText: {
-    ...typography.body,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -251,6 +209,41 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.error.main,
     textAlign: 'center',
+  },
+  tabBar: {
+    backgroundColor: colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabBarContent: {
+    paddingHorizontal: spacing.sm,
+  },
+  tabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.xs,
+    borderRadius: spacing.sm,
+    gap: spacing.xs,
+  },
+  tabButtonActive: {
+    backgroundColor: colors.primary.light,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.primary.main,
+  },
+  tabLabel: {
+    ...typography.small,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  tabLabelActive: {
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  tabContent: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
 });
 
