@@ -37,6 +37,87 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
   }
 });
 
+// POST /api/admin/approve-freelancer/:verificationId
+router.post('/approve-freelancer/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const verification = await FreelancerVerification.findById(id);
+    if (!verification) {
+      return res.status(404).json({
+        success: false,
+        error: 'Verification record not found',
+      });
+    }
+
+    // Update verification record
+    verification.status = 'approved';
+    verification.rejectionReason = null;
+    await verification.save();
+
+    // Update related user
+    if (verification.user) {
+      await User.findByIdAndUpdate(verification.user, {
+        verificationStatus: 'approved',
+        verificationRejectionReason: null,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Freelancer approved successfully',
+      verification,
+    });
+  } catch (error) {
+    console.error('Error approving freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to approve freelancer',
+    });
+  }
+});
+
+// POST /api/admin/reject-freelancer/:verificationId
+router.post('/reject-freelancer/:id', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const verification = await FreelancerVerification.findById(id);
+    if (!verification) {
+      return res.status(404).json({
+        success: false,
+        error: 'Verification record not found',
+      });
+    }
+
+    // Update verification record
+    verification.status = 'rejected';
+    verification.rejectionReason = reason || 'Rejected by admin';
+    await verification.save();
+
+    // Update related user
+    if (verification.user) {
+      await User.findByIdAndUpdate(verification.user, {
+        verificationStatus: 'rejected',
+        verificationRejectionReason: verification.rejectionReason,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Freelancer rejected successfully',
+      verification,
+    });
+  } catch (error) {
+    console.error('Error rejecting freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to reject freelancer',
+    });
+  }
+});
+
 // GET /api/admin/withdrawal-requests?status=pending
 router.get('/withdrawal-requests', authenticate, requireRole('admin'), async (req, res) => {
   const { status } = req.query;
