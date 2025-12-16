@@ -89,6 +89,16 @@ export const clientJobsAPI = {
     const response = await apiClient.post(`/api/client/jobs/${jobId}/pay`);
     return response.data;
   },
+
+  /**
+   * Get offers for a job
+   * @param {string} jobId - Job ID
+   * @returns {Promise} List of offers
+   */
+  getOffers: async (jobId) => {
+    const response = await apiClient.get(`/api/client/jobs/${jobId}/offers`);
+    return response.data;
+  },
 };
 
 export default clientJobsAPI;
