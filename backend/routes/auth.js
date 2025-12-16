@@ -15,6 +15,7 @@ const axios = require('axios');
 // Import your models and utilities
 // Adjust these imports based on your backend structure
 const User = require('../models/User');
+const FreelancerVerification = require('../models/FreelancerVerification');
 const { generateJWT } = require('../utils/jwt');
 const bcrypt = require('bcryptjs');
 
@@ -42,6 +43,41 @@ function getOTPRequest(phoneNumber) {
 // Helper: Clear OTP request
 function clearOTPRequest(phoneNumber) {
   otpRequests.delete(phoneNumber);
+}
+
+/**
+ * Helper function to get the appropriate profile photo for a user
+ * Priority: Freelancer verification profilePhoto > User profilePhoto > null
+ */
+async function getUserProfilePhoto(userId) {
+  try {
+    // First, check if user has a freelancer verification with profilePhoto
+    const verification = await FreelancerVerification.findOne({ 
+      user: userId,
+      profilePhoto: { $exists: true, $ne: null }
+    }).sort({ createdAt: -1 }); // Get the most recent verification
+    
+    if (verification && verification.profilePhoto) {
+      return verification.profilePhoto;
+    }
+    
+    // If no freelancer verification photo, check user's profilePhoto (from client profile setup)
+    const user = await User.findById(userId);
+    if (user && user.profilePhoto) {
+      return user.profilePhoto;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting user profile photo:', error);
+    // Fallback to user's profilePhoto if verification lookup fails
+    try {
+      const user = await User.findById(userId);
+      return user?.profilePhoto || null;
+    } catch (err) {
+      return null;
+    }
+  }
 }
 
 /**
