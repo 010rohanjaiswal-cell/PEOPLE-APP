@@ -55,23 +55,29 @@ const getAuthToken = async () => {
     const credentials = getPhonePeCredentials();
     const config = getConfig();
 
+    // PhonePe OAuth requires application/x-www-form-urlencoded format
+    const params = new URLSearchParams();
+    params.append('client_id', credentials.clientId);
+    params.append('client_secret', credentials.clientSecret);
+    params.append('grant_type', 'client_credentials');
+
     const response = await axios.post(
       config.AUTH_URL,
-      {
-        client_id: credentials.clientId,
-        client_secret: credentials.clientSecret,
-        grant_type: 'client_credentials',
-      },
+      params.toString(),
       {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
       }
     );
 
     return response.data.access_token;
   } catch (error) {
-    console.error('PhonePe Auth Error:', error.response?.data || error.message);
+    console.error('PhonePe Auth Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message,
+    });
     throw new Error('Failed to get PhonePe authorization token');
   }
 };
@@ -155,7 +161,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const base64Payload = Buffer.from(JSON.stringify(orderPayload)).toString('base64');
 
     // Generate X-VERIFY header
-    const endpoint = '/checkout/v2/sdk/order';
+    // Use /checkout/v2/order for web-based payments (not /sdk/order which is for native SDK)
+    const endpoint = '/checkout/v2/order';
     const xVerify = generateXVerify(base64Payload, endpoint);
 
     // Create order via PhonePe API
