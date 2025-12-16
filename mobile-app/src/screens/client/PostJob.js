@@ -11,7 +11,7 @@ import { Button, Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import { clientJobsAPI } from '../../api/clientJobs';
 
-const PostJob = ({ navigation }) => {
+const PostJob = ({ onJobPosted }) => {
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -104,8 +104,10 @@ const PostJob = ({ navigation }) => {
                 gender: '',
                 description: '',
               });
-              // Switch to My Jobs tab
-              navigation.navigate('MyJobs');
+              // Notify parent (ClientDashboard) to switch to My Jobs tab
+              if (typeof onJobPosted === 'function') {
+                onJobPosted();
+              }
             },
           },
         ]);

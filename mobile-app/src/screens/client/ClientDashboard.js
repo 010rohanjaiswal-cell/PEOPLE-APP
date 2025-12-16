@@ -151,6 +151,8 @@ const ClientDashboard = () => {
           <HistoryScreen />
         ) : activeTab === 'Profile' ? (
           <ProfileScreen />
+        ) : activeTab === 'PostJob' ? (
+          <PostJobScreen onJobPosted={() => setActiveTab('MyJobs')} />
         ) : (
           <ActiveScreen />
         )}
