@@ -63,6 +63,15 @@ export const freelancerJobsAPI = {
     const response = await apiClient.post(`/api/freelancer/jobs/${jobId}/fully-complete`);
     return response.data;
   },
+
+  /**
+   * Get completed orders (order history) for freelancer
+   * @returns {Promise} List of completed orders
+   */
+  getOrders: async () => {
+    const response = await apiClient.get('/api/freelancer/orders');
+    return response.data;
+  },
 };
 
 export default freelancerJobsAPI;

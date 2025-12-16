@@ -297,6 +297,69 @@ router.get('/jobs/assigned', authenticate, async (req, res) => {
 });
 
 /**
+ * Get completed orders for freelancer (order history)
+ * GET /api/freelancer/orders
+ * Requires authentication as freelancer
+ */
+router.get('/orders', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can view orders',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // Orders = jobs assigned to this freelancer that they've fully completed
+    const jobs = await Job.find({
+      assignedFreelancer: freelancerId,
+      freelancerCompleted: true,
+      status: 'completed',
+    })
+      .populate('client', 'fullName phone')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    // Attach commission summary for each job if exists
+    const jobIds = jobs.map((job) => job._id);
+    const commissions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      job: { $in: jobIds },
+    }).lean();
+
+    const commissionByJob = {};
+    commissions.forEach((c) => {
+      commissionByJob[c.job.toString()] = {
+        jobAmount: c.jobAmount,
+        platformCommission: c.platformCommission,
+        amountReceived: c.amountReceived,
+        duesPaid: c.duesPaid,
+      };
+    });
+
+    const mappedJobs = jobs.map((job) => ({
+      ...job,
+      commission: commissionByJob[job._id.toString()] || null,
+    }));
+
+    res.json({
+      success: true,
+      orders: mappedJobs,
+    });
+  } catch (error) {
+    console.error('Error getting freelancer orders:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get orders',
+    });
+  }
+});
+
+/**
  * Pickup a job (assign job directly to freelancer)
  * POST /api/freelancer/jobs/:id/pickup
  * Requires authentication as freelancer
