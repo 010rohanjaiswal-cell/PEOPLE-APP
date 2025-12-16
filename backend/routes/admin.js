@@ -53,7 +53,8 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
 
     res.json({
       success: true,
-      data: formattedVerifications,
+      verifications: formattedVerifications, // Admin panel expects 'verifications' not 'data'
+      data: formattedVerifications, // Keep 'data' for backward compatibility
       status: status || 'all',
     });
   } catch (error) {
