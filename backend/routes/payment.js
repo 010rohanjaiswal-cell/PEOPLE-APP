@@ -208,22 +208,16 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-      // Store merchant order ID temporarily (you might want to store this in DB)
-      // For now, we'll return it and the frontend will poll for status
+    // Store merchant order ID temporarily (you might want to store this in DB)
+    // For now, we'll return it and the frontend will poll for status
 
-      res.json({
-        success: true,
-        merchantOrderId,
-        paymentUrl,
-        amount: totalDues,
-        message: 'Payment order created successfully',
-      });
-    } else {
-      return res.status(500).json({
-        success: false,
-        error: responseData.message || 'Failed to create payment order',
-      });
-    }
+    res.json({
+      success: true,
+      merchantOrderId,
+      paymentUrl,
+      amount: totalDues,
+      message: 'Payment order created successfully',
+    });
   } catch (error) {
     console.error('Error creating PhonePe order:', error.response?.data || error.message);
     res.status(500).json({
