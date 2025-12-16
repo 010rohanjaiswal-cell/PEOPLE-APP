@@ -28,6 +28,7 @@ const Verification = ({ navigation }) => {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showResubmitForm, setShowResubmitForm] = useState(false); // Control form visibility for rejected status
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -104,6 +105,10 @@ const Verification = ({ navigation }) => {
       }
       // If status is pending from backend, mark as submitted
       setIsSubmitted(response.status === VERIFICATION_STATUS.PENDING || response.verificationStatus === VERIFICATION_STATUS.PENDING);
+      // Reset resubmit form visibility when status changes
+      if (response.status === VERIFICATION_STATUS.REJECTED || response.verificationStatus === VERIFICATION_STATUS.REJECTED) {
+        setShowResubmitForm(false);
+      }
     } catch (error) {
       console.error('Error checking verification status:', error);
       
@@ -177,12 +182,8 @@ const Verification = ({ navigation }) => {
       </Text>
       <Button
         onPress={() => {
-          // TODO: Show verification form for resubmission (Phase 4)
-          Alert.alert(
-            'Resubmission Coming Soon',
-            'Verification form will be available in Phase 4.',
-            [{ text: 'OK' }]
-          );
+          // Show verification form for resubmission
+          setShowResubmitForm(true);
         }}
         variant="outline"
         style={styles.resubmitButton}
@@ -235,6 +236,7 @@ const Verification = ({ navigation }) => {
       await verificationAPI.submitVerification(formData);
       setStatus(VERIFICATION_STATUS.PENDING);
       setIsSubmitted(true);
+      setShowResubmitForm(false); // Hide form after successful submission
       Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
     } catch (err) {
       console.error('Verification submit error:', err);
@@ -404,11 +406,14 @@ const Verification = ({ navigation }) => {
               <>
                 {/* Show pending only if backend says pending and user has submitted */}
                 {status === VERIFICATION_STATUS.PENDING && isSubmitted && renderPendingStatus()}
-                {/* Show rejection info and form */}
-                {status === VERIFICATION_STATUS.REJECTED && renderRejectedStatus()}
+                {/* Show rejection info (without form) */}
+                {status === VERIFICATION_STATUS.REJECTED && !showResubmitForm && renderRejectedStatus()}
 
-                {/* Show form only when not yet submitted and not pending */}
-                {(!isSubmitted && status !== VERIFICATION_STATUS.PENDING) && renderVerificationForm()}
+                {/* Show form only when:
+                    1. New user (status is null and not submitted), OR
+                    2. Rejected and user clicked "Resubmit Verification" (showResubmitForm === true)
+                */}
+                {((status === null && !isSubmitted) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
               </>
             )}
           </CardContent>

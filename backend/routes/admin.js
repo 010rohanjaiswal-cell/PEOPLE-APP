@@ -21,11 +21,39 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
 
     const verifications = await FreelancerVerification.find(query)
       .sort({ createdAt: -1 })
-      .populate('user', 'phone fullName profilePhoto role');
+      .populate('user', 'phone fullName profilePhoto role email');
+
+    // Transform to ensure all fields are present and properly formatted for admin panel
+    const formattedVerifications = verifications.map(verification => ({
+      _id: verification._id,
+      id: verification._id.toString(),
+      // Freelancer Info
+      fullName: verification.fullName || verification.user?.fullName || 'N/A',
+      phone: verification.user?.phone || 'N/A',
+      email: verification.user?.email || null,
+      profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
+      role: verification.user?.role || 'freelancer',
+      // Verification Details
+      dob: verification.dob || null,
+      gender: verification.gender || null,
+      address: verification.address || null,
+      // Documents
+      aadhaarFront: verification.aadhaarFront || null,
+      aadhaarBack: verification.aadhaarBack || null,
+      panCard: verification.panCard || null,
+      // Status
+      status: verification.status || 'pending',
+      rejectionReason: verification.rejectionReason || null,
+      // Timestamps
+      createdAt: verification.createdAt,
+      updatedAt: verification.updatedAt,
+      // User reference (for admin actions)
+      userId: verification.user?._id || verification.user,
+    }));
 
     res.json({
       success: true,
-      data: verifications,
+      data: formattedVerifications,
       status: status || 'all',
     });
   } catch (error) {
