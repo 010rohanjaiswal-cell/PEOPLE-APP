@@ -3,13 +3,14 @@
  * Main dashboard with tab navigation for freelancers
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { userAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -22,11 +23,28 @@ import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
 
 const FreelancerDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
   const [logoutError, setLogoutError] = useState('');
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
+
+  // Refresh user profile on mount to get updated profile photo
+  useEffect(() => {
+    const refreshUserProfile = async () => {
+      try {
+        const profileResponse = await userAPI.getProfile();
+        if (profileResponse.success && profileResponse.user) {
+          await updateUser(profileResponse.user);
+        }
+      } catch (error) {
+        console.error('Error refreshing user profile:', error);
+        // Silently fail - user data will be updated on next login
+      }
+    };
+
+    refreshUserProfile();
+  }, []); // Only run on mount
 
   const tabs = [
     { key: 'AvailableJobs', label: 'Available', icon: 'work', component: AvailableJobsScreen },

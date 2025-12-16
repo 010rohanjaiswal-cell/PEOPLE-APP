@@ -10,4 +10,5 @@ export { default as freelancerJobsAPI } from './freelancerJobs';
 export { default as walletAPI } from './wallet';
 export { default as verificationAPI } from './verification';
 export { default as paymentAPI } from './payment';
+export { default as userAPI } from './user';
 

@@ -18,11 +18,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Card, CardContent, Input } from '../../components/common';
-import { verificationAPI } from '../../api';
+import { verificationAPI, userAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 
 const Verification = ({ navigation }) => {
+  const { updateUser } = useAuth();
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -237,6 +239,18 @@ const Verification = ({ navigation }) => {
       setStatus(VERIFICATION_STATUS.PENDING);
       setIsSubmitted(true);
       setShowResubmitForm(false); // Hide form after successful submission
+      
+      // Refresh user profile to get updated profile photo from backend
+      try {
+        const profileResponse = await userAPI.getProfile();
+        if (profileResponse.success && profileResponse.user) {
+          await updateUser(profileResponse.user);
+        }
+      } catch (profileError) {
+        console.error('Error refreshing user profile:', profileError);
+        // Don't show error to user, profile photo will update on next login
+      }
+      
       Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
     } catch (err) {
       console.error('Verification submit error:', err);
