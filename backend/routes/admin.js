@@ -136,6 +136,9 @@ router.post('/verifications/:id/approve', authenticate, requireRole('admin'), as
       });
     }
 
+    // Repopulate user before formatting
+    await verification.populate('user', 'phone fullName profilePhoto role email');
+
     res.json({
       success: true,
       message: 'Freelancer approved successfully',
@@ -175,6 +178,9 @@ router.post('/approve-freelancer/:id', authenticate, requireRole('admin'), async
         verificationRejectionReason: null,
       });
     }
+
+    // Repopulate user before formatting
+    await verification.populate('user', 'phone fullName profilePhoto role email');
 
     res.json({
       success: true,
@@ -217,6 +223,9 @@ router.post('/verifications/:id/reject', authenticate, requireRole('admin'), asy
       });
     }
 
+    // Repopulate user before formatting
+    await verification.populate('user', 'phone fullName profilePhoto role email');
+
     res.json({
       success: true,
       message: 'Freelancer rejected successfully',
@@ -257,6 +266,9 @@ router.post('/reject-freelancer/:id', authenticate, requireRole('admin'), async 
         verificationRejectionReason: verification.rejectionReason,
       });
     }
+
+    // Repopulate user before formatting
+    await verification.populate('user', 'phone fullName profilePhoto role email');
 
     res.json({
       success: true,
