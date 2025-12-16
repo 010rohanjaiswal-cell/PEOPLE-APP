@@ -69,6 +69,7 @@ router.post('/jobs', authenticate, async (req, res) => {
   }
 });
 
+
 /**
  * Get active jobs for client
  * GET /api/client/jobs/active
@@ -382,6 +383,11 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
     // Assign job to freelancer and update status
     job.assignedFreelancer = offer.freelancer._id || offer.freelancer;
     job.status = 'assigned';
+
+    // Update job budget to accepted offer amount so client/freelancer see final agreed amount
+    if (offer.amount && Number(offer.amount) > 0) {
+      job.budget = Number(offer.amount);
+    }
 
     await job.save();
 

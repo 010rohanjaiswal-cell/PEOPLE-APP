@@ -20,8 +20,11 @@ import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { walletAPI } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
 const AvailableJobs = () => {
+  const { user } = useAuth();
+  const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -134,6 +137,8 @@ const AvailableJobs = () => {
       if (response.success) {
         Alert.alert('Success', 'Offer submitted successfully.');
         setOfferModalVisible(false);
+        // Reload jobs so we get updated offers array for cooldown calculation
+        loadJobs();
       } else {
         Alert.alert('Error', response.error || 'Failed to submit offer');
       }
@@ -148,7 +153,37 @@ const AvailableJobs = () => {
     }
   };
 
-  const renderJobItem = ({ item }) => (
+  const getOfferCooldownMinutes = (job) => {
+    try {
+      if (!job?.offers || !Array.isArray(job.offers) || !freelancerId) return 0;
+      const myOffers = job.offers.filter(
+        (o) =>
+          o.freelancer === freelancerId ||
+          o.freelancer?._id === freelancerId ||
+          o.freelancer?.toString?.() === freelancerId
+      );
+      if (!myOffers.length) return 0;
+      const lastOffer = myOffers.reduce((latest, current) => {
+        const latestTime = new Date(latest.createdAt || 0).getTime();
+        const currentTime = new Date(current.createdAt || 0).getTime();
+        return currentTime > latestTime ? current : latest;
+      });
+      const FIVE_MINUTES = 5 * 60 * 1000;
+      const now = Date.now();
+      const lastTime = new Date(lastOffer.createdAt || 0).getTime();
+      const diff = now - lastTime;
+      if (diff >= FIVE_MINUTES) return 0;
+      return Math.ceil((FIVE_MINUTES - diff) / (60 * 1000));
+    } catch {
+      return 0;
+    }
+  };
+
+  const renderJobItem = ({ item }) => {
+    const cooldownMinutes = getOfferCooldownMinutes(item);
+    const canMakeOffer = canWork && cooldownMinutes === 0;
+
+    return (
     <View style={styles.jobCard}>
       <View style={styles.jobHeader}>
         <Text style={styles.jobTitle}>{item.title}</Text>
@@ -197,28 +232,32 @@ const AvailableJobs = () => {
           style={[
             styles.actionButton,
             styles.makeOfferButton,
-            !canWork && styles.actionButtonDisabled,
+            (!canWork || cooldownMinutes > 0) && styles.actionButtonDisabled,
           ]}
           onPress={() => openOfferModal(item)}
-          disabled={!canWork}
+          disabled={!canMakeOffer}
         >
           <MaterialIcons
             name="local-offer"
             size={18}
-            color={canWork ? colors.primary.main : colors.text.muted}
+            color={canMakeOffer ? colors.primary.main : colors.text.muted}
           />
           <Text
             style={[
               styles.actionButtonText,
-              { color: canWork ? colors.primary.main : colors.text.muted },
+              { color: canMakeOffer ? colors.primary.main : colors.text.muted },
             ]}
           >
-            Make Offer
+            {!canWork
+              ? 'Pay Commission First'
+              : cooldownMinutes > 0
+              ? `${cooldownMinutes}m`
+              : 'Make Offer'}
           </Text>
         </TouchableOpacity>
       </View>
     </View>
-  );
+  );};
 
   if (loading) {
     return (
