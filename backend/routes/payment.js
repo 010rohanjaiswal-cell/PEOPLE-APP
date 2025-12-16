@@ -259,7 +259,8 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     const authToken = await getAuthToken();
 
     // Generate X-VERIFY for status check
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
+    // Use /pg/v1/status/{merchantId}/{merchantTransactionId} format
+    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     // Check order status
@@ -394,7 +395,7 @@ router.post('/process-dues/:merchantOrderId', authenticate, async (req, res) => 
     const credentials = getPhonePeCredentials();
     const config = getConfig();
     const authToken = await getAuthToken();
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
+    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     const statusResponse = await axios.get(
