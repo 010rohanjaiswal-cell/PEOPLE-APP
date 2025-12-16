@@ -16,11 +16,13 @@ export const walletAPI = {
 
   /**
    * Initiate dues payment
-   * @param {number} amount - Amount to pay
-   * @returns {Promise} Payment URL and order ID
+   * NOTE: PhonePe integration will be added later.
+   * For now, this simply marks all dues as paid on the backend.
+   * @param {string} orderId - Optional external order ID
+   * @returns {Promise} Updated wallet data
    */
-  payDues: async (amount) => {
-    const response = await apiClient.post('/api/freelancer/pay-dues', { amount });
+  payDues: async (orderId) => {
+    const response = await apiClient.post('/api/freelancer/pay-dues', orderId ? { orderId } : {});
     return response.data;
   },
 };

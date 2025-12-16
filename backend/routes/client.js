@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const Job = require('../models/Job');
+const CommissionTransaction = require('../models/CommissionTransaction');
 
 /**
  * Post a new job
@@ -509,8 +510,22 @@ router.post('/jobs/:id/pay', authenticate, async (req, res) => {
     // Update job status to completed
     job.status = 'completed';
 
-    // TODO: Add commission to freelancer's ledger (will be implemented in Phase 4)
-    // For now, just mark the job as completed
+    // Create commission transaction for freelancer (10% commission)
+    const jobAmount = job.budget || 0;
+    const platformCommission = Math.round(jobAmount * 0.1);
+    const amountReceived = jobAmount - platformCommission;
+
+    await CommissionTransaction.create({
+      freelancer: job.assignedFreelancer._id || job.assignedFreelancer,
+      job: job._id,
+      jobTitle: job.title,
+      clientName: job.client?.fullName || null,
+      clientId: job.client?._id || job.client || null,
+      jobAmount,
+      platformCommission,
+      amountReceived,
+      duesPaid: false,
+    });
 
     await job.save();
 

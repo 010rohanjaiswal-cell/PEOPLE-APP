@@ -9,6 +9,7 @@ const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const Job = require('../models/Job');
+const CommissionTransaction = require('../models/CommissionTransaction');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
@@ -226,6 +227,159 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get available jobs',
+    });
+  }
+});
+
+/**
+ * Get freelancer wallet data
+ * GET /api/freelancer/wallet
+ * Requires authentication as freelancer
+ */
+router.get('/wallet', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can view wallet',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // Get all commission transactions for this freelancer
+    const transactions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+    })
+      .sort({ createdAt: -1 })
+      .populate('job', 'title')
+      .lean();
+
+    // Calculate total dues (sum of unpaid commission amounts)
+    const totalDues = transactions
+      .filter((t) => !t.duesPaid)
+      .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
+
+    const canWork = totalDues <= 0;
+
+    // Map transactions to a frontend-friendly shape
+    const mappedTransactions = transactions.map((t) => ({
+      id: t._id.toString(),
+      jobId: t.job?._id || t.job,
+      jobTitle: t.jobTitle || t.job?.title || 'Job',
+      clientName: t.clientName || null,
+      jobAmount: t.jobAmount,
+      platformCommission: t.platformCommission,
+      amountReceived: t.amountReceived,
+      duesPaid: t.duesPaid,
+      duesPaidAt: t.duesPaidAt,
+      duesPaymentOrderId: t.duesPaymentOrderId,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      status: t.duesPaid ? 'paid' : 'pending',
+    }));
+
+    res.json({
+      success: true,
+      wallet: {
+        totalDues,
+        canWork,
+        transactions: mappedTransactions,
+      },
+    });
+  } catch (error) {
+    console.error('Error getting freelancer wallet:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get wallet data',
+    });
+  }
+});
+
+/**
+ * Pay dues (mark all unpaid commission as paid)
+ * POST /api/freelancer/pay-dues
+ * NOTE: PhonePe integration will be added later.
+ */
+router.post('/pay-dues', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can pay dues',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // In production, this will be triggered by PhonePe callback with orderId
+    const now = new Date();
+    const duesPaymentOrderId =
+      req.body?.orderId ||
+      `DUES_${freelancerId.toString()}_${now.getTime()}`;
+
+    // Mark all unpaid transactions as paid
+    await CommissionTransaction.updateMany(
+      {
+        freelancer: freelancerId,
+        duesPaid: false,
+      },
+      {
+        $set: {
+          duesPaid: true,
+          duesPaidAt: now,
+          duesPaymentOrderId,
+        },
+      }
+    );
+
+    // Return updated wallet data
+    const transactions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalDues = transactions
+      .filter((t) => !t.duesPaid)
+      .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
+
+    const canWork = totalDues <= 0;
+
+    const mappedTransactions = transactions.map((t) => ({
+      id: t._id.toString(),
+      jobId: t.job,
+      jobTitle: t.jobTitle,
+      clientName: t.clientName || null,
+      jobAmount: t.jobAmount,
+      platformCommission: t.platformCommission,
+      amountReceived: t.amountReceived,
+      duesPaid: t.duesPaid,
+      duesPaidAt: t.duesPaidAt,
+      duesPaymentOrderId: t.duesPaymentOrderId,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      status: t.duesPaid ? 'paid' : 'pending',
+    }));
+
+    res.json({
+      success: true,
+      wallet: {
+        totalDues,
+        canWork,
+        transactions: mappedTransactions,
+        lastOrderId: duesPaymentOrderId,
+      },
+    });
+  } catch (error) {
+    console.error('Error paying freelancer dues:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to pay dues',
     });
   }
 });
