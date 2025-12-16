@@ -367,6 +367,116 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
 });
 
 /**
+ * Make an offer on a job
+ * POST /api/freelancer/jobs/:id/offer
+ * Requires authentication as freelancer
+ */
+router.post('/jobs/:id/offer', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can make offers',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+    const { amount, message } = req.body || {};
+
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid offer amount is required',
+      });
+    }
+
+    // Check unpaid dues - cannot make offers if dues > 0
+    const unpaidCommissions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaid: false,
+    }).lean();
+
+    const totalDues = unpaidCommissions.reduce(
+      (sum, c) => sum + (c.platformCommission || 0),
+      0
+    );
+
+    if (totalDues > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'You have unpaid commission dues. Pay dues in Wallet to make offers.',
+      });
+    }
+
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'open' || job.assignedFreelancer) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot make offer on this job anymore',
+      });
+    }
+
+    // Cooldown: 5 minutes between offers on same job
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    const now = new Date();
+    const existingOffers = job.offers || [];
+    const myOffers = existingOffers.filter(
+      (o) => o.freelancer.toString() === freelancerId.toString()
+    );
+
+    if (myOffers.length > 0) {
+      const lastOffer = myOffers.reduce((latest, current) =>
+        (latest.createdAt || new Date(0)) > (current.createdAt || new Date(0))
+          ? latest
+          : current
+      );
+
+      if (lastOffer.createdAt && now - lastOffer.createdAt < FIVE_MINUTES) {
+        const remainingMs = FIVE_MINUTES - (now - lastOffer.createdAt);
+        const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+        return res.status(400).json({
+          success: false,
+          error: `You can make another offer on this job in ${remainingMinutes} minute(s).`,
+        });
+      }
+    }
+
+    // Add new offer
+    job.offers.push({
+      freelancer: freelancerId,
+      amount: Number(amount),
+      message: message || null,
+      status: 'pending',
+      createdAt: now,
+    });
+
+    await job.save();
+
+    res.json({
+      success: true,
+      message: 'Offer submitted successfully',
+      jobId: job._id,
+    });
+  } catch (error) {
+    console.error('Error making offer on job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to make offer',
+    });
+  }
+});
+
+/**
  * Mark work as done
  * POST /api/freelancer/jobs/:id/complete
  * Requires authentication as freelancer

@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -24,6 +26,11 @@ const AvailableJobs = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [canWork, setCanWork] = useState(true);
+  const [offerModalVisible, setOfferModalVisible] = useState(false);
+  const [offerJob, setOfferJob] = useState(null);
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerMessage, setOfferMessage] = useState('');
+  const [submittingOffer, setSubmittingOffer] = useState(false);
 
   const loadJobs = async () => {
     try {
@@ -96,6 +103,51 @@ const AvailableJobs = () => {
     ]);
   };
 
+  const openOfferModal = (job) => {
+    if (!canWork) {
+      Alert.alert(
+        'Cannot Make Offer',
+        'You have unpaid commission dues. Please pay dues in Wallet before making offers.'
+      );
+      return;
+    }
+    setOfferJob(job);
+    setOfferAmount('');
+    setOfferMessage('');
+    setOfferModalVisible(true);
+  };
+
+  const handleSubmitOffer = async () => {
+    if (!offerJob) return;
+    const amountNumber = Number(offerAmount);
+    if (!amountNumber || amountNumber <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid offer amount.');
+      return;
+    }
+
+    try {
+      setSubmittingOffer(true);
+      const response = await freelancerJobsAPI.makeOffer(offerJob._id || offerJob.id, {
+        amount: amountNumber,
+        message: offerMessage || null,
+      });
+      if (response.success) {
+        Alert.alert('Success', 'Offer submitted successfully.');
+        setOfferModalVisible(false);
+      } else {
+        Alert.alert('Error', response.error || 'Failed to submit offer');
+      }
+    } catch (err) {
+      console.error('Error submitting offer:', err);
+      Alert.alert(
+        'Error',
+        err.response?.data?.error || err.message || 'Failed to submit offer'
+      );
+    } finally {
+      setSubmittingOffer(false);
+    }
+  };
+
   const renderJobItem = ({ item }) => (
     <View style={styles.jobCard}>
       <View style={styles.jobHeader}>
@@ -140,6 +192,30 @@ const AvailableJobs = () => {
             {canWork ? 'Pickup Job' : 'Pay Commission First'}
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            styles.makeOfferButton,
+            !canWork && styles.actionButtonDisabled,
+          ]}
+          onPress={() => openOfferModal(item)}
+          disabled={!canWork}
+        >
+          <MaterialIcons
+            name="local-offer"
+            size={18}
+            color={canWork ? colors.primary.main : colors.text.muted}
+          />
+          <Text
+            style={[
+              styles.actionButtonText,
+              { color: canWork ? colors.primary.main : colors.text.muted },
+            ]}
+          >
+            Make Offer
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -177,6 +253,62 @@ const AvailableJobs = () => {
         renderItem={renderJobItem}
         contentContainerStyle={styles.listContent}
       />
+
+      {/* Make Offer Modal */}
+      <Modal
+        visible={offerModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOfferModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Make Offer</Text>
+            {offerJob && (
+              <Text style={styles.modalSubtitle}>
+                {offerJob.title} · ₹{offerJob.budget}
+              </Text>
+            )}
+            <Text style={styles.modalLabel}>Offer Amount (₹)</Text>
+            <TextInput
+              style={styles.modalInput}
+              keyboardType="numeric"
+              placeholder="Enter your offer amount"
+              value={offerAmount}
+              onChangeText={setOfferAmount}
+            />
+            <Text style={styles.modalLabel}>Message (optional)</Text>
+            <TextInput
+              style={[styles.modalInput, styles.modalTextarea]}
+              placeholder="Write a short message for the client"
+              value={offerMessage}
+              onChangeText={setOfferMessage}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setOfferModalVisible(false)}
+                disabled={submittingOffer}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton]}
+                onPress={handleSubmitOffer}
+                disabled={submittingOffer}
+              >
+                {submittingOffer ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Submit Offer</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -266,6 +398,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
   actionButton: {
     flexDirection: 'row',
@@ -283,6 +416,79 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     ...typography.small,
+    fontWeight: '600',
+  },
+  makeOfferButton: {
+    borderColor: colors.primary.main,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+  },
+  modalLabel: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text.primary,
+  },
+  modalTextarea: {
+    height: 90,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.cardBackground,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
 });
