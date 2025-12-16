@@ -184,8 +184,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const responseData = orderResponse.data;
 
     // PhonePe returns payment URL in different formats depending on endpoint
-    // For /checkout/v2/order: responseData.data.instrumentResponse.redirectInfo.url
-    // For /checkout/v2/sdk/order: responseData.data.instrumentResponse.redirectInfo.url
+    // For /pg/v1/pay: responseData.data.instrumentResponse.redirectInfo.url
     let paymentUrl = null;
 
     if (responseData.success && responseData.data) {
@@ -196,6 +195,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         paymentUrl = responseData.data.url;
       } else if (responseData.data.instrumentResponse?.url) {
         paymentUrl = responseData.data.instrumentResponse.url;
+      } else if (responseData.data.instrumentResponse?.redirectInfo?.redirectUrl) {
+        paymentUrl = responseData.data.instrumentResponse.redirectInfo.redirectUrl;
       }
     }
 
@@ -219,10 +220,19 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       message: 'Payment order created successfully',
     });
   } catch (error) {
-    console.error('Error creating PhonePe order:', error.response?.data || error.message);
+    console.error('Error creating PhonePe order:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message,
+      endpoint: `${config.API_URL}/pg/v1/pay`,
+    });
     res.status(500).json({
       success: false,
-      error: error.response?.data?.message || error.message || 'Failed to create payment order',
+      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create payment order',
+      debug: process.env.NODE_ENV === 'development' ? {
+        endpoint: `${config.API_URL}/pg/v1/pay`,
+        response: error.response?.data,
+      } : undefined,
     });
   }
 });
