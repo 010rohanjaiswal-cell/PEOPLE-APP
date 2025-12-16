@@ -64,6 +64,11 @@ router.get('/verifications', authenticate, requireRole('admin'), async (req, res
 
     const formattedVerifications = verifications.map(formatVerificationForAdmin);
 
+    // Debug logging to help identify what's being sent
+    if (formattedVerifications.length > 0) {
+      console.log('📋 Admin API - Sample verification object:', JSON.stringify(formattedVerifications[0], null, 2));
+    }
+
     res.json({
       success: true,
       verifications: formattedVerifications,
