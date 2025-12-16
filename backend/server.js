@@ -13,6 +13,7 @@ const { connectDB } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const freelancerRoutes = require('./routes/freelancer');
 const adminRoutes = require('./routes/admin');
+const clientRoutes = require('./routes/client');
 const userRoutes = require('./routes/user');
 
 // Initialize Express app
@@ -42,6 +43,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/freelancer', freelancerRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/client', clientRoutes);
 app.use('/api/user', userRoutes);
 
 // 404 handler
