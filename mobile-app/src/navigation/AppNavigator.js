@@ -31,8 +31,13 @@ const AppNavigator = () => {
       return 'Login';
     }
 
-    // Freelancer: go straight to Verification flow (handles approved/pending/rejected)
+    // Freelancer:
+    // - If verification approved: go to FreelancerDashboard
+    // - Otherwise: go to Verification flow (handles pending/rejected/new)
     if (user?.role === 'freelancer') {
+      if (user?.verificationStatus === 'approved') {
+        return 'FreelancerDashboard';
+      }
       return 'Verification';
     }
 
@@ -58,7 +63,12 @@ const AppNavigator = () => {
       if (!isAuthenticated) {
         targetRoute = 'Login';
       } else if (user?.role === 'freelancer') {
-        targetRoute = 'Verification';
+        // Freelancer routing based on verification status
+        if (user?.verificationStatus === 'approved') {
+          targetRoute = 'FreelancerDashboard';
+        } else {
+          targetRoute = 'Verification';
+        }
       } else if (user?.role === 'client' && !user?.fullName) {
         targetRoute = 'ProfileSetup';
       } else if (user?.role === 'client') {
