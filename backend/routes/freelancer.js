@@ -567,19 +567,7 @@ router.post('/jobs/:id/fully-complete', authenticate, async (req, res) => {
       });
     }
 
-    // Ensure commission for this job is paid before allowing full completion
-    const commission = await CommissionTransaction.findOne({
-      freelancer: freelancerId,
-      job: job._id,
-    }).lean();
-
-    if (commission && !commission.duesPaid) {
-      return res.status(400).json({
-        success: false,
-        error: 'You must pay commission dues before completing this job.',
-      });
-    }
-
+    // Mark job as fully completed (commission payment is separate and can be done anytime)
     job.freelancerCompleted = true;
     await job.save();
 

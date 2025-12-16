@@ -129,9 +129,6 @@ const MyJobs = () => {
 
   const renderJobItem = ({ item }) => {
     const statusInfo = getStatusBadgeStyle(item.status);
-    const commission = item.commission || null;
-    const hasUnpaidCommission =
-      commission && commission.platformCommission > 0 && !commission.duesPaid;
 
     return (
       <View style={styles.jobCard}>
@@ -207,16 +204,7 @@ const MyJobs = () => {
             </View>
           )}
 
-          {item.status === 'completed' && hasUnpaidCommission && (
-            <View style={styles.waitingPaymentBadge}>
-              <MaterialIcons name="warning" size={18} color={colors.warning.main} />
-              <Text style={[styles.waitingPaymentText, { color: colors.warning.main }]}>
-                Pay Commission to Complete
-              </Text>
-            </View>
-          )}
-
-          {item.status === 'completed' && !hasUnpaidCommission && (
+          {item.status === 'completed' && (
             <TouchableOpacity
               style={[styles.actionButton, styles.completedButton]}
               onPress={() => handleFullyComplete(item)}
