@@ -183,15 +183,30 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     const responseData = orderResponse.data;
 
-    if (responseData.success && responseData.data && responseData.data.instrumentResponse) {
-      const paymentUrl = responseData.data.instrumentResponse.redirectInfo?.url;
+    // PhonePe returns payment URL in different formats depending on endpoint
+    // For /checkout/v2/order: responseData.data.instrumentResponse.redirectInfo.url
+    // For /checkout/v2/sdk/order: responseData.data.instrumentResponse.redirectInfo.url
+    let paymentUrl = null;
 
-      if (!paymentUrl) {
-        return res.status(500).json({
-          success: false,
-          error: 'Payment URL not received from PhonePe',
-        });
+    if (responseData.success && responseData.data) {
+      // Try different response structures
+      if (responseData.data.instrumentResponse?.redirectInfo?.url) {
+        paymentUrl = responseData.data.instrumentResponse.redirectInfo.url;
+      } else if (responseData.data.url) {
+        paymentUrl = responseData.data.url;
+      } else if (responseData.data.instrumentResponse?.url) {
+        paymentUrl = responseData.data.instrumentResponse.url;
       }
+    }
+
+    if (!paymentUrl) {
+      console.error('PhonePe Order Response:', JSON.stringify(responseData, null, 2));
+      return res.status(500).json({
+        success: false,
+        error: 'Payment URL not received from PhonePe',
+        debug: responseData,
+      });
+    }
 
       // Store merchant order ID temporarily (you might want to store this in DB)
       // For now, we'll return it and the frontend will poll for status
