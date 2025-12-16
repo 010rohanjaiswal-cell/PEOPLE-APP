@@ -15,6 +15,7 @@ const freelancerRoutes = require('./routes/freelancer');
 const adminRoutes = require('./routes/admin');
 const clientRoutes = require('./routes/client');
 const userRoutes = require('./routes/user');
+const paymentRoutes = require('./routes/payment');
 
 // Initialize Express app
 const app = express();
@@ -45,6 +46,7 @@ app.use('/api/freelancer', freelancerRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,20 +1,38 @@
 /**
- * Payment API - People App
+ * Payment API - PhonePe Integration
  */
 
 import apiClient from './client';
 
 export const paymentAPI = {
   /**
-   * Process dues payment order
-   * @param {string} orderId - Payment order ID
-   * @returns {Promise}
+   * Create PhonePe payment order for dues
+   * @returns {Promise} Payment order with paymentUrl and merchantOrderId
    */
-  processDuesOrder: async (orderId) => {
-    const response = await apiClient.post(`/payment/process-dues-order/${orderId}`);
+  createDuesOrder: async () => {
+    const response = await apiClient.post('/api/payment/create-dues-order');
+    return response.data;
+  },
+
+  /**
+   * Check order status
+   * @param {string} merchantOrderId - Merchant order ID
+   * @returns {Promise} Order status
+   */
+  checkOrderStatus: async (merchantOrderId) => {
+    const response = await apiClient.get(`/api/payment/order-status/${merchantOrderId}`);
+    return response.data;
+  },
+
+  /**
+   * Process dues payment after successful PhonePe payment
+   * @param {string} merchantOrderId - Merchant order ID
+   * @returns {Promise} Updated wallet data
+   */
+  processDuesPayment: async (merchantOrderId) => {
+    const response = await apiClient.post(`/api/payment/process-dues/${merchantOrderId}`);
     return response.data;
   },
 };
 
 export default paymentAPI;
-

@@ -17,8 +17,9 @@ import {
   Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { colors, spacing, typography } from '../../theme';
-import { walletAPI } from '../../api';
+import { walletAPI, paymentAPI } from '../../api';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -88,26 +89,124 @@ const Wallet = () => {
           onPress: async () => {
             try {
               setPaying(true);
-              const response = await walletAPI.payDues();
-              if (response.success && response.wallet) {
-                setWallet(response.wallet);
-                Alert.alert('Success', 'Dues cleared successfully.');
+
+              // Step 1: Create PhonePe payment order
+              const orderResponse = await paymentAPI.createDuesOrder();
+              
+              if (!orderResponse.success || !orderResponse.paymentUrl) {
+                Alert.alert('Error', orderResponse.error || 'Failed to create payment order');
+                setPaying(false);
+                return;
+              }
+
+              const { merchantOrderId, paymentUrl } = orderResponse;
+
+              // Step 2: Open PhonePe payment URL in browser
+              const result = await WebBrowser.openBrowserAsync(paymentUrl, {
+                showTitle: true,
+                toolbarColor: colors.primary.main,
+                enableBarCollapsing: false,
+              });
+
+              // Step 3: Poll for payment status after browser closes
+              if (result.type === 'dismiss') {
+                // User closed the browser, check payment status
+                await checkPaymentStatus(merchantOrderId);
               } else {
-                Alert.alert('Error', response.error || 'Failed to clear dues');
+                // Browser was dismissed, check status
+                await checkPaymentStatus(merchantOrderId);
               }
             } catch (err) {
               console.error('Error paying dues:', err);
               Alert.alert(
                 'Error',
-                err.response?.data?.error || err.message || 'Failed to clear dues'
+                err.response?.data?.error || err.message || 'Failed to process payment'
               );
-            } finally {
               setPaying(false);
             }
           },
         },
       ]
     );
+  };
+
+  const checkPaymentStatus = async (merchantOrderId, retries = 0) => {
+    try {
+      const maxRetries = 10; // Poll for up to 10 times (50 seconds total)
+      const pollInterval = 5000; // 5 seconds
+
+      const pollStatus = async () => {
+        const statusResponse = await paymentAPI.checkOrderStatus(merchantOrderId);
+
+        if (statusResponse.success) {
+          if (statusResponse.isSuccess) {
+            // Payment successful, process dues
+            const processResponse = await paymentAPI.processDuesPayment(merchantOrderId);
+            
+            if (processResponse.success && processResponse.wallet) {
+              setWallet(processResponse.wallet);
+              Alert.alert('Success', 'Dues payment completed successfully!');
+              setPaying(false);
+              return true; // Stop polling
+            } else {
+              Alert.alert('Error', processResponse.error || 'Failed to process payment');
+              setPaying(false);
+              return true; // Stop polling
+            }
+          } else if (statusResponse.isFailed) {
+            // Payment failed
+            Alert.alert('Payment Failed', 'Payment was not successful. Please try again.');
+            setPaying(false);
+            return true; // Stop polling
+          } else if (statusResponse.isPending && retries < maxRetries) {
+            // Still pending, continue polling
+            setTimeout(() => {
+              checkPaymentStatus(merchantOrderId, retries + 1);
+            }, pollInterval);
+            return false; // Continue polling
+          } else if (retries >= maxRetries) {
+            // Max retries reached
+            Alert.alert(
+              'Payment Status',
+              'Payment status is still pending. Please check your wallet or contact support if payment was successful.'
+            );
+            setPaying(false);
+            // Refresh wallet to check if webhook processed it
+            loadWallet();
+            return true; // Stop polling
+          }
+        } else {
+          // Error checking status, but continue polling if retries left
+          if (retries < maxRetries) {
+            setTimeout(() => {
+              checkPaymentStatus(merchantOrderId, retries + 1);
+            }, pollInterval);
+          } else {
+            Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+            setPaying(false);
+            loadWallet();
+            return true;
+          }
+        }
+      };
+
+      await pollStatus();
+    } catch (err) {
+      console.error('Error checking payment status:', err);
+      if (retries < 10) {
+        // Retry after delay
+        setTimeout(() => {
+          checkPaymentStatus(merchantOrderId, retries + 1);
+        }, 5000);
+      } else {
+        Alert.alert(
+          'Error',
+          'Failed to verify payment status. Please refresh your wallet to check if payment was processed.'
+        );
+        setPaying(false);
+        loadWallet();
+      }
+    }
   };
 
   const renderTotalDuesCard = () => {

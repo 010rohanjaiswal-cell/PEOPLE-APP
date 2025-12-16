@@ -801,5 +801,10 @@ router.post('/pay-dues', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * NOTE: The pay-dues route above is kept for backward compatibility.
+ * For PhonePe integration, use /api/payment/create-dues-order instead.
+ */
+
 module.exports = router;
 
