@@ -21,15 +21,25 @@ const formatVerificationForAdmin = (verification) => {
     email: verification.user?.email || null,
     profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
     role: verification.user?.role || 'freelancer',
-    // Verification Details
+    // Verification Details (both flat and nested for compatibility)
     dob: verification.dob || null,
     dateOfBirth: verification.dob || null, // Admin panel expects dateOfBirth
     gender: verification.gender || null,
     address: verification.address || null,
-    // Documents
+    // Documents (both flat and nested for compatibility)
     aadhaarFront: verification.aadhaarFront || null,
     aadhaarBack: verification.aadhaarBack || null,
     panCard: verification.panCard || null,
+    // Nested verificationDocuments object (adminService expects this)
+    verificationDocuments: {
+      profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
+      aadhaarFront: verification.aadhaarFront || null,
+      aadhaarBack: verification.aadhaarBack || null,
+      panCard: verification.panCard || null,
+      dateOfBirth: verification.dob || null,
+      gender: verification.gender || null,
+      address: verification.address || null,
+    },
     // Status
     status: verification.status || 'pending',
     verificationStatus: verification.status || 'pending', // Admin panel expects verificationStatus
@@ -76,7 +86,7 @@ router.get('/verifications', authenticate, requireRole('admin'), async (req, res
     res.json({
       success: true,
       verifications: formattedVerifications,
-      data: formattedVerifications, // Keep for backward compatibility
+      data: formattedVerifications, // AdminService expects response.data.data, so this is the data field
       status: status || 'all',
     });
   } catch (error) {
