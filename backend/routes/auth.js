@@ -207,6 +207,9 @@ router.post('/verify-otp', async (req, res) => {
       // Generate JWT token
       const token = generateJWT(user);
 
+      // Get the appropriate profile photo (freelancer verification photo takes priority)
+      const profilePhoto = await getUserProfilePhoto(user._id);
+
       // Clean up stored OTP request
       clearOTPRequest(formattedPhone);
 
@@ -218,7 +221,7 @@ router.post('/verify-otp', async (req, res) => {
           phone: user.phone,
           role: user.role,
           fullName: user.fullName || null,
-          profilePhoto: user.profilePhoto || null,
+          profilePhoto: profilePhoto, // Use the helper function result
           email: user.email || null,
           verificationStatus: user.verificationStatus || null,
         }
