@@ -8,6 +8,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
+const Job = require('../models/Job');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
@@ -189,6 +190,42 @@ router.post(
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to submit verification',
+    });
+  }
+});
+
+/**
+ * Get available jobs for freelancer
+ * GET /api/freelancer/jobs/available
+ * Requires authentication as freelancer
+ */
+router.get('/jobs/available', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can view available jobs',
+      });
+    }
+
+    // Basic implementation: all open jobs
+    const jobs = await Job.find({
+      status: 'open',
+    })
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    res.json({
+      success: true,
+      jobs,
+    });
+  } catch (error) {
+    console.error('Error getting available jobs for freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get available jobs',
     });
   }
 });
