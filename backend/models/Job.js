@@ -8,6 +8,14 @@ const mongoose = require('mongoose');
 
 const jobSchema = new mongoose.Schema(
   {
+    // External job id used by original web app schema
+    // Note: MongoDB already has _id; this is an additional id field
+    id: {
+      type: String,
+      required: true,
+      unique: true,
+      default: () => new mongoose.Types.ObjectId().toString(),
+    },
     client: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
