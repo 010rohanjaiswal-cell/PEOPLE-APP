@@ -17,11 +17,13 @@ const formatVerificationForAdmin = (verification) => {
     // Freelancer Info (flattened for easy access)
     fullName: verification.fullName || verification.user?.fullName || 'N/A',
     phone: verification.user?.phone || 'N/A',
+    phoneNumber: verification.user?.phone || 'N/A', // Admin panel expects phoneNumber
     email: verification.user?.email || null,
     profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
     role: verification.user?.role || 'freelancer',
     // Verification Details
     dob: verification.dob || null,
+    dateOfBirth: verification.dob || null, // Admin panel expects dateOfBirth
     gender: verification.gender || null,
     address: verification.address || null,
     // Documents
@@ -30,10 +32,12 @@ const formatVerificationForAdmin = (verification) => {
     panCard: verification.panCard || null,
     // Status
     status: verification.status || 'pending',
+    verificationStatus: verification.status || 'pending', // Admin panel expects verificationStatus
     rejectionReason: verification.rejectionReason || null,
     // Timestamps
     createdAt: verification.createdAt,
     updatedAt: verification.updatedAt,
+    submittedAt: verification.createdAt, // Admin panel expects submittedAt for display
     // User reference (for admin actions)
     userId: verification.user?._id || verification.user,
     // Also include user object in case admin panel expects nested structure
