@@ -161,8 +161,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const base64Payload = Buffer.from(JSON.stringify(orderPayload)).toString('base64');
 
     // Generate X-VERIFY header
-    // Use /checkout/v2/order for web-based payments (not /sdk/order which is for native SDK)
-    const endpoint = '/checkout/v2/order';
+    // Use /pg/v1/pay for standard web-based payments
+    const endpoint = '/pg/v1/pay';
     const xVerify = generateXVerify(base64Payload, endpoint);
 
     // Create order via PhonePe API
