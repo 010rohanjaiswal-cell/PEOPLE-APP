@@ -9,7 +9,77 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
 
-// GET /api/admin/freelancer-verifications?status=pending
+// Helper function to format verification for admin panel
+const formatVerificationForAdmin = (verification) => {
+  return {
+    _id: verification._id,
+    id: verification._id.toString(),
+    // Freelancer Info (flattened for easy access)
+    fullName: verification.fullName || verification.user?.fullName || 'N/A',
+    phone: verification.user?.phone || 'N/A',
+    email: verification.user?.email || null,
+    profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
+    role: verification.user?.role || 'freelancer',
+    // Verification Details
+    dob: verification.dob || null,
+    gender: verification.gender || null,
+    address: verification.address || null,
+    // Documents
+    aadhaarFront: verification.aadhaarFront || null,
+    aadhaarBack: verification.aadhaarBack || null,
+    panCard: verification.panCard || null,
+    // Status
+    status: verification.status || 'pending',
+    rejectionReason: verification.rejectionReason || null,
+    // Timestamps
+    createdAt: verification.createdAt,
+    updatedAt: verification.updatedAt,
+    // User reference (for admin actions)
+    userId: verification.user?._id || verification.user,
+    // Also include user object in case admin panel expects nested structure
+    user: verification.user ? {
+      _id: verification.user._id,
+      phone: verification.user.phone,
+      fullName: verification.user.fullName,
+      email: verification.user.email,
+      profilePhoto: verification.user.profilePhoto,
+      role: verification.user.role,
+    } : null,
+  };
+};
+
+// GET /api/admin/verifications?status=pending (admin panel expects this endpoint)
+router.get('/verifications', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const query = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    const verifications = await FreelancerVerification.find(query)
+      .sort({ createdAt: -1 })
+      .populate('user', 'phone fullName profilePhoto role email');
+
+    const formattedVerifications = verifications.map(formatVerificationForAdmin);
+
+    res.json({
+      success: true,
+      verifications: formattedVerifications,
+      data: formattedVerifications, // Keep for backward compatibility
+      status: status || 'all',
+    });
+  } catch (error) {
+    console.error('Error fetching freelancer verifications:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to load freelancer verifications',
+    });
+  }
+});
+
+// GET /api/admin/freelancer-verifications?status=pending (alternative endpoint)
 router.get('/freelancer-verifications', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const { status } = req.query;
@@ -23,33 +93,7 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
       .sort({ createdAt: -1 })
       .populate('user', 'phone fullName profilePhoto role email');
 
-    // Transform to ensure all fields are present and properly formatted for admin panel
-    const formattedVerifications = verifications.map(verification => ({
-      _id: verification._id,
-      id: verification._id.toString(),
-      // Freelancer Info
-      fullName: verification.fullName || verification.user?.fullName || 'N/A',
-      phone: verification.user?.phone || 'N/A',
-      email: verification.user?.email || null,
-      profilePhoto: verification.profilePhoto || verification.user?.profilePhoto || null,
-      role: verification.user?.role || 'freelancer',
-      // Verification Details
-      dob: verification.dob || null,
-      gender: verification.gender || null,
-      address: verification.address || null,
-      // Documents
-      aadhaarFront: verification.aadhaarFront || null,
-      aadhaarBack: verification.aadhaarBack || null,
-      panCard: verification.panCard || null,
-      // Status
-      status: verification.status || 'pending',
-      rejectionReason: verification.rejectionReason || null,
-      // Timestamps
-      createdAt: verification.createdAt,
-      updatedAt: verification.updatedAt,
-      // User reference (for admin actions)
-      userId: verification.user?._id || verification.user,
-    }));
+    const formattedVerifications = verifications.map(formatVerificationForAdmin);
 
     res.json({
       success: true,
@@ -66,7 +110,47 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
   }
 });
 
-// POST /api/admin/approve-freelancer/:verificationId
+// POST /api/admin/verifications/:id/approve (admin panel expects this endpoint)
+router.post('/verifications/:id/approve', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const verification = await FreelancerVerification.findById(id);
+    if (!verification) {
+      return res.status(404).json({
+        success: false,
+        error: 'Verification record not found',
+      });
+    }
+
+    // Update verification record
+    verification.status = 'approved';
+    verification.rejectionReason = null;
+    await verification.save();
+
+    // Update related user
+    if (verification.user) {
+      await User.findByIdAndUpdate(verification.user, {
+        verificationStatus: 'approved',
+        verificationRejectionReason: null,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Freelancer approved successfully',
+      verification: formatVerificationForAdmin(verification),
+    });
+  } catch (error) {
+    console.error('Error approving freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to approve freelancer',
+    });
+  }
+});
+
+// POST /api/admin/approve-freelancer/:verificationId (alternative endpoint)
 router.post('/approve-freelancer/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -95,7 +179,7 @@ router.post('/approve-freelancer/:id', authenticate, requireRole('admin'), async
     res.json({
       success: true,
       message: 'Freelancer approved successfully',
-      verification,
+      verification: formatVerificationForAdmin(verification),
     });
   } catch (error) {
     console.error('Error approving freelancer:', error);
@@ -106,7 +190,48 @@ router.post('/approve-freelancer/:id', authenticate, requireRole('admin'), async
   }
 });
 
-// POST /api/admin/reject-freelancer/:verificationId
+// POST /api/admin/verifications/:id/reject (admin panel expects this endpoint)
+router.post('/verifications/:id/reject', authenticate, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const verification = await FreelancerVerification.findById(id);
+    if (!verification) {
+      return res.status(404).json({
+        success: false,
+        error: 'Verification record not found',
+      });
+    }
+
+    // Update verification record
+    verification.status = 'rejected';
+    verification.rejectionReason = reason || 'Rejected by admin';
+    await verification.save();
+
+    // Update related user
+    if (verification.user) {
+      await User.findByIdAndUpdate(verification.user, {
+        verificationStatus: 'rejected',
+        verificationRejectionReason: verification.rejectionReason,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Freelancer rejected successfully',
+      verification: formatVerificationForAdmin(verification),
+    });
+  } catch (error) {
+    console.error('Error rejecting freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to reject freelancer',
+    });
+  }
+});
+
+// POST /api/admin/reject-freelancer/:verificationId (alternative endpoint)
 router.post('/reject-freelancer/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -136,7 +261,7 @@ router.post('/reject-freelancer/:id', authenticate, requireRole('admin'), async 
     res.json({
       success: true,
       message: 'Freelancer rejected successfully',
-      verification,
+      verification: formatVerificationForAdmin(verification),
     });
   } catch (error) {
     console.error('Error rejecting freelancer:', error);
