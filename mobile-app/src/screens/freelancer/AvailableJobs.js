@@ -4,16 +4,26 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
+import { walletAPI } from '../../api';
 
 const AvailableJobs = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [canWork, setCanWork] = useState(true);
 
   const loadJobs = async () => {
     try {
@@ -36,9 +46,55 @@ const AvailableJobs = () => {
     }
   };
 
+  const loadWalletStatus = async () => {
+    try {
+      const response = await walletAPI.getWallet();
+      if (response.success && response.wallet) {
+        setCanWork(response.wallet.canWork !== false);
+      }
+    } catch (err) {
+      console.error('Error loading wallet for canWork:', err);
+    }
+  };
+
   useEffect(() => {
     loadJobs();
+    loadWalletStatus();
   }, []);
+
+  const handlePickupJob = async (job) => {
+    if (!canWork) {
+      Alert.alert(
+        'Cannot Pickup Job',
+        'You have unpaid commission dues. Please pay dues in Wallet before picking up new jobs.'
+      );
+      return;
+    }
+
+    Alert.alert('Pickup Job', 'Are you sure you want to pickup this job?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Pickup',
+        onPress: async () => {
+          try {
+            const response = await freelancerJobsAPI.pickupJob(job._id || job.id);
+            if (response.success) {
+              Alert.alert('Success', 'Job picked up successfully');
+              loadJobs();
+            } else {
+              Alert.alert('Error', response.error || 'Failed to pickup job');
+            }
+          } catch (err) {
+            console.error('Error picking up job:', err);
+            Alert.alert(
+              'Error',
+              err.response?.data?.error || err.message || 'Failed to pickup job'
+            );
+          }
+        },
+      },
+    ]);
+  };
 
   const renderJobItem = ({ item }) => (
     <View style={styles.jobCard}>
@@ -63,6 +119,28 @@ const AvailableJobs = () => {
           {item.description}
         </Text>
       ) : null}
+
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={[styles.actionButton, !canWork && styles.actionButtonDisabled]}
+          onPress={() => handlePickupJob(item)}
+          disabled={!canWork}
+        >
+          <MaterialIcons
+            name="check-circle"
+            size={18}
+            color={canWork ? colors.success.main : colors.text.muted}
+          />
+          <Text
+            style={[
+              styles.actionButtonText,
+              { color: canWork ? colors.success.main : colors.text.muted },
+            ]}
+          >
+            {canWork ? 'Pickup Job' : 'Pay Commission First'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -182,6 +260,30 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: spacing.xs,
+    fontStyle: 'italic',
+  },
+  actionsRow: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.success.main,
+    backgroundColor: 'transparent',
+  },
+  actionButtonDisabled: {
+    borderColor: colors.text.muted,
+  },
+  actionButtonText: {
+    ...typography.small,
+    fontWeight: '600',
   },
 });
 

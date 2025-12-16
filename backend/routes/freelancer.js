@@ -211,12 +211,14 @@ router.get('/jobs/available', authenticate, async (req, res) => {
       });
     }
 
-    // Basic implementation: all open jobs
+    // Only show jobs that are open and not yet assigned
     const jobs = await Job.find({
       status: 'open',
+      assignedFreelancer: null,
     })
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(100)
+      .lean();
 
     res.json({
       success: true,
@@ -227,6 +229,260 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get available jobs',
+    });
+  }
+});
+
+/**
+ * Get assigned jobs for freelancer
+ * GET /api/freelancer/jobs/assigned
+ * Requires authentication as freelancer
+ */
+router.get('/jobs/assigned', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can view assigned jobs',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // Jobs assigned to this freelancer and not fully completed from their side
+    const jobs = await Job.find({
+      assignedFreelancer: freelancerId,
+      freelancerCompleted: false,
+      status: { $in: ['assigned', 'work_done', 'completed'] },
+    })
+      .populate('client', 'fullName phone')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Attach commission summary for each job if exists
+    const jobIds = jobs.map((job) => job._id);
+    const commissions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      job: { $in: jobIds },
+    }).lean();
+
+    const commissionByJob = {};
+    commissions.forEach((c) => {
+      commissionByJob[c.job.toString()] = {
+        jobAmount: c.jobAmount,
+        platformCommission: c.platformCommission,
+        amountReceived: c.amountReceived,
+        duesPaid: c.duesPaid,
+      };
+    });
+
+    const mappedJobs = jobs.map((job) => ({
+      ...job,
+      commission: commissionByJob[job._id.toString()] || null,
+    }));
+
+    res.json({
+      success: true,
+      jobs: mappedJobs,
+    });
+  } catch (error) {
+    console.error('Error getting assigned jobs for freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get assigned jobs',
+    });
+  }
+});
+
+/**
+ * Pickup a job (assign job directly to freelancer)
+ * POST /api/freelancer/jobs/:id/pickup
+ * Requires authentication as freelancer
+ */
+router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can pickup jobs',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // Check unpaid dues - cannot pickup jobs if dues > 0
+    const unpaidCommissions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaid: false,
+    }).lean();
+
+    const totalDues = unpaidCommissions.reduce(
+      (sum, c) => sum + (c.platformCommission || 0),
+      0
+    );
+
+    if (totalDues > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'You have unpaid commission dues. Pay dues in Wallet to pickup jobs.',
+      });
+    }
+
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'open' || job.assignedFreelancer) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job is no longer available to pickup',
+      });
+    }
+
+    job.assignedFreelancer = freelancerId;
+    job.status = 'assigned';
+    await job.save();
+
+    res.json({
+      success: true,
+      message: 'Job picked up successfully',
+      job,
+    });
+  } catch (error) {
+    console.error('Error picking up job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to pickup job',
+    });
+  }
+});
+
+/**
+ * Mark work as done
+ * POST /api/freelancer/jobs/:id/complete
+ * Requires authentication as freelancer
+ */
+router.post('/jobs/:id/complete', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can mark work as done',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      assignedFreelancer: freelancerId,
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'assigned') {
+      return res.status(400).json({
+        success: false,
+        error: 'Only assigned jobs can be marked as work done',
+      });
+    }
+
+    job.status = 'work_done';
+    await job.save();
+
+    res.json({
+      success: true,
+      message: 'Job marked as work done. Waiting for client payment.',
+      job,
+    });
+  } catch (error) {
+    console.error('Error marking work as done:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to mark work as done',
+    });
+  }
+});
+
+/**
+ * Mark job as fully completed (remove from active list)
+ * POST /api/freelancer/jobs/:id/fully-complete
+ * Requires authentication as freelancer
+ */
+router.post('/jobs/:id/fully-complete', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can fully complete jobs',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      assignedFreelancer: freelancerId,
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'Only completed jobs can be fully completed',
+      });
+    }
+
+    // Ensure commission for this job is paid before allowing full completion
+    const commission = await CommissionTransaction.findOne({
+      freelancer: freelancerId,
+      job: job._id,
+    }).lean();
+
+    if (commission && !commission.duesPaid) {
+      return res.status(400).json({
+        success: false,
+        error: 'You must pay commission dues before completing this job.',
+      });
+    }
+
+    job.freelancerCompleted = true;
+    await job.save();
+
+    res.json({
+      success: true,
+      message: 'Job marked as completed and removed from active list.',
+      job,
+    });
+  } catch (error) {
+    console.error('Error fully completing job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fully complete job',
     });
   }
 });

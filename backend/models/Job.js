@@ -96,6 +96,12 @@ const jobSchema = new mongoose.Schema(
         },
       },
     ],
+    // Marks that freelancer has fully completed this job from their side
+    freelancerCompleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
