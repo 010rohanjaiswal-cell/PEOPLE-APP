@@ -169,9 +169,11 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const base64Payload = Buffer.from(JSON.stringify(orderPayload)).toString('base64');
 
     // Generate X-VERIFY header
-    // For web-based payments (not native SDK), use /checkout/v2/order endpoint
-    // Based on PhonePe docs: Android SDK uses /checkout/v2/sdk/order, but for web we use /checkout/v2/order
-    const endpoint = '/checkout/v2/order';
+    // For web-based payments (browser checkout), use /pg/v1/pay endpoint
+    // This is the standard endpoint for web payments (not native SDK)
+    // /checkout/v2/sdk/order is for native Android/iOS SDK
+    // /checkout/v2/order might not be available for all merchant accounts
+    const endpoint = '/pg/v1/pay';
     const xVerify = generateXVerify(base64Payload, endpoint);
 
     // Create order via PhonePe API
@@ -233,13 +235,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message,
-      endpoint: `${config.API_URL}/checkout/v2/order`,
+      endpoint: `${config.API_URL}/pg/v1/pay`,
     });
     res.status(500).json({
       success: false,
       error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create payment order',
       debug: process.env.NODE_ENV === 'development' ? {
-        endpoint: `${config.API_URL}/checkout/v2/order`,
+        endpoint: `${config.API_URL}/pg/v1/pay`,
         response: error.response?.data,
       } : undefined,
     });
@@ -268,8 +270,9 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     const authToken = await getAuthToken();
 
     // Generate X-VERIFY for status check
-    // Based on PhonePe docs: /checkout/v2/order/{merchantOrderId}/status
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
+    // For web payments, use /pg/v1/status/{merchantId}/{merchantTransactionId}
+    // Alternative: /checkout/v2/order/{merchantOrderId}/status (if available)
+    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     // Check order status
@@ -404,7 +407,7 @@ router.post('/process-dues/:merchantOrderId', authenticate, async (req, res) => 
     const credentials = getPhonePeCredentials();
     const config = getConfig();
     const authToken = await getAuthToken();
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
+    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     const statusResponse = await axios.get(
