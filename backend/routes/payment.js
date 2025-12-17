@@ -12,14 +12,18 @@ const CommissionTransaction = require('../models/CommissionTransaction');
 const router = express.Router();
 
 // PhonePe Configuration
+// Based on official PhonePe documentation: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/android-sdk/introduction
 const PHONEPE_CONFIG = {
   // Environment URLs
   SANDBOX: {
-    AUTH_URL: 'https://api-preprod.phonepe.com/apis/identity-manager/v1/oauth/token',
+    // Authorization endpoint for sandbox (from official docs)
+    AUTH_URL: 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token',
     API_URL: 'https://api-preprod.phonepe.com/apis/pg-sandbox',
   },
   PRODUCTION: {
+    // Authorization endpoint for production (identity-manager)
     AUTH_URL: 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token',
+    // Payment API URL for production
     API_URL: 'https://api.phonepe.com/apis/pg',
   },
 };
@@ -56,8 +60,10 @@ const getAuthToken = async () => {
     const config = getConfig();
 
     // PhonePe OAuth requires application/x-www-form-urlencoded format
+    // Based on official docs: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/authorization
     const params = new URLSearchParams();
     params.append('client_id', credentials.clientId);
+    params.append('client_version', '1'); // Required by PhonePe API
     params.append('client_secret', credentials.clientSecret);
     params.append('grant_type', 'client_credentials');
 
@@ -224,13 +230,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message,
-      endpoint: `${config.API_URL}/v1/pay`,
+      endpoint: `${config.API_URL}/checkout/v2/order`,
     });
     res.status(500).json({
       success: false,
       error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create payment order',
       debug: process.env.NODE_ENV === 'development' ? {
-        endpoint: `${config.API_URL}/v1/pay`,
+        endpoint: `${config.API_URL}/checkout/v2/order`,
         response: error.response?.data,
       } : undefined,
     });
