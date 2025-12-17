@@ -217,97 +217,73 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Get auth token
     const authToken = await getAuthToken();
 
-    // Generate merchant order ID
-    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`;
+    // Generate merchant order ID (max 63 chars, only underscore and hyphen allowed)
+    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // Create order payload for SDK
-    // For SDK endpoint, use UPI_INTENT payment instrument type
+    // Create order payload for SDK according to official PhonePe docs
+    // POST /checkout/v2/sdk/order - Direct JSON body (not base64)
+    // Authorization: O-Bearer <token> (not Bearer)
     const orderPayload = {
-      merchantId: credentials.merchantId,
-      merchantTransactionId: merchantOrderId,
+      merchantOrderId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise (multiply by 100)
-      merchantUserId: freelancerId.toString(),
-      redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`, // Deep link for app callback
-      redirectMode: 'REDIRECT',
-      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      mobileNumber: user.phone || '',
-      paymentInstrument: {
-        type: 'UPI_INTENT', // UPI_INTENT for native SDK (not PAY_PAGE)
+      expireAfter: 1200, // 20 minutes expiry (300-3600 seconds allowed)
+      metaInfo: {
+        udf1: `Freelancer: ${freelancerId.toString()}`,
+        udf2: `Total Dues: ${totalDues}`,
+        udf3: `Timestamp: ${Date.now()}`,
+      },
+      paymentFlow: {
+        type: 'PG_CHECKOUT', // Required: PG_CHECKOUT for SDK flow
+        // Optional: paymentModeConfig to control payment instruments
+        // If not provided, PhonePe shows default enabled instruments
       },
     };
 
-    // Convert payload to base64
-    const base64Payload = Buffer.from(JSON.stringify(orderPayload)).toString('base64');
-
-    // Generate X-VERIFY header
-    // For native SDK payments (React Native/Android/iOS), use /checkout/v2/sdk/order endpoint
-    // This endpoint returns an order token that the SDK uses to launch native checkout
+    // SDK endpoint: /checkout/v2/sdk/order
+    // According to docs: Direct JSON body, Authorization: O-Bearer <token>
+    // No X-VERIFY header needed for this endpoint
     const endpoint = '/checkout/v2/sdk/order';
-    const xVerify = generateXVerify(base64Payload, endpoint);
 
     // Create order via PhonePe API
     const orderResponse = await axios.post(
       `${config.API_URL}${endpoint}`,
-      {
-        request: base64Payload,
-      },
+      orderPayload, // Direct JSON body (not base64 encoded)
       {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'X-VERIFY': xVerify,
-          'X-MERCHANT-ID': credentials.merchantId,
+          'Authorization': `O-Bearer ${authToken}`, // Note: O-Bearer prefix (not Bearer)
+          // No X-VERIFY header for SDK order endpoint
         },
       }
     );
 
     const responseData = orderResponse.data;
 
-    // For SDK endpoint (/checkout/v2/sdk/order), PhonePe returns:
-    // - orderToken: Token to pass to SDK (in redirectInfo.url or token field)
-    // - orderId: Order ID for status checks
-    // - paymentUrl: May also be present for fallback
+    // SDK endpoint response structure (from official docs):
+    // {
+    //   "orderId": "OMO123456789",
+    //   "state": "PENDING" or "CREATED",
+    //   "expireAt": 1703756259307,
+    //   "token": "<order-token-to-pass-to-SDK>"
+    // }
     let orderToken = null;
     let orderId = null;
-    let paymentUrl = null;
+    let state = null;
+    let expireAt = null;
 
-    if (responseData.success && responseData.data) {
-      // SDK endpoint response structure
-      if (responseData.data.instrumentResponse?.redirectInfo?.url) {
-        // Order token is in the URL or response
-        const url = responseData.data.instrumentResponse.redirectInfo.url;
-        // Extract order token from URL or use the full URL
-        if (url.includes('token=')) {
-          orderToken = url.split('token=')[1]?.split('&')[0] || url;
-        } else {
-          orderToken = url;
-        }
-      } else if (responseData.data.instrumentResponse?.redirectInfo?.redirectUrl) {
-        const redirectUrl = responseData.data.instrumentResponse.redirectInfo.redirectUrl;
-        if (redirectUrl.includes('token=')) {
-          orderToken = redirectUrl.split('token=')[1]?.split('&')[0] || redirectUrl;
-        } else {
-          orderToken = redirectUrl;
-        }
-      } else if (responseData.data.token) {
-        // Direct token in response
-        orderToken = responseData.data.token;
-      } else if (responseData.data.instrumentResponse?.token) {
-        orderToken = responseData.data.instrumentResponse.token;
-      } else if (responseData.data.url) {
-        // Fallback: use URL if token not found
-        paymentUrl = responseData.data.url;
-      }
-
-      // Get order ID from response
-      orderId = responseData.data.orderId || merchantOrderId;
+    if (responseData) {
+      // Token is directly in response (not nested)
+      orderToken = responseData.token || null;
+      orderId = responseData.orderId || merchantOrderId;
+      state = responseData.state || null;
+      expireAt = responseData.expireAt || null;
     }
 
-    if (!orderToken && !paymentUrl) {
+    if (!orderToken) {
       console.error('PhonePe SDK Order Response:', JSON.stringify(responseData, null, 2));
       return res.status(500).json({
         success: false,
-        error: 'Order token or payment URL not received from PhonePe',
+        error: 'Order token not received from PhonePe',
         debug: responseData,
       });
     }
@@ -317,8 +293,9 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       success: true,
       merchantOrderId,
       orderId: orderId || merchantOrderId,
-      orderToken: orderToken || null, // Token for SDK
-      paymentUrl: paymentUrl || null, // Fallback URL if token not available
+      orderToken: orderToken, // Token to pass to PhonePe SDK
+      state: state || 'PENDING',
+      expireAt: expireAt || null,
       amount: totalDues,
       message: 'Payment order created successfully',
     });
