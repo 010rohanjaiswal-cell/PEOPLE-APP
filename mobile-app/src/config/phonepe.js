@@ -20,11 +20,12 @@ const PHONEPE_CONFIG = {
 export const initializePhonePe = async () => {
   try {
     // PhonePe SDK init requires: environment, merchantId, appId (optional), enableLogging
+    // Enable logging to debug SDK issues
     const result = await PhonePe.init(
       PHONEPE_CONFIG.environment, // 'PRODUCTION' or 'SANDBOX'
       PHONEPE_CONFIG.merchantId,    // Merchant ID
       null,                         // appId (optional, can be null)
-      false                         // enableLogging (set to true for debugging)
+      true                          // enableLogging: true for debugging (set to false in production)
     );
     console.log('✅ PhonePe SDK initialized:', result);
     return true;
@@ -78,16 +79,52 @@ export const startPhonePeTransaction = async (params) => {
       merchantId: PHONEPE_CONFIG.merchantId,
       orderToken: orderToken.substring(0, 20) + '...', // Log partial token
       paymentRequest: JSON.stringify(paymentRequest),
+      appScheme,
     });
 
+    // Verify SDK method exists
+    if (!PhonePe.startTransaction || typeof PhonePe.startTransaction !== 'function') {
+      throw new Error('PhonePe.startTransaction method not available. SDK may not be properly initialized.');
+    }
+
     // PhonePe SDK expects: startTransaction(JSON.stringify(paymentRequest), appScheme)
-    const response = await PhonePe.startTransaction(
-      JSON.stringify(paymentRequest),
-      appScheme
-    );
+    // Note: startTransaction launches the payment UI directly and may not return a promise
+    console.log('📞 Calling PhonePe.startTransaction...');
+    console.log('Payment request string:', JSON.stringify(paymentRequest));
+    console.log('App scheme:', appScheme);
     
-    console.log('✅ PhonePe transaction response:', response);
-    return response;
+    try {
+      // Call SDK - it may launch UI directly without returning
+      const response = PhonePe.startTransaction(
+        JSON.stringify(paymentRequest),
+        appScheme
+      );
+      
+      // If it returns a promise, await it
+      if (response && typeof response.then === 'function') {
+        const result = await response;
+        console.log('✅ PhonePe transaction response (promise):', result);
+        return result;
+      } else {
+        // If it returns synchronously (or nothing), assume UI was launched
+        console.log('✅ PhonePe transaction initiated (UI should launch)');
+        return { success: true, launched: true };
+      }
+    } catch (sdkError) {
+      // SDK might throw or return error in different format
+      console.error('❌ PhonePe SDK startTransaction error:', sdkError);
+      console.error('Error type:', typeof sdkError);
+      console.error('Error stringified:', JSON.stringify(sdkError, Object.getOwnPropertyNames(sdkError), 2));
+      
+      // Check if SDK returns error in response instead of throwing
+      if (sdkError && typeof sdkError === 'object') {
+        if (sdkError.success === false || sdkError.error) {
+          throw new Error(sdkError.error || sdkError.message || 'PhonePe SDK transaction failed');
+        }
+      }
+      
+      throw sdkError;
+    }
   } catch (error) {
     console.error('❌ PhonePe transaction error:', error);
     console.error('Error details:', {
