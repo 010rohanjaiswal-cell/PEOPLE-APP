@@ -224,13 +224,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       status: error.response?.status,
       data: error.response?.data,
       message: error.message,
-      endpoint: `${config.API_URL}/pg/v1/pay`,
+      endpoint: `${config.API_URL}/v1/pay`,
     });
     res.status(500).json({
       success: false,
       error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create payment order',
       debug: process.env.NODE_ENV === 'development' ? {
-        endpoint: `${config.API_URL}/pg/v1/pay`,
+        endpoint: `${config.API_URL}/v1/pay`,
         response: error.response?.data,
       } : undefined,
     });
