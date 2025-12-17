@@ -161,8 +161,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const base64Payload = Buffer.from(JSON.stringify(orderPayload)).toString('base64');
 
     // Generate X-VERIFY header
-    // Use /pg/v1/pay for standard web-based payments
-    const endpoint = '/pg/v1/pay';
+    // Use /v1/pay for standard web-based payments (API_URL already includes /apis/pg)
+    const endpoint = '/v1/pay';
     const xVerify = generateXVerify(base64Payload, endpoint);
 
     // Create order via PhonePe API
@@ -395,7 +395,7 @@ router.post('/process-dues/:merchantOrderId', authenticate, async (req, res) => 
     const credentials = getPhonePeCredentials();
     const config = getConfig();
     const authToken = await getAuthToken();
-    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
+    const endpoint = `/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     const statusResponse = await axios.get(
