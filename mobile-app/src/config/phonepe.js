@@ -40,33 +40,32 @@ export const initializePhonePe = async () => {
  * Start PhonePe transaction using SDK
  * PhonePe SDK startTransaction signature: startTransaction(jsonString, appScheme)
  * @param {Object} params - Transaction parameters
- * @param {string} params.merchantTransactionId - Unique transaction ID
- * @param {number} params.amount - Amount in rupees (will be converted to paise)
- * @param {string} params.mobileNumber - User's mobile number
- * @param {string} params.redirectUrl - Deep link URL for callback
- * @param {string} params.callbackUrl - Backend webhook URL
+ * @param {string} params.orderId - PhonePe's order ID (from backend response, not merchantTransactionId)
  * @param {string} params.orderToken - Order token from backend (required)
+ * @param {string} params.appScheme - App scheme for deep linking (optional, defaults to 'people-app')
  * @returns {Promise} Promise that resolves with transaction result
  */
 export const startPhonePeTransaction = async (params) => {
   try {
     const {
-      merchantTransactionId,
-      amount,
-      mobileNumber,
-      redirectUrl,
-      callbackUrl,
-      orderToken,
+      orderId,        // PhonePe's orderId (from backend response)
+      orderToken,     // Order token from backend (required)
+      appScheme = 'people-app', // App scheme for deep linking
     } = params;
 
     if (!orderToken) {
       throw new Error('Order token is required for PhonePe SDK transaction');
     }
 
+    if (!orderId) {
+      throw new Error('Order ID is required for PhonePe SDK transaction');
+    }
+
     // PhonePe SDK expects payment request as JSON string
-    // Based on PhonePe documentation: { orderId, merchantId, token, paymentMode: { type } }
+    // According to PhonePe React Native SDK docs:
+    // { orderId: PhonePe's orderId, merchantId: merchantId, token: orderToken, paymentMode: { type: 'PAY_PAGE' } }
     const paymentRequest = {
-      orderId: merchantTransactionId,
+      orderId: orderId, // PhonePe's orderId (not merchantTransactionId)
       merchantId: PHONEPE_CONFIG.merchantId,
       token: orderToken, // Order token from backend
       paymentMode: {
@@ -74,13 +73,11 @@ export const startPhonePeTransaction = async (params) => {
       },
     };
 
-    // App scheme for deep linking (from app.json)
-    const appScheme = 'people-app';
-
     console.log('🚀 Starting PhonePe transaction:', {
-      merchantTransactionId,
-      amount,
+      orderId,
+      merchantId: PHONEPE_CONFIG.merchantId,
       orderToken: orderToken.substring(0, 20) + '...', // Log partial token
+      paymentRequest: JSON.stringify(paymentRequest),
     });
 
     // PhonePe SDK expects: startTransaction(JSON.stringify(paymentRequest), appScheme)
@@ -93,6 +90,11 @@ export const startPhonePeTransaction = async (params) => {
     return response;
   } catch (error) {
     console.error('❌ PhonePe transaction error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      params: params,
+    });
     throw error;
   }
 };

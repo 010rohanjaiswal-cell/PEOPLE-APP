@@ -106,8 +106,9 @@ const Wallet = () => {
 
               // Step 2: Start PhonePe SDK transaction
               // Use orderToken if available, otherwise fallback to paymentUrl
-              if (orderToken) {
+              if (orderToken && orderId) {
                 // Native SDK flow
+                // Note: Use PhonePe's orderId (not merchantOrderId) for SDK
                 const redirectUrl = Linking.createURL('/payment/callback', {
                   queryParams: { orderId: merchantOrderId },
                 });
@@ -115,12 +116,9 @@ const Wallet = () => {
 
                 try {
                   await startPhonePeTransaction({
-                    merchantTransactionId: merchantOrderId,
-                    amount: wallet.totalDues,
-                    mobileNumber: user?.phone || '',
-                    redirectUrl,
-                    callbackUrl,
-                    orderToken,
+                    orderId: orderId, // PhonePe's orderId (required by SDK)
+                    orderToken: orderToken, // Order token from backend
+                    appScheme: 'people-app', // Deep link scheme
                   });
 
                   // SDK will handle the payment flow and redirect back to app
