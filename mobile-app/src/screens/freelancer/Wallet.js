@@ -17,9 +17,11 @@ import {
   Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI } from '../../api';
+import { startPhonePeTransaction } from '../../config/phonepe';
+import { useAuth } from '../../context/AuthContext';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -27,6 +29,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const Wallet = () => {
+  const { user } = useAuth();
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,31 +93,71 @@ const Wallet = () => {
             try {
               setPaying(true);
 
-              // Step 1: Create PhonePe payment order
+              // Step 1: Create PhonePe payment order (backend creates SDK order)
               const orderResponse = await paymentAPI.createDuesOrder();
               
-              if (!orderResponse.success || !orderResponse.paymentUrl) {
+              if (!orderResponse.success) {
                 Alert.alert('Error', orderResponse.error || 'Failed to create payment order');
                 setPaying(false);
                 return;
               }
 
-              const { merchantOrderId, paymentUrl } = orderResponse;
+              const { merchantOrderId, orderToken, paymentUrl, orderId } = orderResponse;
 
-              // Step 2: Open PhonePe payment URL in browser
-              const result = await WebBrowser.openBrowserAsync(paymentUrl, {
-                showTitle: true,
-                toolbarColor: colors.primary.main,
-                enableBarCollapsing: false,
-              });
+              // Step 2: Start PhonePe SDK transaction
+              // Use orderToken if available, otherwise fallback to paymentUrl
+              if (orderToken) {
+                // Native SDK flow
+                const redirectUrl = Linking.createURL('/payment/callback', {
+                  queryParams: { orderId: merchantOrderId },
+                });
+                const callbackUrl = `${process.env.EXPO_PUBLIC_BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`;
 
-              // Step 3: Poll for payment status after browser closes
-              if (result.type === 'dismiss') {
-                // User closed the browser, check payment status
-                await checkPaymentStatus(merchantOrderId);
+                try {
+                  await startPhonePeTransaction({
+                    merchantTransactionId: merchantOrderId,
+                    amount: wallet.totalDues,
+                    mobileNumber: user?.phone || '',
+                    redirectUrl,
+                    callbackUrl,
+                    orderToken,
+                  });
+
+                  // SDK will handle the payment flow and redirect back to app
+                  // Set up deep link listener to handle callback
+                  const subscription = Linking.addEventListener('url', async (event) => {
+                    subscription.remove();
+                    const url = new URL(event.url);
+                    if (url.pathname.includes('/payment/callback')) {
+                      // Payment completed, check status
+                      await checkPaymentStatus(merchantOrderId);
+                    }
+                  });
+
+                  // Also poll for status in case deep link doesn't fire
+                  setTimeout(() => {
+                    checkPaymentStatus(merchantOrderId);
+                  }, 5000);
+                } catch (sdkError) {
+                  console.error('PhonePe SDK error:', sdkError);
+                  // Fallback to web browser if SDK fails
+                  if (paymentUrl) {
+                    const result = await Linking.openURL(paymentUrl);
+                    setTimeout(() => {
+                      checkPaymentStatus(merchantOrderId);
+                    }, 5000);
+                  } else {
+                    throw sdkError;
+                  }
+                }
+              } else if (paymentUrl) {
+                // Fallback: Web browser flow (if orderToken not available)
+                const result = await Linking.openURL(paymentUrl);
+                setTimeout(() => {
+                  checkPaymentStatus(merchantOrderId);
+                }, 5000);
               } else {
-                // Browser was dismissed, check status
-                await checkPaymentStatus(merchantOrderId);
+                throw new Error('No payment method available');
               }
             } catch (err) {
               console.error('Error paying dues:', err);

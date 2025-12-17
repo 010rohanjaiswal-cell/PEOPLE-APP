@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "People App",
-    "slug": "people-app",
+    "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,16 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.company.people"
+      "bundleIdentifier": "com.company.people",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "ppemerchantsdkv1",
+          "ppemerchantsdkv2",
+          "ppemerchantsdkv3",
+          "paytmmp",
+          "gpay"
+        ]
+      }
     },
     "android": {
       "package": "com.company.people",
@@ -23,6 +32,9 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "compileSdkVersion": 34,
+      "minSdkVersion": 21,
+      "targetSdkVersion": 34,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -41,12 +53,13 @@
           "cameraPermission": "The app needs access to your camera to take photos."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "./plugins/withPhonePeMaven"
     ],
     "scheme": "people-app",
     "extra": {
       "eas": {
-        "projectId": "50810881-f6fc-4e8d-a13a-3ba11a692b7c"
+        "projectId": "d2c6e8f0-df10-48b6-8dc0-01909a34e866"
       }
     },
     "owner": "010rohan"

@@ -1,0 +1,22 @@
+diff --git a/node_modules/react-native-phonepe-pg/android/src/main/java/com/phonepepaymentsdk/PhonePePaymentSDKModule.kt b/node_modules/react-native-phonepe-pg/android/src/main/java/com/phonepepaymentsdk/PhonePePaymentSDKModule.kt
+index b0a546e..71dd56d 100644
+--- a/node_modules/react-native-phonepe-pg/android/src/main/java/com/phonepepaymentsdk/PhonePePaymentSDKModule.kt
++++ b/node_modules/react-native-phonepe-pg/android/src/main/java/com/phonepepaymentsdk/PhonePePaymentSDKModule.kt
+@@ -158,7 +158,7 @@ class PhonePePaymentSDKModule(reactContext: ReactApplicationContext) :
+     }
+ 
+     override fun onActivityResult(
+-        activity: Activity?,
++        activity: Activity,
+         requestCode: Int,
+         resultCode: Int,
+         data: Intent?
+@@ -179,5 +179,7 @@ class PhonePePaymentSDKModule(reactContext: ReactApplicationContext) :
+         }
+     }
+ 
+-    override fun onNewIntent(data: Intent?) {}
++    override fun onNewIntent(intent: Intent) {
++        // Handle new intent if needed
++    }
+ }
