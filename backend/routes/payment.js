@@ -88,6 +88,10 @@ const getAuthToken = async () => {
  * Requires authentication as freelancer
  */
 router.post('/create-dues-order', authenticate, async (req, res) => {
+  // Get PhonePe credentials and config outside try block for error handling
+  const credentials = getPhonePeCredentials();
+  const config = getConfig();
+
   try {
     const user = req.user;
 
@@ -124,10 +128,6 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         error: 'No dues to pay',
       });
     }
-
-    // Get PhonePe credentials and config
-    const credentials = getPhonePeCredentials();
-    const config = getConfig();
 
     if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
       return res.status(500).json({
