@@ -259,8 +259,8 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     const authToken = await getAuthToken();
 
     // Generate X-VERIFY for status check
-    // Use /pg/v1/status/{merchantId}/{merchantTransactionId} format
-    const endpoint = `/pg/v1/status/${credentials.merchantId}/${merchantOrderId}`;
+    // Use /v1/status/{merchantId}/{merchantTransactionId} format (API_URL already includes /apis/pg)
+    const endpoint = `/v1/status/${credentials.merchantId}/${merchantOrderId}`;
     const xVerify = generateXVerify('', endpoint);
 
     // Check order status
