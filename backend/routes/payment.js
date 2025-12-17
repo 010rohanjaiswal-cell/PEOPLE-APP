@@ -29,9 +29,11 @@ const PHONEPE_CONFIG = {
 };
 
 // Get environment config
+// Use PHONEPE_ENV environment variable to explicitly set environment
+// If not set, default to production (since user has working production credentials)
 const getConfig = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  return isProduction ? PHONEPE_CONFIG.PRODUCTION : PHONEPE_CONFIG.SANDBOX;
+  const phonepeEnv = process.env.PHONEPE_ENV || 'production'; // Default to production
+  return phonepeEnv === 'sandbox' ? PHONEPE_CONFIG.SANDBOX : PHONEPE_CONFIG.PRODUCTION;
 };
 
 // Get PhonePe credentials from environment
