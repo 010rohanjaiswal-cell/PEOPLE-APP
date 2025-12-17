@@ -102,23 +102,29 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, orderToken, paymentUrl, orderId } = orderResponse;
+              const { merchantOrderId, orderToken, paymentUrl, orderId, base64Body, checksum } = orderResponse;
+
+              // Debug: Log what we received from backend
+              console.log('📦 Backend response:', {
+                hasMerchantOrderId: !!merchantOrderId,
+                hasOrderToken: !!orderToken,
+                hasPaymentUrl: !!paymentUrl,
+                hasOrderId: !!orderId,
+                hasBase64Body: !!base64Body,
+                hasChecksum: !!checksum,
+                fullResponse: orderResponse,
+              });
 
               // Step 2: Start PhonePe SDK transaction
-              // Use orderToken if available, otherwise fallback to paymentUrl
-              if (orderToken && orderId) {
-                // Native SDK flow
-                // Note: Use PhonePe's orderId (not merchantOrderId) for SDK
-                const redirectUrl = Linking.createURL('/payment/callback', {
-                  queryParams: { orderId: merchantOrderId },
-                });
-                const callbackUrl = `${process.env.EXPO_PUBLIC_BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`;
-
+              // React Native SDK requires base64Body and checksum (B2B PG flow)
+              if (base64Body && checksum) {
+                // Native SDK flow with B2B PG (requires base64Body + checksum)
                 try {
                   await startPhonePeTransaction({
-                    orderId: orderId, // PhonePe's orderId (required by SDK)
-                    orderToken: orderToken, // Order token from backend
-                    appScheme: 'people-app', // Deep link scheme
+                    base64Body: base64Body, // Base64 encoded request body (from backend)
+                    checksum: checksum,     // Checksum (from backend)
+                    packageName: null,      // Optional: Android package name
+                    appSchema: 'people-app', // Deep link scheme
                   });
 
                   // SDK will handle the payment flow and redirect back to app

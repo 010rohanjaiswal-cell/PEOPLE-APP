@@ -288,17 +288,56 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    // Return order token for SDK and order ID for status checks
-    res.json({
+    // For React Native SDK, we need to create a B2B PG request with checksum
+    // The SDK expects: startTransaction(base64Body, checksum, packageName, appSchema)
+    // Build the request body for SDK (different from order creation)
+    const sdkRequestBody = {
+      merchantId: credentials.merchantId,
+      merchantTransactionId: merchantOrderId,
+      amount: totalDues * 100, // Amount in paise
+      merchantUserId: freelancerId.toString(),
+      redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
+      mobileNumber: user.phone || '',
+      paymentInstrument: {
+        type: 'PAY_PAGE',
+      },
+    };
+
+    // Base64 encode the body for SDK
+    const base64Body = Buffer.from(JSON.stringify(sdkRequestBody)).toString('base64');
+
+    // Generate checksum for SDK request (X-VERIFY format)
+    // Checksum = SHA256(base64Body + /pg/v1/pay + saltKey) + ### + saltIndex
+    const sdkEndpoint = '/pg/v1/pay';
+    const checksum = generateXVerify(base64Body, sdkEndpoint);
+
+    // Return order token, checksum, and base64 body for SDK
+    const responsePayload = {
       success: true,
       merchantOrderId,
       orderId: orderId || merchantOrderId,
-      orderToken: orderToken, // Token to pass to PhonePe SDK
+      orderToken: orderToken, // Token from SDK order (for reference)
+      // For React Native SDK B2B PG flow:
+      base64Body: base64Body, // Base64 encoded request body
+      checksum: checksum, // Checksum for SDK
       state: state || 'PENDING',
       expireAt: expireAt || null,
       amount: totalDues,
       message: 'Payment order created successfully',
+    };
+
+    console.log('📤 Sending response to frontend:', {
+      hasBase64Body: !!base64Body,
+      hasChecksum: !!checksum,
+      base64BodyLength: base64Body?.length || 0,
+      checksumLength: checksum?.length || 0,
+      merchantOrderId,
+      orderId: orderId || merchantOrderId,
     });
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Error creating PhonePe order:', {
       status: error.response?.status,
