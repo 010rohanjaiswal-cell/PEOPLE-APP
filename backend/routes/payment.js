@@ -251,6 +251,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Build the SDK order request body
     const authToken = await getAuthToken();
     
+    // Build SDK order request body
+    // Only include mobileNumber if it's a valid phone number
     const sdkOrderRequestBody = {
       merchantId: credentials.merchantId,
       merchantOrderId: merchantOrderId,
@@ -259,12 +261,16 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
       redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      mobileNumber: user.phone || '',
       paymentFlow: 'SDK', // Required for SDK orders
       paymentInstrument: {
         type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
     };
+
+    // Add mobileNumber only if it's a valid phone number (not empty)
+    if (user.phone && user.phone.trim().length > 0) {
+      sdkOrderRequestBody.mobileNumber = user.phone.trim();
+    }
 
     // Create SDK order using /checkout/v2/sdk/order endpoint
     const sdkOrderEndpoint = '/checkout/v2/sdk/order';
@@ -274,25 +280,68 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       endpoint: sdkOrderUrl,
       merchantOrderId,
       amount: totalDues * 100,
+      requestBody: {
+        ...sdkOrderRequestBody,
+        mobileNumber: sdkOrderRequestBody.mobileNumber ? `${sdkOrderRequestBody.mobileNumber.substring(0, 3)}***` : 'not provided',
+      },
     });
 
-    const sdkOrderResponse = await axios.post(
-      sdkOrderUrl,
-      sdkOrderRequestBody,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `O-Bearer ${authToken}`,
-        },
-        timeout: 10000,
-      }
-    );
+    let sdkOrderResponse;
+    try {
+      sdkOrderResponse = await axios.post(
+        sdkOrderUrl,
+        sdkOrderRequestBody,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `O-Bearer ${authToken}`,
+          },
+          timeout: 10000,
+          validateStatus: (status) => status < 600, // Don't throw on any status
+        }
+      );
+    } catch (requestError) {
+      console.error('❌ SDK order request failed:', {
+        message: requestError.message,
+        code: requestError.code,
+        response: requestError.response ? {
+          status: requestError.response.status,
+          statusText: requestError.response.statusText,
+          data: requestError.response.data,
+        } : null,
+      });
+      throw requestError;
+    }
+
+    // Log full response for debugging
+    console.log('📥 SDK order response:', {
+      status: sdkOrderResponse.status,
+      statusText: sdkOrderResponse.statusText,
+      hasData: !!sdkOrderResponse.data,
+      dataPreview: JSON.stringify(sdkOrderResponse.data).substring(0, 500),
+    });
+
+    // Check for error response
+    if (sdkOrderResponse.status !== 200 && sdkOrderResponse.status !== 201) {
+      const errorData = sdkOrderResponse.data || {};
+      console.error('❌ SDK order creation failed:', {
+        status: sdkOrderResponse.status,
+        error: errorData.message || errorData.error || 'Unknown error',
+        code: errorData.code,
+        fullResponse: errorData,
+      });
+      throw new Error(errorData.message || errorData.error || `Failed to create SDK order: HTTP ${sdkOrderResponse.status}`);
+    }
 
     const sdkOrderData = sdkOrderResponse.data?.data || sdkOrderResponse.data;
     
     if (!sdkOrderData || !sdkOrderData.orderToken) {
-      console.error('❌ SDK order response missing orderToken:', sdkOrderResponse.data);
-      throw new Error('Failed to create SDK order: missing orderToken');
+      console.error('❌ SDK order response missing orderToken:', {
+        fullResponse: sdkOrderResponse.data,
+        hasData: !!sdkOrderData,
+        orderToken: sdkOrderData?.orderToken,
+      });
+      throw new Error('Failed to create SDK order: missing orderToken in response');
     }
 
     const orderToken = sdkOrderData.orderToken;
