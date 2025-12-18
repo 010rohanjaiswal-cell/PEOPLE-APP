@@ -346,19 +346,23 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
 
     // Order Status API for B2B PG flow:
     // For B2B PG orders created via /pg/v1/pay, use /pg/v1/status/{merchantTransactionId}
-    // GET /pg/v1/status/{merchantTransactionId}
+    // Full URL: https://api.phonepe.com/apis/pg/v1/status/{merchantTransactionId}
+    // Since API_URL is https://api.phonepe.com/apis/pg, endpoint should be /v1/status/...
+    // GET /v1/status/{merchantTransactionId}
     // Headers:
     //   - Content-Type: application/json
     //   - X-VERIFY: <checksum>
     // Note: B2B PG status endpoint uses X-VERIFY header
-    const endpoint = `/pg/v1/status/${merchantOrderId}`;
+    const endpoint = `/v1/status/${merchantOrderId}`;
     const fullUrl = `${config.API_URL}${endpoint}`;
     
     // Generate X-VERIFY header for B2B PG status check
     // For /pg/v1/status/{merchantTransactionId}, checksum format is:
     // SHA256(/pg/v1/status/{merchantTransactionId} + merchantTransactionId + saltKey) + ### + saltIndex
     // Note: The payload for status check is just the merchantTransactionId
-    const statusChecksum = generateXVerify(merchantOrderId, endpoint);
+    // IMPORTANT: For checksum generation, use the full path including /pg
+    const checksumEndpoint = `/pg/v1/status/${merchantOrderId}`;
+    const statusChecksum = generateXVerify(merchantOrderId, checksumEndpoint);
 
     console.log('🔍 Checking order status (B2B PG):', {
       merchantOrderId,
