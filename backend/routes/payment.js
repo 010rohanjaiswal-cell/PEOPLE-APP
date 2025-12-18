@@ -260,6 +260,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       mobileNumber: user.phone || '',
+      paymentFlow: 'SDK', // Required for SDK orders
       paymentInstrument: {
         type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
