@@ -50,19 +50,19 @@ export const initializePhonePe = async () => {
 };
 
 /**
- * Start PhonePe transaction using SDK (B2B PG flow)
+ * Start PhonePe transaction using SDK (SDK Order flow)
  * 
- * For B2B PG, we use direct flow:
- * 1. Backend creates B2B PG request body
- * 2. Backend returns base64Body and checksum
- * 3. SDK uses base64Body and checksum to start transaction
+ * For React Native SDK, we use SDK Order flow:
+ * 1. Backend creates SDK order using /checkout/v2/sdk/order
+ * 2. Backend returns orderToken and orderId
+ * 3. SDK uses orderToken and orderId to start transaction
  * 
  * PhonePe React Native SDK startTransaction signature: 
- * startTransaction(base64Body, checksum, packageName, appSchema)
+ * startTransaction(orderToken, orderId, packageName, appSchema)
  * 
  * @param {Object} params - Transaction parameters
- * @param {string} params.base64Body - Base64 encoded body (REQUIRED for B2B PG)
- * @param {string} params.checksum - Checksum (REQUIRED for B2B PG)
+ * @param {string} params.orderToken - Order token from SDK order (REQUIRED)
+ * @param {string} params.orderId - Order ID from SDK order (REQUIRED)
  * @param {string} params.packageName - Package name for Android (optional)
  * @param {string} params.appSchema - App scheme for deep linking (optional, defaults to 'people-app')
  * @returns {Promise} Promise that resolves with transaction result
@@ -70,18 +70,18 @@ export const initializePhonePe = async () => {
 export const startPhonePeTransaction = async (params) => {
   try {
     const {
-      base64Body,    // Base64 encoded body (REQUIRED for B2B PG)
-      checksum,      // Checksum (REQUIRED for B2B PG)
+      orderToken,     // Order token from SDK order (REQUIRED)
+      orderId,        // Order ID from SDK order (REQUIRED)
       packageName = null, // Optional: Android package name
       appSchema = 'people-app', // App scheme for deep linking
     } = params;
 
-    if (!base64Body) {
-      throw new Error('Base64 body is required for PhonePe B2B PG SDK transaction');
+    if (!orderToken) {
+      throw new Error('Order token is required for PhonePe SDK transaction');
     }
 
-    if (!checksum) {
-      throw new Error('Checksum is required for PhonePe B2B PG SDK transaction');
+    if (!orderId) {
+      throw new Error('Order ID is required for PhonePe SDK transaction');
     }
 
     // Verify SDK method exists
@@ -89,36 +89,35 @@ export const startPhonePeTransaction = async (params) => {
       throw new Error('PhonePe.startTransaction method not available. SDK may not be properly initialized.');
     }
 
-    // B2B PG flow: Use base64Body and checksum
-    // The SDK's startTransaction method signature is: startTransaction(base64Body, checksum, packageName, appSchema)
-    // For B2B PG, we use /pg/v1/pay endpoint with base64Body and checksum
-    console.log('🚀 Starting PhonePe B2B PG transaction:', {
-      base64BodyLength: base64Body.length,
-      checksum: checksum.substring(0, 20) + '...',
+    // SDK Order flow: Use orderToken and orderId
+    // The SDK's startTransaction method signature is: startTransaction(orderToken, orderId, packageName, appSchema)
+    console.log('🚀 Starting PhonePe SDK transaction:', {
+      orderToken: orderToken ? `${orderToken.substring(0, 20)}...` : null,
+      orderId,
       packageName,
       appSchema,
     });
 
-    console.log('📞 Calling PhonePe.startTransaction (B2B PG)...');
+    console.log('📞 Calling PhonePe.startTransaction (SDK Order)...');
     console.log('Parameters:', {
-      base64BodyLength: base64Body.length,
-      checksumLength: checksum.length,
+      orderTokenLength: orderToken?.length || 0,
+      orderId,
       packageName: packageName || 'null',
       appSchema,
     });
     
     try {
       const response = await PhonePe.startTransaction(
-        base64Body,    // Base64 encoded body
-        checksum,      // Checksum
+        orderToken,    // Order token from SDK order
+        orderId,       // Order ID from SDK order
         packageName,   // Optional package name
         appSchema      // App scheme for deep linking
       );
       
-      console.log('✅ PhonePe B2B PG transaction response:', response);
+      console.log('✅ PhonePe SDK transaction response:', response);
       return response;
     } catch (sdkError) {
-      console.error('❌ PhonePe SDK startTransaction error (B2B PG):', sdkError);
+      console.error('❌ PhonePe SDK startTransaction error:', sdkError);
       console.error('Error type:', typeof sdkError);
       console.error('Error stringified:', JSON.stringify(sdkError, Object.getOwnPropertyNames(sdkError), 2));
       

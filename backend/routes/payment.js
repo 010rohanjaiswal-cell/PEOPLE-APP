@@ -245,13 +245,15 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Generate merchant order ID (max 63 chars, only underscore and hyphen allowed)
     const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // For React Native SDK, we use B2B PG direct flow
-    // B2B PG endpoint: /pg/v1/pay
-    // The SDK expects: startTransaction(base64Body, checksum, packageName, appSchema)
-    // Build the B2B PG request body for SDK
-    const b2bPgRequestBody = {
+    // For React Native SDK, we use SDK Order flow (not direct B2B PG)
+    // SDK Order endpoint: /checkout/v2/sdk/order
+    // The SDK expects: startTransaction(orderToken, orderId, packageName, appSchema)
+    // Build the SDK order request body
+    const authToken = await getAuthToken();
+    
+    const sdkOrderRequestBody = {
       merchantId: credentials.merchantId,
-      merchantTransactionId: merchantOrderId,
+      merchantOrderId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise
       merchantUserId: freelancerId.toString(),
       redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
@@ -259,37 +261,65 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       mobileNumber: user.phone || '',
       paymentInstrument: {
-        type: 'PAY_PAGE', // B2B PG uses PAY_PAGE
+        type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
     };
 
-    // Base64 encode the body for SDK
-    const base64Body = Buffer.from(JSON.stringify(b2bPgRequestBody)).toString('base64');
+    // Create SDK order using /checkout/v2/sdk/order endpoint
+    const sdkOrderEndpoint = '/checkout/v2/sdk/order';
+    const sdkOrderUrl = `${config.API_URL}${sdkOrderEndpoint}`;
 
-    // Generate checksum for B2B PG request (X-VERIFY format)
-    // Checksum = SHA256(base64Body + /pg/v1/pay + saltKey) + ### + saltIndex
-    const b2bPgEndpoint = '/pg/v1/pay';
-    const checksum = generateXVerify(base64Body, b2bPgEndpoint);
+    console.log('📤 Creating SDK order:', {
+      endpoint: sdkOrderUrl,
+      merchantOrderId,
+      amount: totalDues * 100,
+    });
 
-    // Return base64Body and checksum for React Native SDK B2B PG flow
+    const sdkOrderResponse = await axios.post(
+      sdkOrderUrl,
+      sdkOrderRequestBody,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `O-Bearer ${authToken}`,
+        },
+        timeout: 10000,
+      }
+    );
+
+    const sdkOrderData = sdkOrderResponse.data?.data || sdkOrderResponse.data;
+    
+    if (!sdkOrderData || !sdkOrderData.orderToken) {
+      console.error('❌ SDK order response missing orderToken:', sdkOrderResponse.data);
+      throw new Error('Failed to create SDK order: missing orderToken');
+    }
+
+    const orderToken = sdkOrderData.orderToken;
+    const phonepeOrderId = sdkOrderData.orderId || merchantOrderId;
+
+    console.log('✅ SDK order created:', {
+      orderToken: orderToken ? `${orderToken.substring(0, 20)}...` : null,
+      orderId: phonepeOrderId,
+      merchantOrderId,
+    });
+
+    // Return orderToken and orderId for React Native SDK
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: merchantOrderId, // Use merchantOrderId as orderId for B2B PG flow
-      // For React Native SDK B2B PG flow:
-      base64Body: base64Body, // Base64 encoded request body
-      checksum: checksum, // Checksum for SDK
+      orderId: phonepeOrderId,
+      // For React Native SDK order flow:
+      orderToken: orderToken, // Order token for SDK
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
-    console.log('📤 Sending response to frontend (B2B PG):', {
-      hasBase64Body: !!base64Body,
-      hasChecksum: !!checksum,
-      base64BodyLength: base64Body?.length || 0,
-      checksumLength: checksum?.length || 0,
+    console.log('📤 Sending response to frontend (SDK Order):', {
+      hasOrderToken: !!orderToken,
+      orderTokenLength: orderToken?.length || 0,
+      orderId: phonepeOrderId,
       merchantOrderId,
-      endpoint: b2bPgEndpoint,
+      endpoint: sdkOrderEndpoint,
     });
 
     res.json(responsePayload);
