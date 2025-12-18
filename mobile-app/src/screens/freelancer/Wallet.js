@@ -115,14 +115,14 @@ const Wallet = () => {
                 fullResponse: orderResponse,
               });
 
-              // Step 2: Start PhonePe SDK transaction
-              // React Native SDK requires base64Body and checksum (B2B PG flow)
+              // Step 2: Start PhonePe SDK transaction (B2C PG flow)
+              // For B2C PG, React Native SDK requires base64Body and checksum
               if (base64Body && checksum) {
-                // Native SDK flow with B2B PG (requires base64Body + checksum)
+                // B2C PG flow (uses /pg/v1/pay endpoint)
                 try {
                   await startPhonePeTransaction({
-                    base64Body: base64Body, // Base64 encoded request body (from backend)
-                    checksum: checksum,     // Checksum (from backend)
+                    base64Body: base64Body, // Base64 encoded B2C PG request body
+                    checksum: checksum,     // Checksum for B2C PG
                     packageName: null,      // Optional: Android package name
                     appSchema: 'people-app', // Deep link scheme
                   });
@@ -143,7 +143,7 @@ const Wallet = () => {
                     checkPaymentStatus(merchantOrderId);
                   }, 5000);
                 } catch (sdkError) {
-                  console.error('PhonePe SDK error:', sdkError);
+                  console.error('PhonePe SDK error (B2C PG):', sdkError);
                   // Fallback to web browser if SDK fails
                   if (paymentUrl) {
                     const result = await Linking.openURL(paymentUrl);
@@ -155,7 +155,7 @@ const Wallet = () => {
                   }
                 }
               } else if (paymentUrl) {
-                // Fallback: Web browser flow (if orderToken not available)
+                // Final fallback: Web browser flow
                 const result = await Linking.openURL(paymentUrl);
                 setTimeout(() => {
                   checkPaymentStatus(merchantOrderId);

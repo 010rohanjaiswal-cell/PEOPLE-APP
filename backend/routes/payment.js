@@ -96,7 +96,18 @@ const getAuthToken = async () => {
     const accessToken = data.access_token;
 
     if (!accessToken) {
+      console.error('PhonePe auth response missing access_token:', {
+        responseData: data,
+        status: response.status,
+      });
       throw new Error('PhonePe auth response missing access_token');
+    }
+
+    // Ensure token is a string and trim whitespace
+    const cleanToken = String(accessToken).trim();
+    
+    if (!cleanToken || cleanToken.length === 0) {
+      throw new Error('PhonePe auth token is empty after cleaning');
     }
 
     // PhonePe docs mention expires_at; if not present, fall back to expires_in
@@ -121,10 +132,16 @@ const getAuthToken = async () => {
       expiresAtMs = Date.now() + 10 * 60 * 1000;
     }
 
-    cachedAuthToken = accessToken;
+    cachedAuthToken = cleanToken;
     cachedAuthTokenExpiresAt = expiresAtMs;
 
-    return accessToken;
+    console.log('✅ PhonePe auth token generated:', {
+      tokenLength: cleanToken.length,
+      tokenPreview: `${cleanToken.substring(0, 20)}...`,
+      expiresAt: new Date(expiresAtMs).toISOString(),
+    });
+
+    return cleanToken;
   } catch (error) {
     console.error('PhonePe Auth Error:', {
       status: error.response?.status,
@@ -143,13 +160,21 @@ const getAuthToken = async () => {
 router.get('/test-auth-token', async (req, res) => {
   try {
     const token = await getAuthToken();
+    const config = getConfig();
 
     return res.json({
       success: true,
       // Show only a preview of the token for safety
       tokenPreview: token ? `${token.slice(0, 8)}...` : null,
+      tokenLength: token?.length || 0,
       // Expose expiry info so we can verify caching logic
       expiresAt: cachedAuthTokenExpiresAt,
+      expiresAtDate: cachedAuthTokenExpiresAt ? new Date(cachedAuthTokenExpiresAt).toISOString() : null,
+      config: {
+        API_URL: config.API_URL,
+        AUTH_URL: config.AUTH_URL,
+        environment: process.env.PHONEPE_ENV || 'production',
+      },
     });
   } catch (error) {
     console.error('Error testing PhonePe auth token:', error.response?.data || error.message);
@@ -214,84 +239,14 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    // Get auth token
-    const authToken = await getAuthToken();
-
     // Generate merchant order ID (max 63 chars, only underscore and hyphen allowed)
     const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // Create order payload for SDK according to official PhonePe docs
-    // POST /checkout/v2/sdk/order - Direct JSON body (not base64)
-    // Authorization: O-Bearer <token> (not Bearer)
-    const orderPayload = {
-      merchantOrderId: merchantOrderId,
-      amount: totalDues * 100, // Amount in paise (multiply by 100)
-      expireAfter: 1200, // 20 minutes expiry (300-3600 seconds allowed)
-      metaInfo: {
-        udf1: `Freelancer: ${freelancerId.toString()}`,
-        udf2: `Total Dues: ${totalDues}`,
-        udf3: `Timestamp: ${Date.now()}`,
-      },
-      paymentFlow: {
-        type: 'PG_CHECKOUT', // Required: PG_CHECKOUT for SDK flow
-        // Optional: paymentModeConfig to control payment instruments
-        // If not provided, PhonePe shows default enabled instruments
-      },
-    };
-
-    // SDK endpoint: /checkout/v2/sdk/order
-    // According to docs: Direct JSON body, Authorization: O-Bearer <token>
-    // No X-VERIFY header needed for this endpoint
-    const endpoint = '/checkout/v2/sdk/order';
-
-    // Create order via PhonePe API
-    const orderResponse = await axios.post(
-      `${config.API_URL}${endpoint}`,
-      orderPayload, // Direct JSON body (not base64 encoded)
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `O-Bearer ${authToken}`, // Note: O-Bearer prefix (not Bearer)
-          // No X-VERIFY header for SDK order endpoint
-        },
-      }
-    );
-
-    const responseData = orderResponse.data;
-
-    // SDK endpoint response structure (from official docs):
-    // {
-    //   "orderId": "OMO123456789",
-    //   "state": "PENDING" or "CREATED",
-    //   "expireAt": 1703756259307,
-    //   "token": "<order-token-to-pass-to-SDK>"
-    // }
-    let orderToken = null;
-    let orderId = null;
-    let state = null;
-    let expireAt = null;
-
-    if (responseData) {
-      // Token is directly in response (not nested)
-      orderToken = responseData.token || null;
-      orderId = responseData.orderId || merchantOrderId;
-      state = responseData.state || null;
-      expireAt = responseData.expireAt || null;
-    }
-
-    if (!orderToken) {
-      console.error('PhonePe SDK Order Response:', JSON.stringify(responseData, null, 2));
-      return res.status(500).json({
-        success: false,
-        error: 'Order token not received from PhonePe',
-        debug: responseData,
-      });
-    }
-
-    // For React Native SDK, we need to create a B2B PG request with checksum
+    // For React Native SDK, we use B2C PG direct flow (not SDK order flow)
+    // B2C PG endpoint: /pg/v1/pay
     // The SDK expects: startTransaction(base64Body, checksum, packageName, appSchema)
-    // Build the request body for SDK (different from order creation)
-    const sdkRequestBody = {
+    // Build the B2C PG request body for SDK
+    const b2cPgRequestBody = {
       merchantId: credentials.merchantId,
       merchantTransactionId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise
@@ -301,40 +256,37 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       mobileNumber: user.phone || '',
       paymentInstrument: {
-        type: 'PAY_PAGE',
+        type: 'PAY_PAGE', // B2C PG uses PAY_PAGE for standard checkout
       },
     };
 
     // Base64 encode the body for SDK
-    const base64Body = Buffer.from(JSON.stringify(sdkRequestBody)).toString('base64');
+    const base64Body = Buffer.from(JSON.stringify(b2cPgRequestBody)).toString('base64');
 
-    // Generate checksum for SDK request (X-VERIFY format)
+    // Generate checksum for B2C PG request (X-VERIFY format)
     // Checksum = SHA256(base64Body + /pg/v1/pay + saltKey) + ### + saltIndex
-    const sdkEndpoint = '/pg/v1/pay';
-    const checksum = generateXVerify(base64Body, sdkEndpoint);
+    const b2cPgEndpoint = '/pg/v1/pay';
+    const checksum = generateXVerify(base64Body, b2cPgEndpoint);
 
-    // Return order token, checksum, and base64 body for SDK
+    // Return base64Body and checksum for React Native SDK B2C PG flow
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: orderId || merchantOrderId,
-      orderToken: orderToken, // Token from SDK order (for reference)
-      // For React Native SDK B2B PG flow:
+      orderId: merchantOrderId, // Use merchantOrderId as orderId for B2C PG flow
+      // For React Native SDK B2C PG flow:
       base64Body: base64Body, // Base64 encoded request body
       checksum: checksum, // Checksum for SDK
-      state: state || 'PENDING',
-      expireAt: expireAt || null,
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
-    console.log('📤 Sending response to frontend:', {
+    console.log('📤 Sending response to frontend (B2C PG):', {
       hasBase64Body: !!base64Body,
       hasChecksum: !!checksum,
       base64BodyLength: base64Body?.length || 0,
       checksumLength: checksum?.length || 0,
       merchantOrderId,
-      orderId: orderId || merchantOrderId,
+      endpoint: b2cPgEndpoint,
     });
 
     res.json(responsePayload);
@@ -375,56 +327,192 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     }
 
     // Get auth token
-    const authToken = await getAuthToken();
+    let authToken = await getAuthToken();
+    
+    if (!authToken) {
+      return res.status(500).json({
+        success: false,
+        code: 'AUTH_TOKEN_MISSING',
+        error: 'Failed to get authorization token',
+        data: {},
+      });
+    }
 
-    // Generate X-VERIFY for status check
-    // For SDK orders, use /checkout/v2/order/{merchantOrderId}/status
+    // Trim any whitespace from token
+    authToken = authToken.trim();
+
+    // Order Status API for SDK flow:
+    // GET /checkout/v2/order/{merchantOrderId}/status
+    // Headers:
+    //   - Content-Type: application/json
+    //   - Authorization: O-Bearer <merchant-auth-token>
+    // No X-VERIFY required for this endpoint as per latest docs
     const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
-    const xVerify = generateXVerify('', endpoint);
+    const fullUrl = `${config.API_URL}${endpoint}`;
+    
+    // Build authorization header - ensure no extra spaces
+    const authHeader = `O-Bearer ${authToken}`.trim();
+
+    console.log('🔍 Checking order status:', {
+      merchantOrderId,
+      endpoint: fullUrl,
+      hasToken: !!authToken,
+      tokenLength: authToken?.length || 0,
+      tokenPreview: authToken ? `${authToken.substring(0, 20)}...` : null,
+      authHeaderPreview: authHeader.substring(0, 30) + '...',
+      config: {
+        API_URL: config.API_URL,
+        environment: process.env.PHONEPE_ENV || 'production',
+      },
+    });
 
     // Check order status
-    const statusResponse = await axios.get(
-      `${config.API_URL}${endpoint}`,
-      {
+    let statusResponse;
+    try {
+      statusResponse = await axios.get(fullUrl, {
         headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'X-VERIFY': xVerify,
-          'X-MERCHANT-ID': credentials.merchantId,
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
         },
-      }
-    );
+        // Optional query params: details, errorContext
+        params: {
+          details: false,
+          errorContext: false,
+        },
+        // Add timeout and better error handling
+        timeout: 10000,
+        validateStatus: (status) => status < 500, // Don't throw on 4xx errors
+      });
+      
+      // Log response for debugging
+      console.log('📥 Order status response:', {
+        status: statusResponse.status,
+        statusText: statusResponse.statusText,
+        dataPreview: JSON.stringify(statusResponse.data).substring(0, 200),
+      });
+    } catch (requestError) {
+      // This will be caught by outer catch, but log here for debugging
+      console.error('❌ Order status request failed:', {
+        message: requestError.message,
+        code: requestError.code,
+        response: requestError.response ? {
+          status: requestError.response.status,
+          statusText: requestError.response.statusText,
+          data: requestError.response.data,
+          headers: requestError.response.headers,
+        } : null,
+      });
+      throw requestError;
+    }
 
     const responseData = statusResponse.data;
 
-    if (responseData.success && responseData.data) {
-      const orderData = responseData.data;
-      const code = orderData.code;
-      const transactionId = orderData.transactionId;
-
-      // Check if payment is successful
-      const isSuccess = code === 'PAYMENT_SUCCESS' || code === 'PAYMENT_PENDING';
-
-      res.json({
-        success: true,
-        orderStatus: code,
-        transactionId,
-        isSuccess: code === 'PAYMENT_SUCCESS',
-        isPending: code === 'PAYMENT_PENDING',
-        isFailed: code === 'PAYMENT_ERROR' || code === 'PAYMENT_DECLINED',
-        data: orderData,
-      });
-    } else {
-      res.json({
+    // PhonePe Order Status API returns order data directly (not wrapped in success/data)
+    // Response format: { orderId, state, amount, expireAt, paymentDetails, ... }
+    // Error format: { success: false, code, message, data: {} }
+    
+    // Check if it's an error response
+    if (responseData.success === false || responseData.code) {
+      return res.status(500).json({
         success: false,
-        orderStatus: 'UNKNOWN',
-        message: responseData.message || 'Failed to get order status',
+        code: responseData.code || 'UNKNOWN_ERROR',
+        error: responseData.message || 'Failed to get order status',
+        data: responseData.data || {},
       });
     }
+
+    // Success response: order data is directly in responseData
+    const state = responseData.state; // PENDING, COMPLETED, FAILED
+    const orderId = responseData.orderId;
+    const amount = responseData.amount;
+    const paymentDetails = responseData.paymentDetails || [];
+    
+    // Get latest payment attempt details
+    const latestPayment = paymentDetails.length > 0 ? paymentDetails[paymentDetails.length - 1] : null;
+    const transactionId = latestPayment?.transactionId || null;
+    const paymentState = latestPayment?.state || state;
+
+    // Map PhonePe states to our status
+    const isSuccess = state === 'COMPLETED';
+    const isPending = state === 'PENDING';
+    const isFailed = state === 'FAILED';
+
+    res.json({
+      success: true,
+      orderId,
+      state,
+      amount,
+      transactionId,
+      isSuccess,
+      isPending,
+      isFailed,
+      paymentDetails,
+      data: responseData,
+    });
   } catch (error) {
-    console.error('Error checking order status:', error.response?.data || error.message);
-    res.status(500).json({
+    const errorData = error.response?.data || {};
+    const errorMessage = errorData.message || error.message || 'Failed to check order status';
+    const httpStatus = error.response?.status;
+    
+    // Determine error code based on response
+    let errorCode = 'UNKNOWN_ERROR';
+    if (httpStatus === 401 || httpStatus === 403) {
+      errorCode = 'AUTHORIZATION_FAILED';
+    } else if (httpStatus === 404) {
+      errorCode = 'ORDER_NOT_FOUND';
+    } else if (errorData.code) {
+      errorCode = errorData.code;
+    }
+    
+    // Check if error message indicates order not found
+    const errorMessageLower = errorMessage.toLowerCase();
+    if (errorMessageLower.includes('not found') || errorMessageLower.includes('mapping not found') || errorMessageLower.includes('no entry found')) {
+      errorCode = 'ORDER_NOT_FOUND';
+    }
+    
+    console.error('❌ Error checking order status:', {
+      code: errorCode,
+      message: errorMessage,
+      status: httpStatus,
+      statusText: error.response?.statusText,
+      data: errorData,
+      url: error.config?.url,
+      headers: {
+        authorization: error.config?.headers?.Authorization ? 'O-Bearer ***' : 'missing',
+      },
+      fullErrorResponse: JSON.stringify(errorData, null, 2),
+    });
+    
+    // If authorization failed, try to get a fresh token and log it
+    if (errorCode === 'AUTHORIZATION_FAILED') {
+      console.log('🔄 Authorization failed - attempting to refresh token...');
+      try {
+        // Clear cached token to force refresh
+        cachedAuthToken = null;
+        cachedAuthTokenExpiresAt = null;
+        const newToken = await getAuthToken();
+        console.log('✅ New token generated:', newToken ? `${newToken.substring(0, 20)}...` : 'null');
+      } catch (tokenError) {
+        console.error('❌ Failed to refresh token:', tokenError.message);
+      }
+    }
+    
+    // For B2B PG orders, if order not found, it might mean the order was never created
+    // (e.g., SDK call failed with 404). In this case, suggest checking webhook or retrying payment.
+    if (errorCode === 'ORDER_NOT_FOUND') {
+      console.log('⚠️ Order not found - This might be a B2B PG order that was never created.');
+      console.log('💡 For B2B PG orders, status updates come via webhook. Check webhook logs for payment status.');
+    }
+    
+    res.status(httpStatus || 500).json({
       success: false,
-      error: error.response?.data?.message || error.message || 'Failed to check order status',
+      code: errorCode,
+      message: errorMessage,
+      data: errorData.data || {},
+      // Add helpful message for order not found
+      hint: errorCode === 'ORDER_NOT_FOUND' 
+        ? 'Order may not exist. For B2B PG orders, status updates come via webhook.' 
+        : undefined,
     });
   }
 });
