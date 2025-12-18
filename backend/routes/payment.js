@@ -330,7 +330,45 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         code: errorData.code,
         fullResponse: errorData,
       });
-      throw new Error(errorData.message || errorData.error || `Failed to create SDK order: HTTP ${sdkOrderResponse.status}`);
+      
+      // Fallback: Generate web payment URL if SDK order fails
+      // This allows payments to work even if SDK orders aren't enabled for the merchant
+      console.log('🔄 Falling back to web payment flow...');
+      
+      // Generate web payment URL using /pg/v1/pay endpoint
+      const webPaymentBody = {
+        merchantId: credentials.merchantId,
+        merchantTransactionId: merchantOrderId,
+        amount: totalDues * 100,
+        merchantUserId: freelancerId.toString(),
+        redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
+        redirectMode: 'REDIRECT',
+        callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
+        mobileNumber: user.phone && user.phone.trim().length > 0 ? user.phone.trim() : undefined,
+        paymentInstrument: {
+          type: 'PAY_PAGE',
+        },
+      };
+
+      // Base64 encode for web payment
+      const base64Body = Buffer.from(JSON.stringify(webPaymentBody)).toString('base64');
+      const webEndpoint = '/pg/v1/pay';
+      const checksum = generateXVerify(base64Body, webEndpoint);
+      
+      // Generate payment URL
+      const paymentUrl = `${config.API_URL}${webEndpoint}?base64Body=${encodeURIComponent(base64Body)}&checksum=${encodeURIComponent(checksum)}`;
+      
+      console.log('✅ Generated web payment URL as fallback');
+      
+      return res.json({
+        success: true,
+        merchantOrderId,
+        orderId: merchantOrderId,
+        paymentUrl: paymentUrl, // Web payment URL as fallback
+        amount: totalDues,
+        message: 'Payment order created successfully (web fallback)',
+        fallback: true, // Indicate this is a fallback
+      });
     }
 
     const sdkOrderData = sdkOrderResponse.data?.data || sdkOrderResponse.data;
