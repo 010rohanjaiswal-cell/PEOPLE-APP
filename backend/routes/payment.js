@@ -356,7 +356,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       const checksum = generateXVerify(base64Body, webEndpoint);
       
       // Generate payment URL
-      const paymentUrl = `${config.API_URL}${webEndpoint}?base64Body=${encodeURIComponent(base64Body)}&checksum=${encodeURIComponent(checksum)}`;
+      // Note: API_URL already includes /pg, so we use /v1/pay (not /pg/v1/pay)
+      const paymentUrl = `${config.API_URL}/v1/pay?base64Body=${encodeURIComponent(base64Body)}&checksum=${encodeURIComponent(checksum)}`;
       
       console.log('✅ Generated web payment URL as fallback');
       

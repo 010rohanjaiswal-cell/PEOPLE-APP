@@ -224,16 +224,34 @@ const Wallet = () => {
             return true; // Stop polling
           }
         } else {
-          // Error checking status, but continue polling if retries left
-          if (retries < maxRetries) {
+          // Error checking status
+          // If ORDER_NOT_FOUND, this is expected for web payments (order created on payment page visit)
+          // Continue polling but with longer intervals
+          if (statusResponse.code === 'ORDER_NOT_FOUND' && retries < maxRetries) {
+            // Order not found yet - wait longer before retrying (user might not have visited payment page)
+            setTimeout(() => {
+              checkPaymentStatus(merchantOrderId, retries + 1);
+            }, pollInterval * 2); // Wait 10 seconds instead of 5 for ORDER_NOT_FOUND
+            return false; // Continue polling
+          } else if (retries < maxRetries) {
+            // Other errors - continue polling with normal interval
             setTimeout(() => {
               checkPaymentStatus(merchantOrderId, retries + 1);
             }, pollInterval);
+            return false; // Continue polling
           } else {
-            Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
-            setPaying(false);
-            loadWallet();
-            return true;
+            // Max retries reached or non-recoverable error
+            if (statusResponse.code === 'ORDER_NOT_FOUND') {
+              // Order not found - user might not have completed payment yet
+              // Don't show error, just refresh wallet in case webhook processed it
+              loadWallet();
+              setPaying(false);
+            } else {
+              Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+              setPaying(false);
+              loadWallet();
+            }
+            return true; // Stop polling
           }
         }
       };
