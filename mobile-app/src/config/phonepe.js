@@ -16,18 +16,30 @@ const PHONEPE_CONFIG = {
  * Initialize PhonePe SDK
  * Call this once when app starts (e.g., in App.js)
  * PhonePe SDK init signature: init(environment, merchantId, appId, enableLogging)
+ * 
+ * Production Requirements (per PhonePe Go Live guide):
+ * - environment: PRODUCTION
+ * - merchantId: Production MID
+ * - enableLogging: false (must be false in production)
  */
 export const initializePhonePe = async () => {
   try {
     // PhonePe SDK init requires: environment, merchantId, appId (optional), enableLogging
-    // Enable logging to debug SDK issues
+    // Per PhonePe Go Live guide: enableLogging must be false in production
+    const isProduction = PHONEPE_CONFIG.environment === 'PRODUCTION';
+    const enableLogging = !isProduction; // false for production, true for sandbox
+    
     const result = await PhonePe.init(
       PHONEPE_CONFIG.environment, // 'PRODUCTION' or 'SANDBOX'
       PHONEPE_CONFIG.merchantId,    // Merchant ID
       null,                         // appId (optional, can be null)
-      true                          // enableLogging: true for debugging (set to false in production)
+      enableLogging                 // false in production, true in sandbox (per Go Live guide)
     );
-    console.log('✅ PhonePe SDK initialized:', result);
+    console.log('✅ PhonePe SDK initialized:', {
+      environment: PHONEPE_CONFIG.environment,
+      merchantId: PHONEPE_CONFIG.merchantId,
+      enableLogging,
+    });
     return true;
   } catch (error) {
     console.error('❌ Error initializing PhonePe SDK:', error);
