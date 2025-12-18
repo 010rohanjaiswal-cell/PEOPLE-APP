@@ -157,7 +157,28 @@ const Wallet = () => {
                 }
               } else if (paymentUrl) {
                 // Final fallback: Web browser flow
-                const result = await Linking.openURL(paymentUrl);
+                console.log('🌐 Opening payment URL in browser:', {
+                  hasPaymentUrl: !!paymentUrl,
+                  urlPreview: paymentUrl ? `${paymentUrl.substring(0, 50)}...` : null,
+                });
+                try {
+                  const canOpen = await Linking.canOpenURL(paymentUrl);
+                  if (canOpen) {
+                    await Linking.openURL(paymentUrl);
+                    console.log('✅ Payment URL opened successfully');
+                  } else {
+                    console.error('❌ Cannot open payment URL');
+                    Alert.alert('Error', 'Cannot open payment URL. Please try again.');
+                    setPaying(false);
+                    return;
+                  }
+                } catch (linkError) {
+                  console.error('❌ Error opening payment URL:', linkError);
+                  Alert.alert('Error', 'Failed to open payment URL. Please try again.');
+                  setPaying(false);
+                  return;
+                }
+                // Start polling after opening payment URL
                 setTimeout(() => {
                   checkPaymentStatus(merchantOrderId);
                 }, 5000);
