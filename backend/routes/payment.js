@@ -46,6 +46,9 @@ const getPhonePeCredentials = () => {
       process.env.PHONEPE_SALT_KEY ||
       process.env.PHONEPE_CLIENT_SECRET, // Use client secret as salt if salt key not provided
     saltIndex: process.env.PHONEPE_SALT_INDEX || '1',
+    // Webhook credentials for Authorization header verification
+    webhookUsername: process.env.PHONEPE_WEBHOOK_USERNAME,
+    webhookPassword: process.env.PHONEPE_WEBHOOK_PASSWORD,
   };
 };
 
@@ -515,56 +518,500 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
 });
 
 /**
+ * Verify PhonePe Webhook Authorization Header
+ * PhonePe sends: Authorization: SHA256(username:password)
+ * We verify it matches our configured webhook credentials
+ */
+const verifyWebhookAuthorization = (authHeader) => {
+  const credentials = getPhonePeCredentials();
+  
+  if (!credentials.webhookUsername || !credentials.webhookPassword) {
+    console.warn('⚠️ Webhook credentials not configured. Skipping authorization verification.');
+    // In development, allow webhooks without credentials
+    // In production, you should always have credentials configured
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  // Generate expected hash: SHA256(username:password)
+  const expectedHash = crypto
+    .createHash('sha256')
+    .update(`${credentials.webhookUsername}:${credentials.webhookPassword}`)
+    .digest('hex');
+
+  // PhonePe sends: Authorization: SHA256(username:password)
+  // Extract the hash from the header (remove "SHA256" prefix if present, or use as-is)
+  const receivedHash = authHeader?.replace(/^SHA256\s*/i, '').trim();
+
+  const isValid = receivedHash === expectedHash;
+
+  if (!isValid) {
+    console.error('❌ Webhook authorization failed:', {
+      receivedHash: receivedHash ? `${receivedHash.substring(0, 20)}...` : 'missing',
+      expectedHash: `${expectedHash.substring(0, 20)}...`,
+    });
+  }
+
+  return isValid;
+};
+
+/**
  * PhonePe Webhook Handler
  * POST /api/payment/webhook
- * This endpoint receives callbacks from PhonePe after payment
+ * 
+ * Handles all PhonePe webhook events:
+ * - checkout.order.completed: Order successfully completed
+ * - checkout.order.failed: Order failed
+ * - pg.refund.accepted: Refund accepted
+ * - pg.refund.completed: Refund successfully completed
+ * - pg.refund.failed: Refund failed
+ * 
+ * Documentation: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/webhook-handling
  */
 router.post('/webhook', async (req, res) => {
   try {
-    // PhonePe sends webhook as JSON
-    const webhookData = req.body;
-    const { merchantTransactionId, transactionId, code } = webhookData;
+    // Verify Authorization header
+    const authHeader = req.headers.authorization;
+    if (!verifyWebhookAuthorization(authHeader)) {
+      console.error('❌ Webhook authorization verification failed');
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Unauthorized' 
+      });
+    }
 
-    console.log('PhonePe Webhook Received:', {
-      merchantTransactionId,
-      transactionId,
-      code,
+    // PhonePe sends webhook as JSON with event and payload structure
+    const webhookData = req.body;
+    const { event, payload } = webhookData;
+
+    console.log('📥 PhonePe Webhook Received:', {
+      event,
+      merchantOrderId: payload?.merchantOrderId || payload?.originalMerchantOrderId,
+      state: payload?.state,
+      amount: payload?.amount,
     });
 
-    // Verify webhook (you should verify X-VERIFY header in production)
-    // For now, we'll process if code is PAYMENT_SUCCESS
+    // Use 'event' parameter (not 'type') to identify event type
+    // Use 'payload.state' for payment status
+    if (!event || !payload) {
+      console.error('❌ Invalid webhook format: missing event or payload');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid webhook format' 
+      });
+    }
 
-    if (code === 'PAYMENT_SUCCESS' && merchantTransactionId) {
-      // Extract freelancer ID from merchant order ID (format: DUES_{freelancerId}_{timestamp})
-      const parts = merchantTransactionId.split('_');
+    // Handle Order Events
+    if (event === 'checkout.order.completed') {
+      await handleOrderCompleted(payload);
+    } else if (event === 'checkout.order.failed') {
+      await handleOrderFailed(payload);
+    }
+    // Handle Refund Events
+    else if (event === 'pg.refund.accepted') {
+      await handleRefundAccepted(payload);
+    } else if (event === 'pg.refund.completed') {
+      await handleRefundCompleted(payload);
+    } else if (event === 'pg.refund.failed') {
+      await handleRefundFailed(payload);
+    } else {
+      console.warn('⚠️ Unknown webhook event:', event);
+    }
+
+    // Always return success to PhonePe (200 OK)
+    // PhonePe will retry if we return error status
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('❌ Error processing PhonePe webhook:', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body,
+    });
+    // Still return 200 to prevent PhonePe from retrying
+    // Log the error for manual investigation
+    res.status(200).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * Handle Order Completed Event
+ * Event: checkout.order.completed
+ * State: COMPLETED
+ */
+const handleOrderCompleted = async (payload) => {
+  try {
+    const { merchantOrderId, state, amount } = payload;
+
+    // Verify state is COMPLETED
+    if (state !== 'COMPLETED') {
+      console.warn('⚠️ Order completed event but state is not COMPLETED:', state);
+      return;
+    }
+
+    if (!merchantOrderId) {
+      console.error('❌ Missing merchantOrderId in order completed webhook');
+      return;
+    }
+
+    // Extract freelancer ID from merchant order ID (format: DUES_{freelancerId}_{timestamp})
+    const parts = merchantOrderId.split('_');
+    if (parts.length >= 2 && parts[0] === 'DUES') {
+      const freelancerId = parts[1];
+
+      // Mark all unpaid transactions as paid
+      const updateResult = await CommissionTransaction.updateMany(
+        {
+          freelancer: freelancerId,
+          duesPaid: false,
+        },
+        {
+          $set: {
+            duesPaid: true,
+            duesPaidAt: new Date(),
+            duesPaymentOrderId: merchantOrderId,
+          },
+        }
+      );
+
+      console.log(`✅ Order completed - Dues payment processed:`, {
+        freelancerId,
+        merchantOrderId,
+        amount: amount ? amount / 100 : null, // Convert paisa to rupees
+        transactionsUpdated: updateResult.modifiedCount,
+      });
+    } else {
+      console.warn('⚠️ Invalid merchant order ID format:', merchantOrderId);
+    }
+  } catch (error) {
+    console.error('❌ Error handling order completed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Handle Order Failed Event
+ * Event: checkout.order.failed
+ * State: FAILED
+ */
+const handleOrderFailed = async (payload) => {
+  try {
+    const { merchantOrderId, state, errorCode, detailedErrorCode } = payload;
+
+    // Verify state is FAILED
+    if (state !== 'FAILED') {
+      console.warn('⚠️ Order failed event but state is not FAILED:', state);
+      return;
+    }
+
+    console.log(`❌ Order failed:`, {
+      merchantOrderId,
+      errorCode,
+      detailedErrorCode,
+    });
+
+    // You can add logic here to:
+    // - Notify the user about payment failure
+    // - Log failure reason for analytics
+    // - Update order status in database
+  } catch (error) {
+    console.error('❌ Error handling order failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Handle Refund Accepted Event
+ * Event: pg.refund.accepted
+ * State: CONFIRMED
+ */
+const handleRefundAccepted = async (payload) => {
+  try {
+    const { merchantRefundId, originalMerchantOrderId, state, amount } = payload;
+
+    console.log(`✅ Refund accepted:`, {
+      merchantRefundId,
+      originalMerchantOrderId,
+      state,
+      amount: amount ? amount / 100 : null, // Convert paisa to rupees
+    });
+
+    // You can add logic here to:
+    // - Update refund status in database
+    // - Notify user that refund is being processed
+  } catch (error) {
+    console.error('❌ Error handling refund accepted:', error);
+    throw error;
+  }
+};
+
+/**
+ * Handle Refund Completed Event
+ * Event: pg.refund.completed
+ * State: COMPLETED
+ */
+const handleRefundCompleted = async (payload) => {
+  try {
+    const { merchantRefundId, originalMerchantOrderId, state, amount } = payload;
+
+    // Verify state is COMPLETED
+    if (state !== 'COMPLETED') {
+      console.warn('⚠️ Refund completed event but state is not COMPLETED:', state);
+      return;
+    }
+
+    console.log(`✅ Refund completed:`, {
+      merchantRefundId,
+      originalMerchantOrderId,
+      amount: amount ? amount / 100 : null, // Convert paisa to rupees
+    });
+
+    // Extract freelancer ID from original merchant order ID (format: DUES_{freelancerId}_{timestamp})
+    if (originalMerchantOrderId) {
+      const parts = originalMerchantOrderId.split('_');
       if (parts.length >= 2 && parts[0] === 'DUES') {
         const freelancerId = parts[1];
 
-        // Mark all unpaid transactions as paid
-        await CommissionTransaction.updateMany(
-          {
-            freelancer: freelancerId,
-            duesPaid: false,
-          },
-          {
-            $set: {
-              duesPaid: true,
-              duesPaidAt: new Date(),
-              duesPaymentOrderId: merchantTransactionId,
-            },
-          }
-        );
-
-        console.log(`✅ Dues payment processed for freelancer: ${freelancerId}, Order: ${merchantTransactionId}`);
+        // You can add logic here to:
+        // - Mark refund as completed in database
+        // - Revert dues payment status if needed
+        // - Notify user that refund is complete
+        console.log(`✅ Refund completed for freelancer: ${freelancerId}`);
       }
     }
-
-    // Always return success to PhonePe
-    res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error processing PhonePe webhook:', error);
-    // Still return success to prevent PhonePe from retrying
-    res.status(200).json({ success: false, error: error.message });
+    console.error('❌ Error handling refund completed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Handle Refund Failed Event
+ * Event: pg.refund.failed
+ * State: FAILED
+ */
+const handleRefundFailed = async (payload) => {
+  try {
+    const { merchantRefundId, originalMerchantOrderId, state, errorCode, detailedErrorCode } = payload;
+
+    // Verify state is FAILED
+    if (state !== 'FAILED') {
+      console.warn('⚠️ Refund failed event but state is not FAILED:', state);
+      return;
+    }
+
+    console.log(`❌ Refund failed:`, {
+      merchantRefundId,
+      originalMerchantOrderId,
+      errorCode,
+      detailedErrorCode,
+    });
+
+    // You can add logic here to:
+    // - Update refund status in database
+    // - Notify user about refund failure
+    // - Log failure reason for investigation
+  } catch (error) {
+    console.error('❌ Error handling refund failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Initiate refund for a successful PhonePe transaction
+ * POST /api/payment/refund
+ *
+ * Docs:
+ * - Initiate refund: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/refund#nav-initiating-refund-request
+ * - Environment:     https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/refund#nav-environment
+ *
+ * Body:
+ * - merchantOrderId (string, required)  -> originalMerchantOrderId in PhonePe
+ * - amount          (number, optional)  -> amount to refund in paisa; if omitted, full order amount should be used (we keep it required for now)
+ */
+router.post('/refund', authenticate, async (req, res) => {
+  try {
+    const { merchantOrderId, amount } = req.body || {};
+
+    if (!merchantOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: 'merchantOrderId is required',
+      });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'amount (in paisa) is required and must be > 0',
+      });
+    }
+
+    const credentials = getPhonePeCredentials();
+    const config = getConfig();
+
+    if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
+      return res.status(500).json({
+        success: false,
+        error: 'PhonePe credentials not configured',
+      });
+    }
+
+    // Get auth token (O-Bearer) as per docs
+    const authToken = await getAuthToken();
+
+    // Generate unique merchantRefundId for this refund
+    // Format: REFUND_{orderId}_{timestamp} (max 63 chars)
+    const rawRefundId = `REFUND_${merchantOrderId}_${Date.now()}`;
+    const merchantRefundId = rawRefundId.substring(0, 63);
+
+    // Refund API (production): POST /apis/pg/payments/v2/refund
+    // See docs: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/refund#nav-environment
+    const endpoint = '/payments/v2/refund';
+    const url = `${config.API_URL}${endpoint}`;
+
+    const payload = {
+      merchantRefundId,
+      originalMerchantOrderId: merchantOrderId,
+      amount, // amount in paisa
+    };
+
+    console.log('🔁 Initiating PhonePe refund:', {
+      url,
+      payload,
+    });
+
+    const refundResponse = await axios.post(url, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `O-Bearer ${authToken}`,
+      },
+      timeout: 10000,
+      validateStatus: (status) => status < 500,
+    });
+
+    console.log('📥 Refund initiation response:', {
+      status: refundResponse.status,
+      dataPreview: JSON.stringify(refundResponse.data).substring(0, 200),
+    });
+
+    const data = refundResponse.data || {};
+
+    // Pass through PhonePe response, but ensure our success flag
+    res.status(refundResponse.status).json({
+      success: true,
+      merchantRefundId,
+      phonepe: data,
+    });
+  } catch (error) {
+    console.error('❌ Error initiating PhonePe refund:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to initiate refund',
+      data: error.response?.data || {},
+    });
+  }
+});
+
+/**
+ * Check refund status
+ * GET /api/payment/refund-status/:merchantRefundId
+ *
+ * Docs:
+ * - Refund status: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/refund
+ *
+ * Path params:
+ * - merchantRefundId (string, required)
+ */
+router.get('/refund-status/:merchantRefundId', authenticate, async (req, res) => {
+  try {
+    const { merchantRefundId } = req.params;
+
+    if (!merchantRefundId) {
+      return res.status(400).json({
+        success: false,
+        error: 'merchantRefundId is required',
+      });
+    }
+
+    const credentials = getPhonePeCredentials();
+    const config = getConfig();
+
+    if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
+      return res.status(500).json({
+        success: false,
+        error: 'PhonePe credentials not configured',
+      });
+    }
+
+    const authToken = await getAuthToken();
+
+    // Refund status API (production):
+    // GET /apis/pg/payments/v2/refund/{merchantRefundId}/status
+    const endpoint = `/payments/v2/refund/${merchantRefundId}/status`;
+    const url = `${config.API_URL}${endpoint}`;
+
+    console.log('🔍 Checking PhonePe refund status:', {
+      url,
+      merchantRefundId,
+    });
+
+    const statusResponse = await axios.get(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `O-Bearer ${authToken}`,
+      },
+      timeout: 10000,
+      validateStatus: (status) => status < 500,
+    });
+
+    console.log('📥 Refund status response:', {
+      status: statusResponse.status,
+      dataPreview: JSON.stringify(statusResponse.data).substring(0, 200),
+    });
+
+    const data = statusResponse.data || {};
+
+    // From docs, expected response shape:
+    // {
+    //   "originalMerchantOrderId": "",
+    //   "refundId": "OMRxxxxx",
+    //   "amount": 1234,
+    //   "state": "FAILED" | "PENDING" | "COMPLETED",
+    //   ...
+    // }
+
+    res.status(statusResponse.status).json({
+      success: true,
+      merchantRefundId,
+      phonepe: data,
+    });
+  } catch (error) {
+    console.error('❌ Error checking PhonePe refund status:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error:
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Failed to check refund status',
+      data: error.response?.data || {},
+    });
   }
 });
 
