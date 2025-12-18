@@ -184,7 +184,37 @@ const Wallet = () => {
       const pollInterval = 5000; // 5 seconds
 
       const pollStatus = async () => {
-        const statusResponse = await paymentAPI.checkOrderStatus(merchantOrderId);
+        let statusResponse;
+        try {
+          statusResponse = await paymentAPI.checkOrderStatus(merchantOrderId);
+        } catch (error) {
+          // Handle API errors gracefully
+          const errorData = error.response?.data || {};
+          const errorCode = errorData.code;
+          
+          // ORDER_NOT_FOUND is expected for web payments (order created on payment page visit)
+          if (errorCode === 'ORDER_NOT_FOUND') {
+            statusResponse = {
+              success: false,
+              code: 'ORDER_NOT_FOUND',
+              isPending: true, // Treat as pending, not error
+            };
+          } else {
+            // Other errors - log and continue polling
+            console.warn('⚠️ Order status check error:', errorCode || error.message);
+            if (retries < maxRetries) {
+              setTimeout(() => {
+                checkPaymentStatus(merchantOrderId, retries + 1);
+              }, pollInterval);
+              return false;
+            } else {
+              Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+              setPaying(false);
+              loadWallet();
+              return true;
+            }
+          }
+        }
 
         if (statusResponse.success) {
           if (statusResponse.isSuccess) {
@@ -224,15 +254,23 @@ const Wallet = () => {
             return true; // Stop polling
           }
         } else {
-          // Error checking status
+          // Error checking status or ORDER_NOT_FOUND
           // If ORDER_NOT_FOUND, this is expected for web payments (order created on payment page visit)
-          // Continue polling but with longer intervals
-          if (statusResponse.code === 'ORDER_NOT_FOUND' && retries < maxRetries) {
+          if (statusResponse.code === 'ORDER_NOT_FOUND' || statusResponse.isPending) {
             // Order not found yet - wait longer before retrying (user might not have visited payment page)
-            setTimeout(() => {
-              checkPaymentStatus(merchantOrderId, retries + 1);
-            }, pollInterval * 2); // Wait 10 seconds instead of 5 for ORDER_NOT_FOUND
-            return false; // Continue polling
+            if (retries < maxRetries) {
+              // Don't log as error - this is expected for web payments
+              setTimeout(() => {
+                checkPaymentStatus(merchantOrderId, retries + 1);
+              }, pollInterval * 2); // Wait 10 seconds instead of 5 for ORDER_NOT_FOUND
+              return false; // Continue polling
+            } else {
+              // Max retries reached - order still not found
+              // User might not have completed payment yet, silently refresh wallet
+              loadWallet();
+              setPaying(false);
+              return true; // Stop polling
+            }
           } else if (retries < maxRetries) {
             // Other errors - continue polling with normal interval
             setTimeout(() => {
@@ -240,17 +278,10 @@ const Wallet = () => {
             }, pollInterval);
             return false; // Continue polling
           } else {
-            // Max retries reached or non-recoverable error
-            if (statusResponse.code === 'ORDER_NOT_FOUND') {
-              // Order not found - user might not have completed payment yet
-              // Don't show error, just refresh wallet in case webhook processed it
-              loadWallet();
-              setPaying(false);
-            } else {
-              Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
-              setPaying(false);
-              loadWallet();
-            }
+            // Max retries reached for other errors
+            Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+            setPaying(false);
+            loadWallet();
             return true; // Stop polling
           }
         }
