@@ -319,56 +319,40 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       statusText: sdkOrderResponse.statusText,
       hasData: !!sdkOrderResponse.data,
       dataPreview: JSON.stringify(sdkOrderResponse.data).substring(0, 500),
+      fullResponse: sdkOrderResponse.data, // Log full response for debugging
     });
 
     // Check for error response
     if (sdkOrderResponse.status !== 200 && sdkOrderResponse.status !== 201) {
       const errorData = sdkOrderResponse.data || {};
-      console.error('❌ SDK order creation failed:', {
+      console.error('❌ SDK order creation failed - DETAILED ERROR:', {
         status: sdkOrderResponse.status,
+        statusText: sdkOrderResponse.statusText,
         error: errorData.message || errorData.error || 'Unknown error',
         code: errorData.code,
-        fullResponse: errorData,
+        fullResponse: JSON.stringify(errorData, null, 2),
+        requestDetails: {
+          endpoint: sdkOrderUrl,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `O-Bearer ${authToken ? `${authToken.substring(0, 20)}...` : 'missing'}`,
+          },
+          requestBody: JSON.stringify(sdkOrderRequestBody, null, 2),
+        },
       });
       
-      // Fallback: Generate web payment URL if SDK order fails
-      // This allows payments to work even if SDK orders aren't enabled for the merchant
-      console.log('🔄 Falling back to web payment flow...');
-      
-      // Generate web payment URL using /pg/v1/pay endpoint
-      const webPaymentBody = {
-        merchantId: credentials.merchantId,
-        merchantTransactionId: merchantOrderId,
-        amount: totalDues * 100,
-        merchantUserId: freelancerId.toString(),
-        redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
-        redirectMode: 'REDIRECT',
-        callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-        mobileNumber: user.phone && user.phone.trim().length > 0 ? user.phone.trim() : undefined,
-        paymentInstrument: {
-          type: 'PAY_PAGE',
+      // Return detailed error for debugging
+      return res.status(500).json({
+        success: false,
+        error: errorData.message || errorData.error || 'Failed to create SDK order',
+        code: errorData.code || 'SDK_ORDER_FAILED',
+        message: 'SDK order creation failed. This might indicate that SDK orders are not enabled for your merchant account, or there is an issue with the request format. Please check the backend logs for detailed error information.',
+        debug: {
+          phonepeError: errorData,
+          endpoint: sdkOrderUrl,
+          requestBody: sdkOrderRequestBody,
         },
-      };
-
-      // Base64 encode for web payment
-      const base64Body = Buffer.from(JSON.stringify(webPaymentBody)).toString('base64');
-      const webEndpoint = '/pg/v1/pay';
-      const checksum = generateXVerify(base64Body, webEndpoint);
-      
-      // Generate payment URL
-      // Note: API_URL already includes /pg, so we use /v1/pay (not /pg/v1/pay)
-      const paymentUrl = `${config.API_URL}/v1/pay?base64Body=${encodeURIComponent(base64Body)}&checksum=${encodeURIComponent(checksum)}`;
-      
-      console.log('✅ Generated web payment URL as fallback');
-      
-      return res.json({
-        success: true,
-        merchantOrderId,
-        orderId: merchantOrderId,
-        paymentUrl: paymentUrl, // Web payment URL as fallback
-        amount: totalDues,
-        message: 'Payment order created successfully (web fallback)',
-        fallback: true, // Indicate this is a fallback
       });
     }
 
