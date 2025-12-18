@@ -19,6 +19,11 @@ PHONEPE_SALT_INDEX=1
 # PhonePe Environment: 'production' or 'sandbox' (default: production)
 PHONEPE_ENV=production
 
+# PhonePe Webhook Credentials (for webhook authorization)
+# These are set in PhonePe Dashboard → Developer Settings → Webhooks
+PHONEPE_WEBHOOK_USERNAME=your_webhook_username
+PHONEPE_WEBHOOK_PASSWORD=your_webhook_password
+
 # Backend and Frontend URLs (for callbacks)
 BACKEND_URL=https://freelancing-platform-backend-backup.onrender.com
 FRONTEND_URL=https://freelancing-platform-backend-backup.onrender.com
@@ -51,8 +56,31 @@ FRONTEND_URL=https://freelancing-platform-backend-backup.onrender.com
 
 ### 4. Webhook Handler
 - **Endpoint:** `POST /api/payment/webhook`
-- **Auth:** None (PhonePe calls this directly)
-- **Purpose:** Receives payment callbacks from PhonePe
+- **Auth:** Authorization header verification (SHA256(username:password))
+- **Purpose:** Receives payment and refund callbacks from PhonePe
+- **Events Handled:**
+  - `checkout.order.completed`: Order successfully completed
+  - `checkout.order.failed`: Order failed
+  - `pg.refund.accepted`: Refund accepted
+  - `pg.refund.completed`: Refund successfully completed
+  - `pg.refund.failed`: Refund failed
+
+### 5. Initiate Refund
+- **Endpoint:** `POST /api/payment/refund`
+- **Auth:** Required
+- **Request Body:**
+  ```json
+  {
+    "merchantOrderId": "DUES_...",
+    "amount": 1234
+  }
+  ```
+- **Response:** Returns refund details with `merchantRefundId`
+
+### 6. Check Refund Status
+- **Endpoint:** `GET /api/payment/refund-status/:merchantRefundId`
+- **Auth:** Required
+- **Response:** Returns refund status (PENDING, COMPLETED, FAILED)
 
 ## Payment Flow
 
@@ -85,10 +113,32 @@ FRONTEND_URL=https://freelancing-platform-backend-backup.onrender.com
 ## Webhook Configuration
 
 ### PhonePe Dashboard Setup
-1. Login to PhonePe Merchant Dashboard
-2. Navigate to **Settings** → **Webhooks**
-3. Add webhook URL: `https://freelancing-platform-backend-backup.onrender.com/api/payment/webhook`
-4. Select events: `PAYMENT_SUCCESS`, `PAYMENT_PENDING`, `PAYMENT_ERROR`
+1. Login to PhonePe Business Dashboard
+2. Set the environment mode using the **Test Mode** toggle:
+   - **Sandbox (Testing)**: Toggle ON
+   - **Production (Live)**: Toggle OFF
+3. Navigate to **Developer Settings** from the side menu
+4. Select the **Webhook** tab and click **Create Webhook**
+5. Fill in the webhook configuration:
+   - **Webhook URL**: `https://freelancing-platform-backend-backup.onrender.com/api/payment/webhook`
+   - **Username**: Your webhook username (set this in `PHONEPE_WEBHOOK_USERNAME`)
+   - **Password**: Your webhook password (set this in `PHONEPE_WEBHOOK_PASSWORD`)
+   - **Description**: "Payment and refund webhooks"
+6. Select the following events:
+   - **Order Events:**
+     - `checkout.order.completed`: Sent when an order is successfully completed
+     - `checkout.order.failed`: Sent when an order fails
+   - **Refund Events:**
+     - `pg.refund.accepted`: Sent when a refund is accepted
+     - `pg.refund.completed`: Sent when a refund is successfully processed
+     - `pg.refund.failed`: Sent when a refund processing fails
+7. Click **Create** to save and activate the webhook
+
+### Webhook Authorization
+- PhonePe sends webhooks with `Authorization: SHA256(username:password)` header
+- The backend verifies this header matches your configured `PHONEPE_WEBHOOK_USERNAME` and `PHONEPE_WEBHOOK_PASSWORD`
+- If verification fails, the webhook is rejected with 401 Unauthorized
+- Always return 200 OK to PhonePe (even on errors) to prevent retries
 
 ## Troubleshooting
 
@@ -111,8 +161,9 @@ FRONTEND_URL=https://freelancing-platform-backend-backup.onrender.com
 
 - Never commit `.env` file to Git
 - Store all credentials in Render.com environment variables
-- Webhook endpoint should verify X-VERIFY header (currently basic implementation)
+- Webhook endpoint verifies Authorization header using SHA256(username:password)
 - Use HTTPS for all payment-related endpoints
+- Webhook credentials (`PHONEPE_WEBHOOK_USERNAME`, `PHONEPE_WEBHOOK_PASSWORD`) must match what you configure in PhonePe Dashboard
 
 ## References
 
