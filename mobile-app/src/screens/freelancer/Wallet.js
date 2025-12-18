@@ -117,7 +117,7 @@ const Wallet = () => {
 
               // Step 2: Start PhonePe SDK transaction (SDK Order flow)
               // For React Native SDK, we use SDK Order flow with orderToken and orderId
-              const { orderToken, orderId } = orderResponse;
+              // orderToken and orderId are already extracted from orderResponse on line 105
               if (orderToken && orderId) {
                 // SDK Order flow (uses /checkout/v2/sdk/order endpoint)
                 try {
