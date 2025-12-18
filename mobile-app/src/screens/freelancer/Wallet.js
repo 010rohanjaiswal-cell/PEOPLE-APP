@@ -115,14 +115,14 @@ const Wallet = () => {
                 fullResponse: orderResponse,
               });
 
-              // Step 2: Start PhonePe SDK transaction (B2C PG flow)
-              // For B2C PG, React Native SDK requires base64Body and checksum
+              // Step 2: Start PhonePe SDK transaction (B2B PG flow)
+              // For B2B PG, React Native SDK requires base64Body and checksum
               if (base64Body && checksum) {
-                // B2C PG flow (uses /pg/v1/pay endpoint)
+                // B2B PG flow (uses /pg/v1/pay endpoint)
                 try {
                   await startPhonePeTransaction({
-                    base64Body: base64Body, // Base64 encoded B2C PG request body
-                    checksum: checksum,     // Checksum for B2C PG
+                    base64Body: base64Body, // Base64 encoded B2B PG request body
+                    checksum: checksum,     // Checksum for B2B PG
                     packageName: null,      // Optional: Android package name
                     appSchema: 'people-app', // Deep link scheme
                   });

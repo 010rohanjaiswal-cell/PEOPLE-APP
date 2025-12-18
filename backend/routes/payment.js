@@ -242,11 +242,11 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Generate merchant order ID (max 63 chars, only underscore and hyphen allowed)
     const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // For React Native SDK, we use B2C PG direct flow (not SDK order flow)
-    // B2C PG endpoint: /pg/v1/pay
+    // For React Native SDK, we use B2B PG direct flow
+    // B2B PG endpoint: /pg/v1/pay
     // The SDK expects: startTransaction(base64Body, checksum, packageName, appSchema)
-    // Build the B2C PG request body for SDK
-    const b2cPgRequestBody = {
+    // Build the B2B PG request body for SDK
+    const b2bPgRequestBody = {
       merchantId: credentials.merchantId,
       merchantTransactionId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise
@@ -256,37 +256,37 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       mobileNumber: user.phone || '',
       paymentInstrument: {
-        type: 'PAY_PAGE', // B2C PG uses PAY_PAGE for standard checkout
+        type: 'PAY_PAGE', // B2B PG uses PAY_PAGE
       },
     };
 
     // Base64 encode the body for SDK
-    const base64Body = Buffer.from(JSON.stringify(b2cPgRequestBody)).toString('base64');
+    const base64Body = Buffer.from(JSON.stringify(b2bPgRequestBody)).toString('base64');
 
-    // Generate checksum for B2C PG request (X-VERIFY format)
+    // Generate checksum for B2B PG request (X-VERIFY format)
     // Checksum = SHA256(base64Body + /pg/v1/pay + saltKey) + ### + saltIndex
-    const b2cPgEndpoint = '/pg/v1/pay';
-    const checksum = generateXVerify(base64Body, b2cPgEndpoint);
+    const b2bPgEndpoint = '/pg/v1/pay';
+    const checksum = generateXVerify(base64Body, b2bPgEndpoint);
 
-    // Return base64Body and checksum for React Native SDK B2C PG flow
+    // Return base64Body and checksum for React Native SDK B2B PG flow
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: merchantOrderId, // Use merchantOrderId as orderId for B2C PG flow
-      // For React Native SDK B2C PG flow:
+      orderId: merchantOrderId, // Use merchantOrderId as orderId for B2B PG flow
+      // For React Native SDK B2B PG flow:
       base64Body: base64Body, // Base64 encoded request body
       checksum: checksum, // Checksum for SDK
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
-    console.log('📤 Sending response to frontend (B2C PG):', {
+    console.log('📤 Sending response to frontend (B2B PG):', {
       hasBase64Body: !!base64Body,
       hasChecksum: !!checksum,
       base64BodyLength: base64Body?.length || 0,
       checksumLength: checksum?.length || 0,
       merchantOrderId,
-      endpoint: b2cPgEndpoint,
+      endpoint: b2bPgEndpoint,
     });
 
     res.json(responsePayload);
@@ -341,25 +341,23 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     // Trim any whitespace from token
     authToken = authToken.trim();
 
-    // Order Status API for B2C PG flow:
-    // For B2C PG orders created via /pg/v1/pay, use /pg/v1/status/{merchantTransactionId}
-    // For SDK orders created via /checkout/v2/sdk/order, use /checkout/v2/order/{merchantOrderId}/status
-    // Since we're using B2C PG direct flow (/pg/v1/pay), we use the B2C status endpoint
+    // Order Status API for B2B PG flow:
+    // For B2B PG orders created via /pg/v1/pay, use /pg/v1/status/{merchantTransactionId}
     // GET /pg/v1/status/{merchantTransactionId}
     // Headers:
     //   - Content-Type: application/json
     //   - X-VERIFY: <checksum>
-    // Note: B2C PG status endpoint uses X-VERIFY header, not Authorization header
+    // Note: B2B PG status endpoint uses X-VERIFY header
     const endpoint = `/pg/v1/status/${merchantOrderId}`;
     const fullUrl = `${config.API_URL}${endpoint}`;
     
-    // Generate X-VERIFY header for B2C PG status check
+    // Generate X-VERIFY header for B2B PG status check
     // For /pg/v1/status/{merchantTransactionId}, checksum format is:
     // SHA256(/pg/v1/status/{merchantTransactionId} + merchantTransactionId + saltKey) + ### + saltIndex
     // Note: The payload for status check is just the merchantTransactionId
     const statusChecksum = generateXVerify(merchantOrderId, endpoint);
 
-    console.log('🔍 Checking order status (B2C PG):', {
+    console.log('🔍 Checking order status (B2B PG):', {
       merchantOrderId,
       endpoint: fullUrl,
       hasChecksum: !!statusChecksum,
