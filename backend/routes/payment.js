@@ -345,30 +345,23 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
     authToken = authToken.trim();
 
     // Order Status API for B2B PG flow:
-    // For B2B PG orders created via /pg/v1/pay, use /pg/v1/status/{merchantTransactionId}
-    // Full URL: https://api.phonepe.com/apis/pg/v1/status/{merchantTransactionId}
-    // Since API_URL is https://api.phonepe.com/apis/pg, endpoint should be /v1/status/...
-    // GET /v1/status/{merchantTransactionId}
+    // For B2B PG orders created via /pg/v1/pay, we use the SDK order status endpoint
+    // GET /checkout/v2/order/{merchantOrderId}/status
     // Headers:
     //   - Content-Type: application/json
-    //   - X-VERIFY: <checksum>
-    // Note: B2B PG status endpoint uses X-VERIFY header
-    const endpoint = `/v1/status/${merchantOrderId}`;
+    //   - Authorization: O-Bearer <access_token>
+    // Note: B2B PG orders can be checked using the SDK order status endpoint
+    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
     const fullUrl = `${config.API_URL}${endpoint}`;
     
-    // Generate X-VERIFY header for B2B PG status check
-    // For /pg/v1/status/{merchantTransactionId}, checksum format is:
-    // SHA256(/pg/v1/status/{merchantTransactionId} + merchantTransactionId + saltKey) + ### + saltIndex
-    // Note: The payload for status check is just the merchantTransactionId
-    // IMPORTANT: For checksum generation, use the full path including /pg
-    const checksumEndpoint = `/pg/v1/status/${merchantOrderId}`;
-    const statusChecksum = generateXVerify(merchantOrderId, checksumEndpoint);
+    // SDK order status endpoint uses Authorization header (O-Bearer token)
+    // No X-VERIFY checksum needed for this endpoint
 
-    console.log('🔍 Checking order status (B2B PG):', {
+    console.log('🔍 Checking order status (B2B PG via SDK endpoint):', {
       merchantOrderId,
       endpoint: fullUrl,
-      hasChecksum: !!statusChecksum,
-      checksumPreview: statusChecksum ? `${statusChecksum.substring(0, 20)}...` : null,
+      hasToken: !!authToken,
+      tokenPreview: authToken ? `${authToken.substring(0, 20)}...` : null,
       config: {
         API_URL: config.API_URL,
         environment: process.env.PHONEPE_ENV || 'production',
@@ -381,7 +374,7 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       statusResponse = await axios.get(fullUrl, {
         headers: {
           'Content-Type': 'application/json',
-          'X-VERIFY': statusChecksum, // B2C PG uses X-VERIFY, not Authorization
+          'Authorization': `O-Bearer ${authToken}`, // SDK order status uses O-Bearer token
         },
         // Add timeout and better error handling
         timeout: 10000,
