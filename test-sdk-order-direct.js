@@ -22,7 +22,9 @@ const requestBody = {
   "redirectUrl": `people-app://payment/callback?orderId=${MERCHANT_ORDER_ID}`,
   "redirectMode": "REDIRECT",
   "callbackUrl": `${BACKEND_URL}/api/payment/webhook`,
-  "paymentFlow": "SDK", // Required for SDK orders
+  "paymentFlow": {
+    "type": "SDK" // Required for SDK orders - using Object format as per PhonePe docs
+  },
   "paymentInstrument": {
     "type": "UPI_INTENT" // SDK order uses UPI_INTENT
   },

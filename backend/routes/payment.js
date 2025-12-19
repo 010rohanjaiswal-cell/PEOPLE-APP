@@ -221,7 +221,9 @@ router.post('/test-sdk-order', authenticate, async (req, res) => {
       redirectUrl: 'people-app://payment/callback?orderId=' + testOrderId,
       redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      paymentFlow: 'SDK',
+      paymentFlow: {
+        type: 'SDK', // Using Object format as per PhonePe docs
+      },
       paymentInstrument: {
         type: 'UPI_INTENT',
       },
@@ -341,7 +343,9 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
       redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      paymentFlow: 'SDK', // Required for SDK orders
+      paymentFlow: {
+        type: 'SDK', // Required for SDK orders - using Object format as per PhonePe docs
+      },
       paymentInstrument: {
         type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
