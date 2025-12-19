@@ -351,25 +351,9 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       paymentInstrument: {
         type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
-      // metaInfo: Optional - included as per PhonePe sample request format
-      // Constraints: udf1-10 max 256 chars, udf11-15 max 50 chars
-      metaInfo: {
-        udf1: '', // Max 256 characters
-        udf2: '', // Max 256 characters
-        udf3: '', // Max 256 characters
-        udf4: '', // Max 256 characters
-        udf5: '', // Max 256 characters
-        udf6: '', // Max 256 characters
-        udf7: '', // Max 256 characters
-        udf8: '', // Max 256 characters
-        udf9: '', // Max 256 characters
-        udf10: '', // Max 256 characters
-        udf11: '', // Max 50 characters
-        udf12: '', // Max 50 characters
-        udf13: '', // Max 50 characters
-        udf14: '', // Max 50 characters
-        udf15: '', // Max 50 characters
-      },
+      // Note: metaInfo is optional. If all fields are empty, don't include it
+      // Empty udf11-15 fields cause validation errors (400 Bad Request)
+      // Only include metaInfo if we have actual values to send
     };
 
     // Add mobileNumber only if it's a valid phone number (not empty)
