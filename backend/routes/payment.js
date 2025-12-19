@@ -156,19 +156,20 @@ const getAuthToken = async () => {
 };
 
 /**
- * Test route: Generate and return a (masked) PhonePe auth token
- * GET /api/payment/test-auth-token
+ * Test route: Generate and return PhonePe auth token
+ * GET /api/payment/test-auth-token?full=true
  * NOTE: For debugging only. Consider disabling in production.
+ * Query params:
+ *   - full=true: Returns full token (default: false, shows preview only)
  */
 router.get('/test-auth-token', async (req, res) => {
   try {
     const token = await getAuthToken();
     const config = getConfig();
+    const showFull = req.query.full === 'true' || req.query.full === '1';
 
-    return res.json({
+    const response = {
       success: true,
-      // Show only a preview of the token for safety
-      tokenPreview: token ? `${token.slice(0, 8)}...` : null,
       tokenLength: token?.length || 0,
       // Expose expiry info so we can verify caching logic
       expiresAt: cachedAuthTokenExpiresAt,
@@ -178,7 +179,18 @@ router.get('/test-auth-token', async (req, res) => {
         AUTH_URL: config.AUTH_URL,
         environment: process.env.PHONEPE_ENV || 'production',
       },
-    });
+    };
+
+    // Return full token if requested, otherwise show preview
+    if (showFull) {
+      response.token = token;
+      response.tokenPreview = token ? `${token.slice(0, 20)}...` : null;
+    } else {
+      response.tokenPreview = token ? `${token.slice(0, 8)}...` : null;
+      response.message = 'Add ?full=true to get the complete token';
+    }
+
+    return res.json(response);
   } catch (error) {
     console.error('Error testing PhonePe auth token:', error.response?.data || error.message);
     return res.status(500).json({
