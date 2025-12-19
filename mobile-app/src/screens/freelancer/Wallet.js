@@ -102,127 +102,107 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, orderToken, paymentUrl, orderId, base64Body, checksum } = orderResponse;
+              const { merchantOrderId, orderToken, orderId } = orderResponse;
 
               // Debug: Log what we received from backend
-              console.log('📦 Backend response:', {
+              console.log('📦 Backend response (Android SDK flow only):', {
                 hasMerchantOrderId: !!merchantOrderId,
                 hasOrderToken: !!orderToken,
-                hasPaymentUrl: !!paymentUrl,
                 hasOrderId: !!orderId,
-                hasBase64Body: !!base64Body,
-                hasChecksum: !!checksum,
                 fullResponse: orderResponse,
               });
 
-              // Step 2: Start PhonePe SDK transaction (SDK Order flow)
-              // For React Native SDK, we use SDK Order flow with orderToken and orderId
-              // orderToken and orderId are already extracted from orderResponse on line 105
-              if (orderToken && orderId) {
-                // SDK Order flow (uses /checkout/v2/sdk/order endpoint)
-                try {
-                  // IMPORTANT: Set up deep link listener BEFORE calling SDK
-                  // The SDK might complete quickly and redirect before listener is set up
-                  let deepLinkHandled = false;
-                  
-                  const handleDeepLink = async (event) => {
-                    try {
-                      const url = event.url;
-                      console.log('🔗 Deep link received:', url);
-                      
-                      // Parse URL: people-app://payment/callback?orderId=...
-                      if (url.includes('people-app://payment/callback')) {
-                        const urlObj = new URL(url.replace('people-app://', 'https://'));
-                        const callbackOrderId = urlObj.searchParams.get('orderId');
-                        
-                        console.log('✅ Payment callback received:', {
-                          callbackOrderId,
-                          merchantOrderId,
-                          matches: callbackOrderId === merchantOrderId,
-                        });
-                        
-                        if (callbackOrderId === merchantOrderId && !deepLinkHandled) {
-                          deepLinkHandled = true;
-                          subscription.remove();
-                          console.log('✅ Payment callback verified, checking status...');
-                          await checkPaymentStatus(merchantOrderId);
-                        }
-                      }
-                    } catch (linkError) {
-                      console.error('❌ Error handling deep link:', linkError);
-                    }
-                  };
-                  
-                  // Set up deep link listener BEFORE SDK call
-                  const subscription = Linking.addEventListener('url', handleDeepLink);
-                  
-                  // Also check for initial URL (in case app was opened via deep link)
-                  Linking.getInitialURL().then((initialUrl) => {
-                    if (initialUrl && initialUrl.includes('payment/callback')) {
-                      handleDeepLink({ url: initialUrl });
-                    }
-                  }).catch((err) => {
-                    console.log('No initial URL:', err);
-                  });
-                  
-                  console.log('🚀 Starting PhonePe SDK transaction...');
-                  await startPhonePeTransaction({
-                    orderToken: orderToken, // Order token from SDK order
-                    orderId: orderId,      // Order ID from SDK order
-                    packageName: null,      // Optional: Android package name
-                    appSchema: 'people-app', // Deep link scheme
-                  });
-                  
-                  console.log('✅ SDK transaction initiated, waiting for callback...');
+              // ANDROID NATIVE SDK FLOW ONLY - No web payment fallback
+              // We require orderToken and orderId for native Android SDK
+              if (!orderToken || !orderId) {
+                throw new Error('SDK order creation failed: Missing orderToken or orderId. Please contact support or try again.');
+              }
 
-                  // Also poll for status in case deep link doesn't fire
-                  setTimeout(() => {
-                    if (!deepLinkHandled) {
-                      console.log('⏰ Deep link not received yet, starting status polling...');
-                      checkPaymentStatus(merchantOrderId);
-                    }
-                  }, 5000);
-                } catch (sdkError) {
-                  console.error('PhonePe SDK error (B2C PG):', sdkError);
-                  // Fallback to web browser if SDK fails
-                  if (paymentUrl) {
-                    const result = await Linking.openURL(paymentUrl);
-                    setTimeout(() => {
-                      checkPaymentStatus(merchantOrderId);
-                    }, 5000);
-                  } else {
-                    throw sdkError;
-                  }
-                }
-              } else if (paymentUrl) {
-                // Final fallback: Web browser flow
-                console.log('🌐 Opening payment URL in browser:', {
-                  hasPaymentUrl: !!paymentUrl,
-                  urlPreview: paymentUrl ? `${paymentUrl.substring(0, 50)}...` : null,
-                });
+              // Step 2: Start PhonePe Android Native SDK transaction
+              // This uses the native Android SDK, not web payment
+              console.log('📱 Using Android Native SDK Payment Flow');
+              
+              // IMPORTANT: Set up deep link listener BEFORE calling SDK
+              // The SDK might complete quickly and redirect before listener is set up
+              let deepLinkHandled = false;
+              
+              const handleDeepLink = async (event) => {
                 try {
-                  const canOpen = await Linking.canOpenURL(paymentUrl);
-                  if (canOpen) {
-                    await Linking.openURL(paymentUrl);
-                    console.log('✅ Payment URL opened successfully');
-                  } else {
-                    console.error('❌ Cannot open payment URL');
-                    Alert.alert('Error', 'Cannot open payment URL. Please try again.');
-                    setPaying(false);
-                    return;
+                  const url = event.url;
+                  console.log('🔗 Deep link received:', url);
+                  
+                  // Parse URL: people-app://payment/callback?orderId=...
+                  if (url.includes('people-app://payment/callback')) {
+                    const urlObj = new URL(url.replace('people-app://', 'https://'));
+                    const callbackOrderId = urlObj.searchParams.get('orderId');
+                    
+                    console.log('✅ Payment callback received:', {
+                      callbackOrderId,
+                      merchantOrderId,
+                      matches: callbackOrderId === merchantOrderId,
+                    });
+                    
+                    if (callbackOrderId === merchantOrderId && !deepLinkHandled) {
+                      deepLinkHandled = true;
+                      subscription.remove();
+                      console.log('✅ Payment callback verified, checking status...');
+                      await checkPaymentStatus(merchantOrderId);
+                    }
                   }
                 } catch (linkError) {
-                  console.error('❌ Error opening payment URL:', linkError);
-                  Alert.alert('Error', 'Failed to open payment URL. Please try again.');
-                  setPaying(false);
-                  return;
+                  console.error('❌ Error handling deep link:', linkError);
                 }
-                // Start polling after opening payment URL
+              };
+              
+              // Set up deep link listener BEFORE SDK call
+              const subscription = Linking.addEventListener('url', handleDeepLink);
+              
+              // Also check for initial URL (in case app was opened via deep link)
+              Linking.getInitialURL().then((initialUrl) => {
+                if (initialUrl && initialUrl.includes('payment/callback')) {
+                  handleDeepLink({ url: initialUrl });
+                }
+              }).catch((err) => {
+                console.log('No initial URL:', err);
+              });
+              
+              try {
+                console.log('🚀 Starting PhonePe Android Native SDK transaction...');
+                console.log('📱 SDK Parameters:', {
+                  hasOrderToken: !!orderToken,
+                  orderTokenLength: orderToken?.length || 0,
+                  orderId,
+                  appSchema: 'people-app',
+                });
+                
+                await startPhonePeTransaction({
+                  orderToken: orderToken, // Order token from SDK order (REQUIRED for Android SDK)
+                  orderId: orderId,      // Order ID from SDK order (REQUIRED for Android SDK)
+                  packageName: null,      // Optional: Android package name
+                  appSchema: 'people-app', // Deep link scheme for callback
+                });
+                
+                console.log('✅ Android SDK transaction initiated, waiting for callback...');
+
+                // Also poll for status in case deep link doesn't fire
                 setTimeout(() => {
-                  checkPaymentStatus(merchantOrderId);
+                  if (!deepLinkHandled) {
+                    console.log('⏰ Deep link not received yet, starting status polling...');
+                    checkPaymentStatus(merchantOrderId);
+                  }
                 }, 5000);
-              } else {
-                throw new Error('No payment method available');
+              } catch (sdkError) {
+                console.error('❌ Android SDK transaction error:', sdkError);
+                subscription.remove(); // Clean up listener
+                setPaying(false);
+                
+                // NO WEB FALLBACK - Android SDK only
+                Alert.alert(
+                  'Payment Error',
+                  `Android SDK payment failed: ${sdkError.message || 'Unknown error'}\n\nPlease try again or contact support if the issue persists.`,
+                  [{ text: 'OK' }]
+                );
+                throw sdkError;
               }
             } catch (err) {
               console.error('Error paying dues:', err);
