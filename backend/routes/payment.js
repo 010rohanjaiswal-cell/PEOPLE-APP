@@ -189,6 +189,74 @@ router.get('/test-auth-token', async (req, res) => {
 });
 
 /**
+ * Test route: Test SDK order creation (for debugging)
+ * POST /api/payment/test-sdk-order
+ * NOTE: For debugging only. Creates a test SDK order to diagnose issues.
+ */
+router.post('/test-sdk-order', authenticate, async (req, res) => {
+  try {
+    const credentials = getPhonePeCredentials();
+    const config = getConfig();
+    const authToken = await getAuthToken();
+    
+    // Create a test SDK order
+    const testOrderId = `TEST_${Date.now()}`;
+    const testRequestBody = {
+      merchantId: credentials.merchantId,
+      merchantOrderId: testOrderId,
+      amount: 100, // 1 rupee in paise
+      merchantUserId: 'test_user',
+      redirectUrl: 'people-app://payment/callback?orderId=' + testOrderId,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
+      paymentFlow: 'SDK',
+      paymentInstrument: {
+        type: 'UPI_INTENT',
+      },
+    };
+
+    const endpoint = '/checkout/v2/sdk/order';
+    const url = `${config.API_URL}${endpoint}`;
+
+    console.log('🧪 Testing SDK order creation:', {
+      url,
+      requestBody: testRequestBody,
+    });
+
+    const response = await axios.post(url, testRequestBody, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `O-Bearer ${authToken}`,
+      },
+      timeout: 10000,
+      validateStatus: () => true, // Don't throw on any status
+    });
+
+    return res.json({
+      success: response.status === 200 || response.status === 201,
+      status: response.status,
+      statusText: response.statusText,
+      response: response.data,
+      request: {
+        url,
+        body: testRequestBody,
+      },
+    });
+  } catch (error) {
+    console.error('Error testing SDK order:', error.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message,
+      fullError: error.response ? {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+      } : null,
+    });
+  }
+});
+
+/**
  * Create PhonePe payment order for dues payment
  * POST /api/payment/create-dues-order
  * Requires authentication as freelancer
