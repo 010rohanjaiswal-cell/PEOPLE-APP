@@ -334,11 +334,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const authToken = await getAuthToken();
     
     // Build SDK order request body
+    // Based on PhonePe support team's sample request format
     // Only include mobileNumber if it's a valid phone number
     const sdkOrderRequestBody = {
       merchantId: credentials.merchantId,
       merchantOrderId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise
+      expireAfter: 1200, // Order expiry in seconds (20 minutes) - included as per PhonePe sample
       merchantUserId: freelancerId.toString(),
       redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
       redirectMode: 'REDIRECT',
@@ -349,7 +351,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       paymentInstrument: {
         type: 'UPI_INTENT', // SDK order uses UPI_INTENT
       },
-      // metaInfo: Optional - can be used to store additional information
+      // metaInfo: Optional - included as per PhonePe sample request format
       // Constraints: udf1-10 max 256 chars, udf11-15 max 50 chars
       metaInfo: {
         udf1: '', // Max 256 characters

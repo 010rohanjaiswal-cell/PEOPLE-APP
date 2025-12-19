@@ -28,7 +28,7 @@ const requestBody = {
   "paymentInstrument": {
     "type": "UPI_INTENT" // SDK order uses UPI_INTENT
   },
-  "expireAfter": 1200,
+  "expireAfter": 1200, // Order expiry in seconds (20 minutes) - included as per PhonePe sample
   "metaInfo": {
     "udf1": "",
     "udf2": "",
