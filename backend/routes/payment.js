@@ -314,12 +314,15 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     }
 
     // Log full response for debugging
-    console.log('📥 SDK order response:', {
+    const fullResponseData = sdkOrderResponse.data;
+    console.log('📥 SDK order response (FULL):', {
       status: sdkOrderResponse.status,
       statusText: sdkOrderResponse.statusText,
-      hasData: !!sdkOrderResponse.data,
-      dataPreview: JSON.stringify(sdkOrderResponse.data).substring(0, 500),
-      fullResponse: sdkOrderResponse.data, // Log full response for debugging
+      headers: sdkOrderResponse.headers,
+      hasData: !!fullResponseData,
+      dataType: typeof fullResponseData,
+      dataKeys: fullResponseData ? Object.keys(fullResponseData) : [],
+      fullResponse: JSON.stringify(fullResponseData, null, 2), // Full response as JSON string
     });
 
     // Check for error response
