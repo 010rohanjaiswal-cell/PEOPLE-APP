@@ -121,27 +121,66 @@ const Wallet = () => {
               if (orderToken && orderId) {
                 // SDK Order flow (uses /checkout/v2/sdk/order endpoint)
                 try {
+                  // IMPORTANT: Set up deep link listener BEFORE calling SDK
+                  // The SDK might complete quickly and redirect before listener is set up
+                  let deepLinkHandled = false;
+                  
+                  const handleDeepLink = async (event) => {
+                    try {
+                      const url = event.url;
+                      console.log('🔗 Deep link received:', url);
+                      
+                      // Parse URL: people-app://payment/callback?orderId=...
+                      if (url.includes('people-app://payment/callback')) {
+                        const urlObj = new URL(url.replace('people-app://', 'https://'));
+                        const callbackOrderId = urlObj.searchParams.get('orderId');
+                        
+                        console.log('✅ Payment callback received:', {
+                          callbackOrderId,
+                          merchantOrderId,
+                          matches: callbackOrderId === merchantOrderId,
+                        });
+                        
+                        if (callbackOrderId === merchantOrderId && !deepLinkHandled) {
+                          deepLinkHandled = true;
+                          subscription.remove();
+                          console.log('✅ Payment callback verified, checking status...');
+                          await checkPaymentStatus(merchantOrderId);
+                        }
+                      }
+                    } catch (linkError) {
+                      console.error('❌ Error handling deep link:', linkError);
+                    }
+                  };
+                  
+                  // Set up deep link listener BEFORE SDK call
+                  const subscription = Linking.addEventListener('url', handleDeepLink);
+                  
+                  // Also check for initial URL (in case app was opened via deep link)
+                  Linking.getInitialURL().then((initialUrl) => {
+                    if (initialUrl && initialUrl.includes('payment/callback')) {
+                      handleDeepLink({ url: initialUrl });
+                    }
+                  }).catch((err) => {
+                    console.log('No initial URL:', err);
+                  });
+                  
+                  console.log('🚀 Starting PhonePe SDK transaction...');
                   await startPhonePeTransaction({
                     orderToken: orderToken, // Order token from SDK order
                     orderId: orderId,      // Order ID from SDK order
                     packageName: null,      // Optional: Android package name
                     appSchema: 'people-app', // Deep link scheme
                   });
-
-                  // SDK will handle the payment flow and redirect back to app
-                  // Set up deep link listener to handle callback
-                  const subscription = Linking.addEventListener('url', async (event) => {
-                    subscription.remove();
-                    const url = new URL(event.url);
-                    if (url.pathname.includes('/payment/callback')) {
-                      // Payment completed, check status
-                      await checkPaymentStatus(merchantOrderId);
-                    }
-                  });
+                  
+                  console.log('✅ SDK transaction initiated, waiting for callback...');
 
                   // Also poll for status in case deep link doesn't fire
                   setTimeout(() => {
-                    checkPaymentStatus(merchantOrderId);
+                    if (!deepLinkHandled) {
+                      console.log('⏰ Deep link not received yet, starting status polling...');
+                      checkPaymentStatus(merchantOrderId);
+                    }
                   }, 5000);
                 } catch (sdkError) {
                   console.error('PhonePe SDK error (B2C PG):', sdkError);
