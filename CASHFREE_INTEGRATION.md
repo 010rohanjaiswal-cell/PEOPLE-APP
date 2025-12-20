@@ -62,27 +62,36 @@ BACKEND_URL=https://freelancing-platform-backend-backup.onrender.com
 
 ### Mobile App
 
-1. **Updated `mobile-app/src/screens/freelancer/Wallet.js`:**
+1. **Created `mobile-app/src/components/PaymentWebView.js`:**
+   - In-app WebView component for payment flow
+   - Modal interface with header and back button
+   - Detects deep link callbacks within WebView
+   - Loading indicators and error handling
+
+2. **Updated `mobile-app/src/screens/freelancer/Wallet.js`:**
    - Removed PhonePe SDK integration
-   - Added Cashfree web checkout using `expo-web-browser`
-   - Opens Cashfree payment page in browser
+   - Integrated PaymentWebView component
+   - Payment flow runs entirely inside the app (no external browser)
    - Handles deep link callbacks
 
 2. **Updated `mobile-app/src/api/payment.js`:**
    - Updated comments to reflect Cashfree integration
    - API methods remain the same (backend handles the difference)
 
-## 📱 Payment Flow
+## 📱 Payment Flow (In-App WebView)
 
 1. **User initiates payment** → `handlePayDues()`
 2. **Frontend calls backend** → `paymentAPI.createDuesOrder()`
 3. **Backend creates Cashfree order** → `POST /pg/orders`
 4. **Backend returns** → `paymentSessionId` and `paymentUrl`
-5. **Frontend opens payment page** → `WebBrowser.openBrowserAsync(paymentUrl)`
-6. **User completes payment** → In Cashfree checkout page
-7. **Cashfree redirects to app** → `people-app://payment/callback?orderId=...`
-8. **App verifies transaction** → `checkPaymentStatus(merchantOrderId)`
-9. **Backend processes dues** → Via webhook or status check
+5. **Frontend opens PaymentWebView modal** → In-app WebView component
+6. **User completes payment** → Inside the app (no external browser)
+7. **Cashfree redirects to deep link** → `people-app://payment/callback?orderId=...`
+8. **WebView detects callback** → Closes modal and verifies transaction
+9. **App verifies transaction** → `checkPaymentStatus(merchantOrderId)`
+10. **Backend processes dues** → Via webhook or status check
+
+**Key Feature:** ✅ **Entire payment flow runs inside the app** - no external browser opens!
 
 ## 🔗 Deep Link Configuration
 
@@ -158,10 +167,29 @@ curl -X GET https://your-backend-url.com/api/payment/order-status/DUES_... \
 ## ⚠️ Important Notes
 
 1. **PhonePe code is preserved** in `backend/routes/payment.js` (commented) for future use
-2. **Cashfree uses web checkout** (not native SDK) for React Native
-3. **Deep link handling** is required for payment callbacks
-4. **Webhook is recommended** for reliable payment status updates
-5. **IP Whitelisting** may be required in Cashfree dashboard for API access
+2. **Cashfree uses in-app WebView** - payment flow runs entirely inside the app
+3. **react-native-webview** is required - native module, needs EAS build rebuild
+4. **Deep link handling** is required for payment callbacks
+5. **Webhook is recommended** for reliable payment status updates
+6. **IP Whitelisting** may be required in Cashfree dashboard for API access
+
+## 🔧 Dependencies
+
+### Required Packages
+
+- `react-native-webview` - For in-app payment WebView (native module)
+  ```bash
+  npx expo install react-native-webview
+  ```
+
+### Build Requirements
+
+Since `react-native-webview` is a native module, you need to rebuild your EAS dev build:
+
+```bash
+cd mobile-app
+eas build --profile development --platform android
+```
 
 ## 🔄 Switching Back to PhonePe
 
