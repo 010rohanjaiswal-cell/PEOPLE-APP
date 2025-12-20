@@ -690,6 +690,75 @@ const verifyWebhookAuthorization = (authHeader) => {
 };
 
 /**
+ * Cashfree Payment Return Handler
+ * GET /api/payment/return
+ * Handles payment return from Cashfree (redirects to deep link for mobile app)
+ */
+router.get('/return', async (req, res) => {
+  try {
+    const { orderId } = req.query;
+    
+    if (!orderId) {
+      return res.status(400).send('Order ID is required');
+    }
+    
+    // Redirect to deep link for mobile app
+    // The WebView will detect this and handle it
+    const deepLinkUrl = `people-app://payment/callback?orderId=${orderId}`;
+    
+    // Return HTML that attempts to open deep link and shows fallback
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Payment Processing</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              background: #f5f5f5;
+            }
+            .container {
+              text-align: center;
+              padding: 20px;
+            }
+            .success {
+              color: #4CAF50;
+              font-size: 24px;
+              margin-bottom: 10px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="success">✓ Payment Processing</div>
+            <p>Redirecting to app...</p>
+            <script>
+              // Try to open deep link
+              window.location.href = '${deepLinkUrl}';
+              
+              // Fallback: If deep link doesn't work, show message
+              setTimeout(function() {
+                document.body.innerHTML = '<div class="container"><div class="success">✓ Payment Successful</div><p>You can close this window and return to the app.</p></div>';
+              }, 2000);
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('❌ Error handling payment return:', error);
+    res.status(500).send('Error processing payment return');
+  }
+});
+
+/**
  * Cashfree Webhook Handler
  * POST /api/payment/webhook
  * 

@@ -44,6 +44,22 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       }
     }
 
+    // Check for payment return URL (our backend redirect page)
+    if (url.includes('/api/payment/return')) {
+      // Extract orderId from return URL
+      try {
+        const urlObj = new URL(url);
+        const orderId = urlObj.searchParams.get('orderId');
+        if (orderId) {
+          // The return page will try to redirect to deep link
+          // We'll detect it in handleShouldStartLoadWithRequest
+          console.log('📥 Payment return page detected, orderId:', orderId);
+        }
+      } catch (e) {
+        console.error('Error parsing return URL:', e);
+      }
+    }
+    
     // Check for Cashfree success/failure pages
     if (url.includes('cashfree.com') && (url.includes('success') || url.includes('failure'))) {
       // Payment page redirected to success/failure
