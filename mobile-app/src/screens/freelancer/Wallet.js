@@ -597,6 +597,15 @@ const Wallet = () => {
       {renderTransactionHistory()}
       {renderCommissionLedger()}
     </ScrollView>
+
+    {/* Payment WebView Modal */}
+    <PaymentWebView
+      visible={showPaymentWebView}
+      paymentUrl={paymentUrl}
+      onClose={handlePaymentWebViewClose}
+      onPaymentComplete={handlePaymentComplete}
+    />
+    </>
   );
 };
 
