@@ -20,8 +20,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI } from '../../api';
-import { startPhonePeTransaction } from '../../config/phonepe';
 import { useAuth } from '../../context/AuthContext';
+import * as WebBrowser from 'expo-web-browser';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -93,7 +93,7 @@ const Wallet = () => {
             try {
               setPaying(true);
 
-              // Step 1: Create PhonePe payment order (backend creates SDK order)
+              // Step 1: Create Cashfree payment order
               const orderResponse = await paymentAPI.createDuesOrder();
               
               if (!orderResponse.success) {
@@ -102,28 +102,15 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, orderToken, orderId } = orderResponse;
+              const { merchantOrderId, paymentSessionId, paymentUrl } = orderResponse;
 
-              // Debug: Log what we received from backend
-              console.log('📦 Backend response (Android SDK flow only):', {
-                hasMerchantOrderId: !!merchantOrderId,
-                hasOrderToken: !!orderToken,
-                hasOrderId: !!orderId,
-                fullResponse: orderResponse,
+              console.log('📦 Cashfree order created:', {
+                merchantOrderId,
+                hasPaymentSessionId: !!paymentSessionId,
+                hasPaymentUrl: !!paymentUrl,
               });
 
-              // ANDROID NATIVE SDK FLOW ONLY - No web payment fallback
-              // We require orderToken and orderId for native Android SDK
-              if (!orderToken || !orderId) {
-                throw new Error('SDK order creation failed: Missing orderToken or orderId. Please contact support or try again.');
-              }
-
-              // Step 2: Start PhonePe Android Native SDK transaction
-              // This uses the native Android SDK, not web payment
-              console.log('📱 Using Android Native SDK Payment Flow');
-              
-              // IMPORTANT: Set up deep link listener BEFORE calling SDK
-              // The SDK might complete quickly and redirect before listener is set up
+              // Step 2: Set up deep link listener for payment callback
               let deepLinkHandled = false;
               
               const handleDeepLink = async (event) => {
@@ -136,16 +123,10 @@ const Wallet = () => {
                     const urlObj = new URL(url.replace('people-app://', 'https://'));
                     const callbackOrderId = urlObj.searchParams.get('orderId');
                     
-                    console.log('✅ Payment callback received:', {
-                      callbackOrderId,
-                      merchantOrderId,
-                      matches: callbackOrderId === merchantOrderId,
-                    });
-                    
                     if (callbackOrderId === merchantOrderId && !deepLinkHandled) {
                       deepLinkHandled = true;
                       subscription.remove();
-                      console.log('✅ Payment callback verified, checking status...');
+                      console.log('✅ Payment callback received, checking status...');
                       await checkPaymentStatus(merchantOrderId);
                     }
                   }
@@ -154,7 +135,7 @@ const Wallet = () => {
                 }
               };
               
-              // Set up deep link listener BEFORE SDK call
+              // Set up deep link listener BEFORE opening payment
               const subscription = Linking.addEventListener('url', handleDeepLink);
               
               // Also check for initial URL (in case app was opened via deep link)
@@ -166,43 +147,36 @@ const Wallet = () => {
                 console.log('No initial URL:', err);
               });
               
+              // Step 3: Open Cashfree payment page
               try {
-                console.log('🚀 Starting PhonePe Android Native SDK transaction...');
-                console.log('📱 SDK Parameters:', {
-                  hasOrderToken: !!orderToken,
-                  orderTokenLength: orderToken?.length || 0,
-                  orderId,
-                  appSchema: 'people-app',
+                console.log('🚀 Opening Cashfree payment page...');
+                
+                // Use paymentUrl if available, otherwise construct from paymentSessionId
+                const checkoutUrl = paymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
+                
+                const result = await WebBrowser.openBrowserAsync(checkoutUrl, {
+                  showTitle: false,
+                  enableBarCollapsing: false,
                 });
                 
-                await startPhonePeTransaction({
-                  orderToken: orderToken, // Order token from SDK order (REQUIRED for Android SDK)
-                  orderId: orderId,      // Order ID from SDK order (REQUIRED for Android SDK)
-                  packageName: null,      // Optional: Android package name
-                  appSchema: 'people-app', // Deep link scheme for callback
-                });
+                console.log('📱 Payment browser closed:', result);
                 
-                console.log('✅ Android SDK transaction initiated, waiting for callback...');
-
-                // Also poll for status in case deep link doesn't fire
+                // Check payment status after browser closes
                 setTimeout(() => {
                   if (!deepLinkHandled) {
-                    console.log('⏰ Deep link not received yet, starting status polling...');
+                    console.log('⏰ Checking payment status...');
                     checkPaymentStatus(merchantOrderId);
                   }
-                }, 5000);
-              } catch (sdkError) {
-                console.error('❌ Android SDK transaction error:', sdkError);
-                subscription.remove(); // Clean up listener
+                }, 2000);
+              } catch (paymentError) {
+                console.error('❌ Payment error:', paymentError);
+                subscription.remove();
                 setPaying(false);
-                
-                // NO WEB FALLBACK - Android SDK only
                 Alert.alert(
                   'Payment Error',
-                  `Android SDK payment failed: ${sdkError.message || 'Unknown error'}\n\nPlease try again or contact support if the issue persists.`,
+                  paymentError.message || 'Failed to open payment page. Please try again.',
                   [{ text: 'OK' }]
                 );
-                throw sdkError;
               }
             } catch (err) {
               console.error('Error paying dues:', err);

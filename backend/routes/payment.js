@@ -1,6 +1,7 @@
 /**
- * Payment Routes - PhonePe Integration
- * Handles PhonePe payment gateway integration for commission dues payment
+ * Payment Routes - Cashfree Integration
+ * Handles Cashfree payment gateway integration for commission dues payment
+ * PhonePe code preserved for future use (see PHONEPE_COMPLETE_DOCUMENTATION.md)
  */
 
 const express = require('express');
@@ -10,6 +11,36 @@ const { authenticate } = require('../middleware/auth');
 const CommissionTransaction = require('../models/CommissionTransaction');
 
 const router = express.Router();
+
+// ============================================================================
+// CASHFREE CONFIGURATION
+// ============================================================================
+
+const CASHFREE_CONFIG = {
+  PRODUCTION: {
+    API_URL: 'https://api.cashfree.com',
+  },
+  SANDBOX: {
+    API_URL: 'https://sandbox.cashfree.com',
+  },
+};
+
+const getCashfreeConfig = () => {
+  const env = process.env.CASHFREE_ENV || 'production';
+  return env === 'sandbox' ? CASHFREE_CONFIG.SANDBOX : CASHFREE_CONFIG.PRODUCTION;
+};
+
+const getCashfreeCredentials = () => {
+  return {
+    clientId: process.env.CASHFREE_CLIENT_ID,
+    clientSecret: process.env.CASHFREE_CLIENT_SECRET,
+    apiVersion: process.env.CASHFREE_API_VERSION || '2023-08-01',
+  };
+};
+
+// ============================================================================
+// PHONEPE CONFIGURATION (PRESERVED FOR FUTURE USE)
+// ============================================================================
 
 // PhonePe Configuration
 // Based on official PhonePe documentation: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/android-sdk/introduction
@@ -271,14 +302,14 @@ router.post('/test-sdk-order', authenticate, async (req, res) => {
 });
 
 /**
- * Create PhonePe payment order for dues payment
+ * Create Cashfree payment order for dues payment
  * POST /api/payment/create-dues-order
  * Requires authentication as freelancer
  */
 router.post('/create-dues-order', authenticate, async (req, res) => {
-  // Get PhonePe credentials and config outside try block for error handling
-  const credentials = getPhonePeCredentials();
-  const config = getConfig();
+  // Get Cashfree credentials and config
+  const credentials = getCashfreeCredentials();
+  const config = getCashfreeConfig();
 
   try {
     const user = req.user;
@@ -317,80 +348,61 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
+    if (!credentials.clientId || !credentials.clientSecret) {
       return res.status(500).json({
         success: false,
-        error: 'PhonePe credentials not configured',
+        error: 'Cashfree credentials not configured',
       });
     }
 
-    // Generate merchant order ID (max 63 chars, only underscore and hyphen allowed)
-    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
+    // Generate merchant order ID
+    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`;
 
-    // For React Native SDK, we use SDK Order flow (not direct B2B PG)
-    // SDK Order endpoint: /checkout/v2/sdk/order
-    // The SDK expects: startTransaction(orderToken, orderId, packageName, appSchema)
-    // Build the SDK order request body
-    const authToken = await getAuthToken();
-    
-    // Build SDK order request body
-    // Based on PhonePe support team's sample request format
-    // Only include mobileNumber if it's a valid phone number
-    const sdkOrderRequestBody = {
-      merchantId: credentials.merchantId,
-      merchantOrderId: merchantOrderId,
-      amount: totalDues * 100, // Amount in paise
-      expireAfter: 1200, // Order expiry in seconds (20 minutes) - included as per PhonePe sample
-      merchantUserId: freelancerId.toString(),
-      redirectUrl: `people-app://payment/callback?orderId=${merchantOrderId}`,
-      redirectMode: 'REDIRECT',
-      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      paymentFlow: {
-        type: 'SDK', // Required for SDK orders - using Object format as per PhonePe docs
+    // Cashfree order request body
+    const orderRequestBody = {
+      order_id: merchantOrderId,
+      order_amount: totalDues,
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: freelancerId.toString(),
+        customer_name: user.name || 'Freelancer',
+        customer_email: user.email || '',
+        customer_phone: user.phone || '',
       },
-      paymentInstrument: {
-        type: 'UPI_INTENT', // SDK order uses UPI_INTENT
+      order_meta: {
+        return_url: `people-app://payment/callback?orderId=${merchantOrderId}`,
+        notify_url: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       },
-      // Note: metaInfo is optional. If all fields are empty, don't include it
-      // Empty udf11-15 fields cause validation errors (400 Bad Request)
-      // Only include metaInfo if we have actual values to send
     };
 
-    // Add mobileNumber only if it's a valid phone number (not empty)
-    if (user.phone && user.phone.trim().length > 0) {
-      sdkOrderRequestBody.mobileNumber = user.phone.trim();
-    }
+    // Cashfree API endpoint
+    const orderEndpoint = '/pg/orders';
+    const orderUrl = `${config.API_URL}${orderEndpoint}`;
 
-    // Create SDK order using /checkout/v2/sdk/order endpoint
-    const sdkOrderEndpoint = '/checkout/v2/sdk/order';
-    const sdkOrderUrl = `${config.API_URL}${sdkOrderEndpoint}`;
-
-    console.log('📤 Creating SDK order:', {
-      endpoint: sdkOrderUrl,
+    console.log('📤 Creating Cashfree order:', {
+      endpoint: orderUrl,
       merchantOrderId,
-      amount: totalDues * 100,
-      requestBody: {
-        ...sdkOrderRequestBody,
-        mobileNumber: sdkOrderRequestBody.mobileNumber ? `${sdkOrderRequestBody.mobileNumber.substring(0, 3)}***` : 'not provided',
-      },
+      amount: totalDues,
     });
 
-    let sdkOrderResponse;
+    let orderResponse;
     try {
-      sdkOrderResponse = await axios.post(
-        sdkOrderUrl,
-        sdkOrderRequestBody,
+      orderResponse = await axios.post(
+        orderUrl,
+        orderRequestBody,
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `O-Bearer ${authToken}`,
+            'x-client-id': credentials.clientId,
+            'x-client-secret': credentials.clientSecret,
+            'x-api-version': credentials.apiVersion,
           },
           timeout: 10000,
-          validateStatus: (status) => status < 600, // Don't throw on any status
+          validateStatus: (status) => status < 600,
         }
       );
     } catch (requestError) {
-      console.error('❌ SDK order request failed:', {
+      console.error('❌ Cashfree order request failed:', {
         message: requestError.message,
         code: requestError.code,
         response: requestError.response ? {
@@ -402,89 +414,55 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       throw requestError;
     }
 
-    // Log full response for debugging
-    const fullResponseData = sdkOrderResponse.data;
-    console.log('📥 SDK order response (FULL):', {
-      status: sdkOrderResponse.status,
-      statusText: sdkOrderResponse.statusText,
-      headers: sdkOrderResponse.headers,
-      hasData: !!fullResponseData,
-      dataType: typeof fullResponseData,
-      dataKeys: fullResponseData ? Object.keys(fullResponseData) : [],
-      fullResponse: JSON.stringify(fullResponseData, null, 2), // Full response as JSON string
-    });
-
     // Check for error response
-    if (sdkOrderResponse.status !== 200 && sdkOrderResponse.status !== 201) {
-      const errorData = sdkOrderResponse.data || {};
-      console.error('❌ SDK order creation failed - DETAILED ERROR:', {
-        status: sdkOrderResponse.status,
-        statusText: sdkOrderResponse.statusText,
+    if (orderResponse.status !== 200 && orderResponse.status !== 201) {
+      const errorData = orderResponse.data || {};
+      console.error('❌ Cashfree order creation failed:', {
+        status: orderResponse.status,
         error: errorData.message || errorData.error || 'Unknown error',
-        code: errorData.code,
         fullResponse: JSON.stringify(errorData, null, 2),
-        requestDetails: {
-          endpoint: sdkOrderUrl,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `O-Bearer ${authToken ? `${authToken.substring(0, 20)}...` : 'missing'}`,
-          },
-          requestBody: JSON.stringify(sdkOrderRequestBody, null, 2),
-        },
       });
       
-      // Return detailed error for debugging
       return res.status(500).json({
         success: false,
-        error: errorData.message || errorData.error || 'Failed to create SDK order',
-        code: errorData.code || 'SDK_ORDER_FAILED',
-        message: 'SDK order creation failed. This might indicate that SDK orders are not enabled for your merchant account, or there is an issue with the request format. Please check the backend logs for detailed error information.',
-        debug: {
-          phonepeError: errorData,
-          endpoint: sdkOrderUrl,
-          requestBody: sdkOrderRequestBody,
-        },
+        error: errorData.message || errorData.error || 'Failed to create payment order',
+        code: errorData.code || 'ORDER_CREATION_FAILED',
       });
     }
 
-    const sdkOrderData = sdkOrderResponse.data?.data || sdkOrderResponse.data;
+    const orderData = orderResponse.data;
     
-    if (!sdkOrderData || !sdkOrderData.orderToken) {
-      console.error('❌ SDK order response missing orderToken:', {
-        fullResponse: sdkOrderResponse.data,
-        hasData: !!sdkOrderData,
-        orderToken: sdkOrderData?.orderToken,
+    if (!orderData || !orderData.payment_session_id) {
+      console.error('❌ Cashfree order response missing payment_session_id:', {
+        fullResponse: orderResponse.data,
       });
-      throw new Error('Failed to create SDK order: missing orderToken in response');
+      throw new Error('Failed to create order: missing payment_session_id in response');
     }
 
-    const orderToken = sdkOrderData.orderToken;
-    const phonepeOrderId = sdkOrderData.orderId || merchantOrderId;
+    const paymentSessionId = orderData.payment_session_id;
+    const cashfreeOrderId = orderData.order_id || merchantOrderId;
 
-    console.log('✅ SDK order created:', {
-      orderToken: orderToken ? `${orderToken.substring(0, 20)}...` : null,
-      orderId: phonepeOrderId,
+    console.log('✅ Cashfree order created:', {
+      paymentSessionId: paymentSessionId ? `${paymentSessionId.substring(0, 20)}...` : null,
+      orderId: cashfreeOrderId,
       merchantOrderId,
     });
 
-    // Return orderToken and orderId for React Native SDK
+    // Return payment session ID and order ID for frontend
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: phonepeOrderId,
-      // For React Native SDK order flow:
-      orderToken: orderToken, // Order token for SDK
+      orderId: cashfreeOrderId,
+      paymentSessionId: paymentSessionId, // For Cashfree checkout
+      paymentUrl: orderData.payment_link || null, // Optional payment link
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
-    console.log('📤 Sending response to frontend (SDK Order):', {
-      hasOrderToken: !!orderToken,
-      orderTokenLength: orderToken?.length || 0,
-      orderId: phonepeOrderId,
+    console.log('📤 Sending response to frontend (Cashfree):', {
+      hasPaymentSessionId: !!paymentSessionId,
+      orderId: cashfreeOrderId,
       merchantOrderId,
-      endpoint: sdkOrderEndpoint,
     });
 
     res.json(responsePayload);
@@ -514,53 +492,23 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
   try {
     const { merchantOrderId } = req.params;
-    const credentials = getPhonePeCredentials();
-    const config = getConfig();
+    const credentials = getCashfreeCredentials();
+    const config = getCashfreeConfig();
 
-    if (!credentials.merchantId) {
+    if (!credentials.clientId || !credentials.clientSecret) {
       return res.status(500).json({
         success: false,
-        error: 'PhonePe credentials not configured',
+        error: 'Cashfree credentials not configured',
       });
     }
 
-    // Get auth token
-    let authToken = await getAuthToken();
-    
-    if (!authToken) {
-      return res.status(500).json({
-        success: false,
-        code: 'AUTH_TOKEN_MISSING',
-        error: 'Failed to get authorization token',
-        data: {},
-      });
-    }
-
-    // Trim any whitespace from token
-    authToken = authToken.trim();
-
-    // Order Status API for B2B PG flow:
-    // For B2B PG orders created via /pg/v1/pay, we use the SDK order status endpoint
-    // GET /checkout/v2/order/{merchantOrderId}/status
-    // Headers:
-    //   - Content-Type: application/json
-    //   - Authorization: O-Bearer <access_token>
-    // Note: B2B PG orders can be checked using the SDK order status endpoint
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
+    // Cashfree order status endpoint
+    const endpoint = `/pg/orders/${merchantOrderId}`;
     const fullUrl = `${config.API_URL}${endpoint}`;
-    
-    // SDK order status endpoint uses Authorization header (O-Bearer token)
-    // No X-VERIFY checksum needed for this endpoint
 
-    console.log('🔍 Checking order status (B2B PG via SDK endpoint):', {
+    console.log('🔍 Checking Cashfree order status:', {
       merchantOrderId,
       endpoint: fullUrl,
-      hasToken: !!authToken,
-      tokenPreview: authToken ? `${authToken.substring(0, 20)}...` : null,
-      config: {
-        API_URL: config.API_URL,
-        environment: process.env.PHONEPE_ENV || 'production',
-      },
     });
 
     // Check order status
@@ -569,11 +517,12 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       statusResponse = await axios.get(fullUrl, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `O-Bearer ${authToken}`, // SDK order status uses O-Bearer token
+          'x-client-id': credentials.clientId,
+          'x-client-secret': credentials.clientSecret,
+          'x-api-version': credentials.apiVersion,
         },
-        // Add timeout and better error handling
         timeout: 10000,
-        validateStatus: (status) => status < 500, // Don't throw on 4xx errors
+        validateStatus: (status) => status < 500,
       });
       
       // Log response for debugging
@@ -599,12 +548,9 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
 
     const responseData = statusResponse.data;
 
-    // PhonePe Order Status API returns order data directly (not wrapped in success/data)
-    // Response format: { orderId, state, amount, expireAt, paymentDetails, ... }
-    // Error format: { success: false, code, message, data: {} }
-    
+    // Cashfree order status response format
     // Check if it's an error response
-    if (responseData.success === false || responseData.code) {
+    if (responseData.status === 'ERROR' || responseData.message) {
       return res.status(500).json({
         success: false,
         code: responseData.code || 'UNKNOWN_ERROR',
@@ -613,32 +559,27 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       });
     }
 
-    // Success response: order data is directly in responseData
-    const state = responseData.state; // PENDING, COMPLETED, FAILED
-    const orderId = responseData.orderId;
-    const amount = responseData.amount;
-    const paymentDetails = responseData.paymentDetails || [];
+    // Cashfree order status: PAID, ACTIVE, EXPIRED, etc.
+    const orderStatus = responseData.order_status; // PAID, ACTIVE, EXPIRED
+    const orderId = responseData.order_id;
+    const orderAmount = responseData.order_amount;
+    const paymentSessionId = responseData.payment_session_id;
     
-    // Get latest payment attempt details
-    const latestPayment = paymentDetails.length > 0 ? paymentDetails[paymentDetails.length - 1] : null;
-    const transactionId = latestPayment?.transactionId || null;
-    const paymentState = latestPayment?.state || state;
-
-    // Map PhonePe states to our status
-    const isSuccess = state === 'COMPLETED';
-    const isPending = state === 'PENDING';
-    const isFailed = state === 'FAILED';
+    // Map Cashfree status to our status
+    const isSuccess = orderStatus === 'PAID';
+    const isPending = orderStatus === 'ACTIVE';
+    const isFailed = orderStatus === 'EXPIRED' || orderStatus === 'CANCELLED';
 
     res.json({
       success: true,
       orderId,
-      state,
-      amount,
-      transactionId,
+      state: orderStatus,
+      amount: orderAmount,
+      transactionId: responseData.payment_session_id || null,
       isSuccess,
       isPending,
       isFailed,
-      paymentDetails,
+      paymentDetails: responseData.payment_details || [],
       data: responseData,
     });
   } catch (error) {
@@ -747,79 +688,66 @@ const verifyWebhookAuthorization = (authHeader) => {
 };
 
 /**
- * PhonePe Webhook Handler
+ * Cashfree Webhook Handler
  * POST /api/payment/webhook
  * 
- * Handles all PhonePe webhook events:
- * - checkout.order.completed: Order successfully completed
- * - checkout.order.failed: Order failed
- * - pg.refund.accepted: Refund accepted
- * - pg.refund.completed: Refund successfully completed
- * - pg.refund.failed: Refund failed
- * 
- * Documentation: https://developer.phonepe.com/payment-gateway/mobile-app-integration/standard-checkout-mobile/api-reference/webhook-handling
+ * Handles Cashfree webhook events for payment status updates
+ * Cashfree sends webhook when payment status changes
  */
 router.post('/webhook', async (req, res) => {
   try {
-    // Verify Authorization header
-    const authHeader = req.headers.authorization;
-    if (!verifyWebhookAuthorization(authHeader)) {
-      console.error('❌ Webhook authorization verification failed');
-      return res.status(401).json({ 
-        success: false, 
-        error: 'Unauthorized' 
-      });
-    }
-
-    // PhonePe sends webhook as JSON with event and payload structure
+    // Cashfree webhook data
     const webhookData = req.body;
-    const { event, payload } = webhookData;
-
-    console.log('📥 PhonePe Webhook Received:', {
-      event,
-      merchantOrderId: payload?.merchantOrderId || payload?.originalMerchantOrderId,
-      state: payload?.state,
-      amount: payload?.amount,
+    
+    console.log('📥 Cashfree Webhook Received:', {
+      type: webhookData.type,
+      orderId: webhookData.data?.order?.order_id,
+      orderStatus: webhookData.data?.order?.order_status,
+      paymentStatus: webhookData.data?.payment?.payment_status,
     });
 
-    // Use 'event' parameter (not 'type') to identify event type
-    // Use 'payload.state' for payment status
-    if (!event || !payload) {
-      console.error('❌ Invalid webhook format: missing event or payload');
+    // Cashfree webhook structure: { type, data: { order: {...}, payment: {...} } }
+    if (!webhookData.type || !webhookData.data) {
+      console.error('❌ Invalid Cashfree webhook format');
       return res.status(400).json({ 
         success: false, 
         error: 'Invalid webhook format' 
       });
     }
 
-    // Handle Order Events
-    if (event === 'checkout.order.completed') {
-      await handleOrderCompleted(payload);
-    } else if (event === 'checkout.order.failed') {
-      await handleOrderFailed(payload);
-    }
-    // Handle Refund Events
-    else if (event === 'pg.refund.accepted') {
-      await handleRefundAccepted(payload);
-    } else if (event === 'pg.refund.completed') {
-      await handleRefundCompleted(payload);
-    } else if (event === 'pg.refund.failed') {
-      await handleRefundFailed(payload);
-    } else {
-      console.warn('⚠️ Unknown webhook event:', event);
+    // Handle payment status updates
+    const orderData = webhookData.data?.order;
+    const paymentData = webhookData.data?.payment;
+
+    if (orderData && paymentData) {
+      const orderStatus = orderData.order_status;
+      const paymentStatus = paymentData.payment_status;
+      const orderId = orderData.order_id;
+
+      // If payment is successful, process dues
+      if (orderStatus === 'PAID' && paymentStatus === 'SUCCESS') {
+        await handleCashfreeOrderCompleted({
+          merchantOrderId: orderId,
+          amount: orderData.order_amount,
+        });
+      } else if (paymentStatus === 'FAILED' || orderStatus === 'EXPIRED') {
+        console.log('❌ Payment failed or expired:', {
+          orderId,
+          orderStatus,
+          paymentStatus,
+        });
+      }
     }
 
-    // Always return success to PhonePe (200 OK)
-    // PhonePe will retry if we return error status
+    // Always return success to Cashfree (200 OK)
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('❌ Error processing PhonePe webhook:', {
+    console.error('❌ Error processing Cashfree webhook:', {
       error: error.message,
       stack: error.stack,
       body: req.body,
     });
-    // Still return 200 to prevent PhonePe from retrying
-    // Log the error for manual investigation
+    // Still return 200 to prevent Cashfree from retrying
     res.status(200).json({ 
       success: false, 
       error: error.message 
@@ -828,19 +756,11 @@ router.post('/webhook', async (req, res) => {
 });
 
 /**
- * Handle Order Completed Event
- * Event: checkout.order.completed
- * State: COMPLETED
+ * Handle Cashfree Order Completed Event
  */
-const handleOrderCompleted = async (payload) => {
+const handleCashfreeOrderCompleted = async (payload) => {
   try {
-    const { merchantOrderId, state, amount } = payload;
-
-    // Verify state is COMPLETED
-    if (state !== 'COMPLETED') {
-      console.warn('⚠️ Order completed event but state is not COMPLETED:', state);
-      return;
-    }
+    const { merchantOrderId, amount } = payload;
 
     if (!merchantOrderId) {
       console.error('❌ Missing merchantOrderId in order completed webhook');
@@ -867,17 +787,17 @@ const handleOrderCompleted = async (payload) => {
         }
       );
 
-      console.log(`✅ Order completed - Dues payment processed:`, {
+      console.log(`✅ Cashfree order completed - Dues payment processed:`, {
         freelancerId,
         merchantOrderId,
-        amount: amount ? amount / 100 : null, // Convert paisa to rupees
+        amount: amount || null,
         transactionsUpdated: updateResult.modifiedCount,
       });
     } else {
       console.warn('⚠️ Invalid merchant order ID format:', merchantOrderId);
     }
   } catch (error) {
-    console.error('❌ Error handling order completed:', error);
+    console.error('❌ Error handling Cashfree order completed:', error);
     throw error;
   }
 };

@@ -1,13 +1,13 @@
 /**
- * Payment API - PhonePe Integration
+ * Payment API - Cashfree Integration
  */
 
 import apiClient from './client';
 
 export const paymentAPI = {
   /**
-   * Create PhonePe payment order for dues
-   * @returns {Promise} Payment order with paymentUrl and merchantOrderId
+   * Create Cashfree payment order for dues
+   * @returns {Promise} Payment order with paymentSessionId, paymentUrl and merchantOrderId
    */
   createDuesOrder: async () => {
     const response = await apiClient.post('/api/payment/create-dues-order');
@@ -25,7 +25,7 @@ export const paymentAPI = {
   },
 
   /**
-   * Process dues payment after successful PhonePe payment
+   * Process dues payment after successful Cashfree payment
    * @param {string} merchantOrderId - Merchant order ID
    * @returns {Promise} Updated wallet data
    */
