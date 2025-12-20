@@ -21,7 +21,7 @@ import * as Linking from 'expo-linking';
 import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import * as WebBrowser from 'expo-web-browser';
+import PaymentWebView from '../../components/PaymentWebView';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -37,6 +37,9 @@ const Wallet = () => {
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [ledgerExpandedIds, setLedgerExpandedIds] = useState({});
   const [paying, setPaying] = useState(false);
+  const [showPaymentWebView, setShowPaymentWebView] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState(null);
+  const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const loadWallet = async () => {
     try {
@@ -102,18 +105,16 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, paymentSessionId, paymentUrl } = orderResponse;
+              const { merchantOrderId, paymentSessionId, paymentUrl: orderPaymentUrl } = orderResponse;
 
               console.log('📦 Cashfree order created:', {
                 merchantOrderId,
                 hasPaymentSessionId: !!paymentSessionId,
-                hasPaymentUrl: !!paymentUrl,
+                hasPaymentUrl: !!orderPaymentUrl,
               });
 
               // Step 2: Set up deep link listener for payment callback
-              let deepLinkHandled = false;
-              
-              const handleDeepLink = async (event) => {
+              const subscription = Linking.addEventListener('url', async (event) => {
                 try {
                   const url = event.url;
                   console.log('🔗 Deep link received:', url);
@@ -123,9 +124,10 @@ const Wallet = () => {
                     const urlObj = new URL(url.replace('people-app://', 'https://'));
                     const callbackOrderId = urlObj.searchParams.get('orderId');
                     
-                    if (callbackOrderId === merchantOrderId && !deepLinkHandled) {
-                      deepLinkHandled = true;
+                    if (callbackOrderId === merchantOrderId) {
                       subscription.remove();
+                      setShowPaymentWebView(false);
+                      setPaying(false);
                       console.log('✅ Payment callback received, checking status...');
                       await checkPaymentStatus(merchantOrderId);
                     }
@@ -133,41 +135,19 @@ const Wallet = () => {
                 } catch (linkError) {
                   console.error('❌ Error handling deep link:', linkError);
                 }
-              };
-              
-              // Set up deep link listener BEFORE opening payment
-              const subscription = Linking.addEventListener('url', handleDeepLink);
-              
-              // Also check for initial URL (in case app was opened via deep link)
-              Linking.getInitialURL().then((initialUrl) => {
-                if (initialUrl && initialUrl.includes('payment/callback')) {
-                  handleDeepLink({ url: initialUrl });
-                }
-              }).catch((err) => {
-                console.log('No initial URL:', err);
               });
               
-              // Step 3: Open Cashfree payment page
+              // Step 3: Open Cashfree payment page in WebView (in-app)
               try {
-                console.log('🚀 Opening Cashfree payment page...');
+                console.log('🚀 Opening Cashfree payment page in-app...');
                 
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
-                const checkoutUrl = paymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
+                const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
                 
-                const result = await WebBrowser.openBrowserAsync(checkoutUrl, {
-                  showTitle: false,
-                  enableBarCollapsing: false,
-                });
-                
-                console.log('📱 Payment browser closed:', result);
-                
-                // Check payment status after browser closes
-                setTimeout(() => {
-                  if (!deepLinkHandled) {
-                    console.log('⏰ Checking payment status...');
-                    checkPaymentStatus(merchantOrderId);
-                  }
-                }, 2000);
+                setCurrentOrderId(merchantOrderId);
+                setPaymentUrl(checkoutUrl);
+                setShowPaymentWebView(true);
+                setPaying(false); // WebView handles its own loading state
               } catch (paymentError) {
                 console.error('❌ Payment error:', paymentError);
                 subscription.remove();
@@ -583,9 +563,27 @@ const Wallet = () => {
     );
   }
 
+  const handlePaymentWebViewClose = () => {
+    setShowPaymentWebView(false);
+    setPaymentUrl(null);
+    // Check payment status when WebView is closed
+    if (currentOrderId) {
+      checkPaymentStatus(currentOrderId);
+    }
+  };
+
+  const handlePaymentComplete = async (orderId) => {
+    setShowPaymentWebView(false);
+    setPaymentUrl(null);
+    setCurrentOrderId(null);
+    setPaying(false);
+    await checkPaymentStatus(orderId);
+  };
+
   return (
-    <ScrollView
-      style={styles.container}
+    <>
+      <ScrollView
+        style={styles.container}
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
