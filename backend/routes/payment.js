@@ -370,7 +370,9 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         customer_phone: user.phone || '',
       },
       order_meta: {
-        return_url: `people-app://payment/callback?orderId=${merchantOrderId}`,
+        // Cashfree requires HTTPS return_url, not deep links
+        // We'll handle the deep link callback via WebView navigation detection
+        return_url: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
         notify_url: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       },
     };
