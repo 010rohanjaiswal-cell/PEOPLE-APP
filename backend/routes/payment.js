@@ -444,9 +444,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const paymentSessionId = orderData.payment_session_id;
     const cashfreeOrderId = orderData.order_id || merchantOrderId;
 
-    // Check what payment URL fields are available
-    const paymentLink = orderData.payment_link;
-    const paymentUrl = orderData.payment_url;
+    // Check what payment URL fields are available in Cashfree response
+    // Cashfree might return payment URL under different field names
+    const paymentLink = orderData.payment_link || orderData.link_url || orderData.checkout_url;
+    const paymentUrl = orderData.payment_url || orderData.payment_session_url;
     
     console.log('✅ Cashfree order created:', {
       paymentSessionId: paymentSessionId ? `${paymentSessionId.substring(0, 20)}...` : null,
@@ -458,11 +459,22 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       paymentUrl: paymentUrl || '(not provided)',
     });
 
+    // Log full response to see all available fields
+    console.log('📋 Full Cashfree order response keys:', Object.keys(orderData));
+    console.log('📋 Full Cashfree order response:', JSON.stringify(orderData, null, 2));
+
     // Return payment session ID and order ID for frontend
-    // Prefer payment_link or payment_url from API, otherwise construct URL
-    // Try different URL formats based on Cashfree documentation
-    const finalPaymentUrl = paymentLink || paymentUrl || 
-      `https://cashfree.com/checkout/post/submit?paymentSessionId=${paymentSessionId}`;
+    // Prefer payment URL from API response, otherwise use payment session ID
+    // According to Cashfree docs, payment link should be in the response
+    let finalPaymentUrl = paymentLink || paymentUrl;
+    
+    // If no payment URL in response, construct it using payment session ID
+    // Based on Cashfree docs, checkout URL format might vary
+    if (!finalPaymentUrl && paymentSessionId) {
+      // Try the standard checkout format
+      finalPaymentUrl = `https://payments.cashfree.com/checkout/paylink/${paymentSessionId}`;
+      console.log('⚠️  No payment URL in response, using constructed URL:', finalPaymentUrl);
+    }
     
     const responsePayload = {
       success: true,
