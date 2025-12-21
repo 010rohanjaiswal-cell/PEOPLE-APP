@@ -105,11 +105,10 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, paymentSessionId, paymentUrl: orderPaymentUrl } = orderResponse;
+              const { merchantOrderId, paymentUrl: orderPaymentUrl } = orderResponse;
 
-              console.log('📦 Cashfree order created:', {
+              console.log('📦 PhonePe order created:', {
                 merchantOrderId,
-                hasPaymentSessionId: !!paymentSessionId,
                 hasPaymentUrl: !!orderPaymentUrl,
               });
 
@@ -137,21 +136,19 @@ const Wallet = () => {
                 }
               });
               
-              // Step 3: Open Cashfree payment page in WebView (in-app)
+              // Step 3: Open PhonePe payment page in WebView (in-app)
               try {
-                console.log('🚀 Opening Cashfree payment page in-app...');
+                console.log('🚀 Opening PhonePe payment page in-app...');
                 console.log('📋 Payment details:', {
                   hasPaymentUrl: !!orderPaymentUrl,
                   paymentUrl: orderPaymentUrl || '(not provided)',
-                  hasPaymentSessionId: !!paymentSessionId,
-                  paymentSessionId: paymentSessionId ? `${paymentSessionId.substring(0, 20)}...` : null,
                 });
                 
-                // Use paymentUrl if available, otherwise construct from paymentSessionId
-                // Cashfree checkout URL format: https://www.cashfree.com/pg/checkout?payment_session_id={payment_session_id}
-                // Using www. prefix as logs show redirect from cashfree.com to www.cashfree.com
-                const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/pg/checkout?payment_session_id=${paymentSessionId}`;
+                if (!orderPaymentUrl) {
+                  throw new Error('Payment URL not received from server');
+                }
                 
+                const checkoutUrl = orderPaymentUrl;
                 console.log('🔗 Final checkout URL:', checkoutUrl);
                 
                 // Set all states together - React 18+ will auto-batch these
