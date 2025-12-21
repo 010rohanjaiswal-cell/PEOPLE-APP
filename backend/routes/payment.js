@@ -458,7 +458,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     console.log('📋 PhonePe order response structure:', {
       hasData: !!orderData,
       dataKeys: orderData ? Object.keys(orderData) : null,
-      fullResponse: JSON.stringify(orderResponse.data, null, 2).substring(0, 500),
+      fullResponse: JSON.stringify(orderResponse.data, null, 2), // Log full response, not truncated
     });
     
     if (orderData?.instrumentResponse?.redirectInfo?.url) {
