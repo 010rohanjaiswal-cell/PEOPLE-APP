@@ -572,10 +572,14 @@ const Wallet = () => {
   }, [currentOrderId]);
 
   const handlePaymentComplete = useCallback(async (orderId) => {
-    setShowPaymentWebView(false);
-    setPaymentUrl(null);
-    setCurrentOrderId(null);
-    setPaying(false);
+    // Use startTransition to prevent blocking updates
+    React.startTransition(() => {
+      setShowPaymentWebView(false);
+      setPaymentUrl(null);
+      setCurrentOrderId(null);
+      setPaying(false);
+    });
+    // Check payment status after state updates
     await checkPaymentStatus(orderId);
   }, []);
 
