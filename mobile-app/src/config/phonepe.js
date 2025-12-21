@@ -146,7 +146,6 @@ export const startPhonePeTransaction = async (params) => {
       // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
       // For Android, appSchema should be null (not needed)
       // For iOS, appSchema is required
-      const Platform = require('react-native').Platform;
       const appSchemaForSDK = Platform.OS === 'ios' ? appSchema : null;
       
       console.log('📱 Platform:', Platform.OS);
