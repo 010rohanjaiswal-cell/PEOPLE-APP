@@ -142,7 +142,8 @@ const Wallet = () => {
                 console.log('🚀 Opening Cashfree payment page in-app...');
                 
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
-                const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
+                // Cashfree checkout URL format: https://payments.cashfree.com/checkout/paylink/{paymentSessionId}
+                const checkoutUrl = orderPaymentUrl || `https://payments.cashfree.com/checkout/paylink/${paymentSessionId}`;
                 
                 // Set all states together - React 18+ will auto-batch these
                 setCurrentOrderId(merchantOrderId);
