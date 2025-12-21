@@ -188,7 +188,14 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
         {paymentUrl ? (
           <WebView
             ref={webViewRef}
-            source={{ uri: paymentUrl }}
+            source={{ 
+              uri: paymentUrl,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+              }
+            }}
             style={styles.webview}
             onNavigationStateChange={handleNavigationStateChange}
             onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
