@@ -22,16 +22,19 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
   const [canGoBack, setCanGoBack] = useState(false);
   const [webViewRef, setWebViewRef] = useState(null);
   const paymentCompletedRef = useRef(false); // Prevent multiple calls
+  const lastUrlRef = useRef(''); // Track last URL to prevent duplicate processing
 
   // Reset payment completed flag when modal opens/closes
   useEffect(() => {
     if (visible) {
       paymentCompletedRef.current = false;
+      lastUrlRef.current = '';
       setLoading(true);
       setCanGoBack(false);
     } else {
       // Reset when modal closes
       paymentCompletedRef.current = false;
+      lastUrlRef.current = '';
       setLoading(false);
       setCanGoBack(false);
     }
