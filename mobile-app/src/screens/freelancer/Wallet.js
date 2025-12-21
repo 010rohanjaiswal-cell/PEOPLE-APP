@@ -559,14 +559,7 @@ const Wallet = () => {
     );
   };
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary.main} />
-      </View>
-    );
-  }
-
+  // Define callbacks BEFORE early return (Rules of Hooks)
   const handlePaymentWebViewClose = useCallback(() => {
     setShowPaymentWebView(false);
     setPaymentUrl(null);
@@ -583,6 +576,14 @@ const Wallet = () => {
     setPaying(false);
     await checkPaymentStatus(orderId);
   }, []);
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary.main} />
+      </View>
+    );
+  }
 
   return (
     <>
