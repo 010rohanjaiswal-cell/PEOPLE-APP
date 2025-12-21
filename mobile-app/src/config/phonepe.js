@@ -15,29 +15,37 @@ const PHONEPE_CONFIG = {
 /**
  * Initialize PhonePe SDK
  * Call this once when app starts (e.g., in App.js)
- * PhonePe SDK init signature: init(environment, merchantId, appId, enableLogging)
+ * PhonePe React Native SDK init signature: init(environment, merchantId, flowId, enableLogging)
  * 
- * Production Requirements (per PhonePe Go Live guide):
+ * @param {string} flowId - An alphanumeric string without special characters. 
+ *   Acts as a common ID between app user journey and PhonePe SDK.
+ *   Recommended: Pass user-specific information or merchant user Id to track the journey.
+ * 
+ * Production Requirements:
  * - environment: PRODUCTION
  * - merchantId: Production MID
  * - enableLogging: false (must be false in production)
  */
-export const initializePhonePe = async () => {
+export const initializePhonePe = async (flowId = null) => {
   try {
-    // PhonePe SDK init requires: environment, merchantId, appId (optional), enableLogging
-    // Per PhonePe Go Live guide: enableLogging must be false in production
+    // PhonePe React Native SDK init requires: environment, merchantId, flowId, enableLogging
+    // flowId: An alphanumeric string for tracking user journey (recommended: user ID)
     const isProduction = PHONEPE_CONFIG.environment === 'PRODUCTION';
     const enableLogging = !isProduction; // false for production, true for sandbox
+    
+    // Generate flowId if not provided (use timestamp + random for uniqueness)
+    const generatedFlowId = flowId || `flow_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
     const result = await PhonePe.init(
       PHONEPE_CONFIG.environment, // 'PRODUCTION' or 'SANDBOX'
       PHONEPE_CONFIG.merchantId,    // Merchant ID
-      null,                         // appId (optional, can be null)
-      enableLogging                 // false in production, true in sandbox (per Go Live guide)
+      generatedFlowId,              // flowId: alphanumeric string for tracking
+      enableLogging                 // false in production, true in sandbox
     );
     console.log('✅ PhonePe SDK initialized:', {
       environment: PHONEPE_CONFIG.environment,
       merchantId: PHONEPE_CONFIG.merchantId,
+      flowId: generatedFlowId,
       enableLogging,
     });
     return true;
@@ -50,30 +58,47 @@ export const initializePhonePe = async () => {
 };
 
 /**
- * Start PhonePe transaction using SDK (SDK Order flow)
+ * Start PhonePe transaction using React Native SDK
  * 
  * For React Native SDK, we use SDK Order flow:
  * 1. Backend creates SDK order using /checkout/v2/sdk/order
  * 2. Backend returns orderToken and orderId
- * 3. SDK uses orderToken and orderId to start transaction
+ * 3. Construct request body as JSON string
+ * 4. SDK uses request body string to start transaction
  * 
  * PhonePe React Native SDK startTransaction signature: 
- * startTransaction(orderToken, orderId, packageName, appSchema)
+ * startTransaction(request: string, appSchema: string | null)
+ * 
+ * Request body format:
+ * {
+ *   "orderId": <orderId>,
+ *   "merchantId": <merchantId>,
+ *   "token": <token>,
+ *   "paymentMode": {
+ *     "type": "PAY_PAGE"
+ *   }
+ * }
  * 
  * @param {Object} params - Transaction parameters
  * @param {string} params.orderToken - Order token from SDK order (REQUIRED)
  * @param {string} params.orderId - Order ID from SDK order (REQUIRED)
- * @param {string} params.packageName - Package name for Android (optional)
+ * @param {string} params.merchantId - Merchant ID (REQUIRED)
  * @param {string} params.appSchema - App scheme for deep linking (optional, defaults to 'people-app')
  * @returns {Promise} Promise that resolves with transaction result
+ * 
+ * Response format:
+ * {
+ *   status: String, // "SUCCESS", "FAILURE", "INTERRUPTED"
+ *   error: String   // if any error occurs
+ * }
  */
 export const startPhonePeTransaction = async (params) => {
   try {
     const {
       orderToken,     // Order token from SDK order (REQUIRED)
       orderId,        // Order ID from SDK order (REQUIRED)
-      packageName = null, // Optional: Android package name
-      appSchema = 'people-app', // App scheme for deep linking
+      merchantId,     // Merchant ID (REQUIRED)
+      appSchema = 'people-app', // App scheme for deep linking (optional, not needed for Android)
     } = params;
 
     if (!orderToken) {
@@ -84,50 +109,86 @@ export const startPhonePeTransaction = async (params) => {
       throw new Error('Order ID is required for PhonePe SDK transaction');
     }
 
+    if (!merchantId) {
+      throw new Error('Merchant ID is required for PhonePe SDK transaction');
+    }
+
     // Verify SDK method exists
     if (!PhonePe.startTransaction || typeof PhonePe.startTransaction !== 'function') {
       throw new Error('PhonePe.startTransaction method not available. SDK may not be properly initialized.');
     }
 
-    // SDK Order flow: Use orderToken and orderId
-    // The SDK's startTransaction method signature is: startTransaction(orderToken, orderId, packageName, appSchema)
-    console.log('🚀 Starting PhonePe SDK transaction:', {
-      orderToken: orderToken ? `${orderToken.substring(0, 20)}...` : null,
+    // Construct request body as per React Native SDK documentation
+    const requestBody = {
+      orderId: orderId,
+      merchantId: merchantId,
+      token: orderToken,
+      paymentMode: {
+        type: 'PAY_PAGE', // For Standard Checkout
+      },
+    };
+
+    // Convert to JSON string (required by SDK)
+    const requestBodyString = JSON.stringify(requestBody);
+
+    console.log('🚀 Starting PhonePe React Native SDK transaction:', {
       orderId,
-      packageName,
+      merchantId,
+      tokenLength: orderToken?.length || 0,
       appSchema,
+      requestBody: requestBodyString,
     });
 
-    console.log('📞 Calling PhonePe.startTransaction (SDK Order)...');
-    console.log('Parameters:', {
-      orderTokenLength: orderToken?.length || 0,
-      orderId,
-      packageName: packageName || 'null',
-      appSchema,
-    });
+    console.log('📞 Calling PhonePe.startTransaction...');
     
     try {
+      // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
+      // Note: The SDK may open the payment UI and handle the flow internally
+      // The response might come immediately or after payment completion
       const response = await PhonePe.startTransaction(
-        orderToken,    // Order token from SDK order
-        orderId,       // Order ID from SDK order
-        packageName,   // Optional package name
-        appSchema      // App scheme for deep linking
+        requestBodyString, // Request body as JSON string
+        appSchema          // App scheme for deep linking (optional, not needed for Android)
       );
       
       console.log('✅ PhonePe SDK transaction response:', response);
+      console.log('Response type:', typeof response);
+      console.log('Response keys:', response ? Object.keys(response) : 'null');
+      
+      // Handle different response formats
+      if (response && typeof response === 'object') {
+        // Check if response has status field
+        if (response.status) {
+          return response;
+        }
+        // If response doesn't have status, it might be the payment flow is starting
+        // Return a default response indicating the flow has started
+        return {
+          status: 'PENDING',
+          message: 'Payment flow initiated',
+        };
+      }
+      
+      // If response is not an object, return it as-is
       return response;
     } catch (sdkError) {
       console.error('❌ PhonePe SDK startTransaction error:', sdkError);
       console.error('Error type:', typeof sdkError);
+      console.error('Error message:', sdkError?.message);
+      console.error('Error code:', sdkError?.code);
       console.error('Error stringified:', JSON.stringify(sdkError, Object.getOwnPropertyNames(sdkError), 2));
       
       // Check if SDK returns error in response instead of throwing
       if (sdkError && typeof sdkError === 'object') {
-        if (sdkError.success === false || sdkError.error) {
+        // PhonePe SDK might return error with status field
+        if (sdkError.status === 'FAILURE' || sdkError.status === 'INTERRUPTED') {
+          return sdkError; // Return the error response instead of throwing
+        }
+        if (sdkError.error || sdkError.message) {
           throw new Error(sdkError.error || sdkError.message || 'PhonePe SDK transaction failed');
         }
       }
       
+      // Re-throw if it's a real error
       throw sdkError;
     }
   } catch (error) {

@@ -21,7 +21,7 @@ import * as Linking from 'expo-linking';
 import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import PaymentWebView from '../../components/PaymentWebView';
+import { startPhonePeTransaction } from '../../config/phonepe';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -37,9 +37,6 @@ const Wallet = () => {
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [ledgerExpandedIds, setLedgerExpandedIds] = useState({});
   const [paying, setPaying] = useState(false);
-  const [showPaymentWebView, setShowPaymentWebView] = useState(false);
-  const [paymentUrl, setPaymentUrl] = useState(null);
-  const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const loadWallet = async () => {
     try {
@@ -96,7 +93,7 @@ const Wallet = () => {
             try {
               setPaying(true);
 
-              // Step 1: Create Cashfree payment order
+              // Step 1: Create PhonePe SDK order (returns orderToken and orderId)
               const orderResponse = await paymentAPI.createDuesOrder();
               
               if (!orderResponse.success) {
@@ -105,11 +102,18 @@ const Wallet = () => {
                 return;
               }
 
-              const { merchantOrderId, paymentUrl: orderPaymentUrl } = orderResponse;
+              const { merchantOrderId, orderToken, orderId, merchantId } = orderResponse;
 
-              console.log('📦 PhonePe order created:', {
+              if (!orderToken || !orderId || !merchantId) {
+                Alert.alert('Error', 'Invalid payment order response. Missing orderToken, orderId, or merchantId.');
+                setPaying(false);
+                return;
+              }
+
+              console.log('📦 PhonePe SDK order created:', {
                 merchantOrderId,
-                hasPaymentUrl: !!orderPaymentUrl,
+                orderId,
+                hasOrderToken: !!orderToken,
               });
 
               // Step 2: Set up deep link listener for payment callback
@@ -125,7 +129,6 @@ const Wallet = () => {
                     
                     if (callbackOrderId === merchantOrderId) {
                       subscription.remove();
-                      setShowPaymentWebView(false);
                       setPaying(false);
                       console.log('✅ Payment callback received, checking status...');
                       await checkPaymentStatus(merchantOrderId);
@@ -136,33 +139,84 @@ const Wallet = () => {
                 }
               });
               
-              // Step 3: Open PhonePe payment page in WebView (in-app)
+              // Step 3: Start PhonePe transaction using React Native SDK
               try {
-                console.log('🚀 Opening PhonePe payment page in-app...');
-                console.log('📋 Payment details:', {
-                  hasPaymentUrl: !!orderPaymentUrl,
-                  paymentUrl: orderPaymentUrl || '(not provided)',
+                console.log('🚀 Starting PhonePe React Native SDK transaction...');
+                
+                // Get merchantId from order response (already extracted above)
+                const appSchema = 'people-app'; // Deep link scheme (optional, not needed for Android)
+                
+                // Start transaction using PhonePe React Native SDK
+                // Request body will be constructed inside startPhonePeTransaction
+                const sdkResponse = await startPhonePeTransaction({
+                  orderToken,
+                  orderId,
+                  merchantId,
+                  appSchema,
                 });
                 
-                if (!orderPaymentUrl) {
-                  throw new Error('Payment URL not received from server');
+                console.log('✅ PhonePe SDK transaction response:', sdkResponse);
+                console.log('Response type:', typeof sdkResponse);
+                console.log('Response status:', sdkResponse?.status);
+                
+                // Check response status
+                if (sdkResponse && sdkResponse.status === 'SUCCESS') {
+                  // Payment successful - deep link will be called
+                  // The deep link listener above will handle the callback
+                  console.log('✅ Payment successful - waiting for deep link callback');
+                  // Don't set paying to false yet - wait for deep link
+                } else if (sdkResponse && sdkResponse.status === 'FAILURE') {
+                  // Payment failed
+                  console.error('❌ Payment failed:', sdkResponse.error);
+                  subscription.remove();
+                  setPaying(false);
+                  Alert.alert(
+                    'Payment Failed',
+                    sdkResponse.error || 'Payment transaction failed. Please try again.',
+                    [{ text: 'OK' }]
+                  );
+                } else if (sdkResponse && sdkResponse.status === 'INTERRUPTED') {
+                  // Payment interrupted by user
+                  console.log('⚠️ Payment interrupted by user');
+                  subscription.remove();
+                  setPaying(false);
+                  // Don't show error for user cancellation
+                } else if (sdkResponse && sdkResponse.status === 'PENDING') {
+                  // Payment flow initiated - SDK will handle the UI
+                  console.log('⏳ Payment flow initiated - SDK handling payment UI');
+                  // Don't set paying to false - SDK is handling the flow
+                  // The deep link listener will catch the callback
+                } else {
+                  // SDK handles the payment flow internally
+                  // The deep link listener will catch the callback
+                  console.log('⏳ Payment flow in progress - waiting for SDK to complete');
+                  // Don't set paying to false yet - wait for deep link or SDK response
                 }
-                
-                const checkoutUrl = orderPaymentUrl;
-                console.log('🔗 Final checkout URL:', checkoutUrl);
-                
-                // Set all states together - React 18+ will auto-batch these
-                setCurrentOrderId(merchantOrderId);
-                setPaymentUrl(checkoutUrl);
-                setPaying(false);
-                setShowPaymentWebView(true); // Open modal immediately
               } catch (paymentError) {
-                console.error('❌ Payment error:', paymentError);
+                console.error('❌ PhonePe SDK transaction error:', paymentError);
+                console.error('Error details:', {
+                  message: paymentError.message,
+                  code: paymentError.code,
+                  status: paymentError.status,
+                  error: paymentError.error,
+                  stack: paymentError.stack,
+                });
                 subscription.remove();
                 setPaying(false);
+                
+                // Extract error message
+                let errorMessage = 'Failed to start payment. Please try again.';
+                if (paymentError.message) {
+                  errorMessage = paymentError.message;
+                } else if (paymentError.error) {
+                  errorMessage = paymentError.error;
+                } else if (typeof paymentError === 'string') {
+                  errorMessage = paymentError;
+                }
+                
                 Alert.alert(
                   'Payment Error',
-                  paymentError.message || 'Failed to open payment page. Please try again.',
+                  errorMessage,
                   [{ text: 'OK' }]
                 );
               }
@@ -563,27 +617,6 @@ const Wallet = () => {
     );
   };
 
-  // Define callbacks BEFORE early return (Rules of Hooks)
-  const handlePaymentWebViewClose = useCallback(() => {
-    setShowPaymentWebView(false);
-    setPaymentUrl(null);
-    // Check payment status when WebView is closed
-    if (currentOrderId) {
-      checkPaymentStatus(currentOrderId);
-    }
-  }, [currentOrderId]);
-
-  const handlePaymentComplete = useCallback(async (orderId) => {
-    // Use startTransition to prevent blocking updates
-    React.startTransition(() => {
-      setShowPaymentWebView(false);
-      setPaymentUrl(null);
-      setCurrentOrderId(null);
-      setPaying(false);
-    });
-    // Check payment status after state updates
-    await checkPaymentStatus(orderId);
-  }, []);
 
   if (loading && !refreshing) {
     return (
@@ -610,14 +643,6 @@ const Wallet = () => {
       {renderTransactionHistory()}
       {renderCommissionLedger()}
     </ScrollView>
-
-    {/* Payment WebView Modal */}
-    <PaymentWebView
-      visible={showPaymentWebView}
-      paymentUrl={paymentUrl}
-      onClose={handlePaymentWebViewClose}
-      onPaymentComplete={handlePaymentComplete}
-    />
     </>
   );
 };
