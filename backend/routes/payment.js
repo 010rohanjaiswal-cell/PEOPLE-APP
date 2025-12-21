@@ -307,9 +307,9 @@ router.post('/test-sdk-order', authenticate, async (req, res) => {
  * Requires authentication as freelancer
  */
 router.post('/create-dues-order', authenticate, async (req, res) => {
-  // Get Cashfree credentials and config
-  const credentials = getCashfreeCredentials();
-  const config = getCashfreeConfig();
+  // Use PhonePe for WebView payment flow (Cashfree has 403 issues with WebView)
+  const credentials = getPhonePeCredentials();
+  const config = getConfig();
 
   try {
     const user = req.user;
@@ -387,6 +387,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       amount: totalDues,
     });
 
+    // Generate X-VERIFY header for PhonePe
+    const payload = JSON.stringify(orderRequestBody);
+    const xVerify = generateXVerify(payload, orderEndpoint);
+
     let orderResponse;
     try {
       orderResponse = await axios.post(
@@ -395,16 +399,15 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'x-client-id': credentials.clientId,
-            'x-client-secret': credentials.clientSecret,
-            'x-api-version': credentials.apiVersion,
+            'X-VERIFY': xVerify,
+            'Authorization': `O-Bearer ${authToken}`,
           },
           timeout: 10000,
           validateStatus: (status) => status < 600,
         }
       );
     } catch (requestError) {
-      console.error('❌ Cashfree order request failed:', {
+      console.error('❌ PhonePe order request failed:', {
         message: requestError.message,
         code: requestError.code,
         response: requestError.response ? {
@@ -419,7 +422,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Check for error response
     if (orderResponse.status !== 200 && orderResponse.status !== 201) {
       const errorData = orderResponse.data || {};
-      console.error('❌ Cashfree order creation failed:', {
+      console.error('❌ PhonePe order creation failed:', {
         status: orderResponse.status,
         error: errorData.message || errorData.error || 'Unknown error',
         fullResponse: JSON.stringify(errorData, null, 2),
@@ -432,72 +435,43 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    const orderData = orderResponse.data;
+    const orderData = orderResponse.data?.data || orderResponse.data;
     
-    if (!orderData || !orderData.payment_session_id) {
-      console.error('❌ Cashfree order response missing payment_session_id:', {
+    if (!orderData || !orderData.instrumentResponse || !orderData.instrumentResponse.redirectInfo) {
+      console.error('❌ PhonePe order response missing redirectInfo:', {
         fullResponse: orderResponse.data,
       });
-      throw new Error('Failed to create order: missing payment_session_id in response');
+      throw new Error('Failed to create order: missing redirectInfo in response');
     }
 
-    const paymentSessionId = orderData.payment_session_id;
-    const cashfreeOrderId = orderData.order_id || merchantOrderId;
-
-    // Check what payment URL fields are available in Cashfree response
-    // Cashfree might return payment URL under different field names
-    const paymentLink = orderData.payment_link || orderData.link_url || orderData.checkout_url;
-    const paymentUrl = orderData.payment_url || orderData.payment_session_url;
+    const redirectInfo = orderData.instrumentResponse.redirectInfo;
+    const paymentUrl = redirectInfo.url;
+    const phonepeOrderId = orderData.orderId || merchantOrderId;
     
-    console.log('✅ Cashfree order created:', {
-      paymentSessionId: paymentSessionId ? `${paymentSessionId.substring(0, 20)}...` : null,
-      orderId: cashfreeOrderId,
+    console.log('✅ PhonePe order created (WebView redirect):', {
+      orderId: phonepeOrderId,
       merchantOrderId,
-      hasPaymentLink: !!paymentLink,
       hasPaymentUrl: !!paymentUrl,
-      paymentLink: paymentLink || '(not provided)',
       paymentUrl: paymentUrl || '(not provided)',
     });
 
-    // Log full response to see all available fields
-    console.log('📋 Full Cashfree order response keys:', Object.keys(orderData));
-    console.log('📋 Full Cashfree order response:', JSON.stringify(orderData, null, 2));
-
-    // Return payment session ID and order ID for frontend
-    // Prefer payment URL from API response, otherwise use payment session ID
-    // According to Cashfree docs, payment link should be in the response
-    let finalPaymentUrl = paymentLink || paymentUrl;
-    
-    // If no payment URL in response, construct it using payment session ID
-    // According to Cashfree documentation, the correct checkout URL format is:
-    // https://www.cashfree.com/pg/checkout?payment_session_id={payment_session_id}
-    // Using www. prefix as logs show redirect from cashfree.com to www.cashfree.com
-    if (!finalPaymentUrl && paymentSessionId) {
-      // Cashfree standard checkout URL format (from official docs)
-      // Using www. prefix to avoid redirect
-      finalPaymentUrl = `https://www.cashfree.com/pg/checkout?payment_session_id=${paymentSessionId}`;
-      console.log('⚠️  No payment URL in response, using constructed URL:', finalPaymentUrl);
-    }
+    // Log full response for debugging
+    console.log('📋 Full PhonePe order response:', JSON.stringify(orderData, null, 2));
     
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: cashfreeOrderId,
-      paymentSessionId: paymentSessionId, // For Cashfree checkout
-      paymentUrl: finalPaymentUrl, // Use API response or construct URL
+      orderId: phonepeOrderId,
+      paymentUrl: paymentUrl, // PhonePe redirect URL for WebView
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
-    console.log('📤 Sending response to frontend (Cashfree):', {
-      hasPaymentSessionId: !!paymentSessionId,
-      orderId: cashfreeOrderId,
+    console.log('📤 Sending response to frontend (PhonePe WebView):', {
+      orderId: phonepeOrderId,
       merchantOrderId,
-      finalPaymentUrl: finalPaymentUrl.substring(0, 100) + '...',
+      paymentUrl: paymentUrl ? paymentUrl.substring(0, 100) + '...' : '(not provided)',
     });
-    
-    // Log full orderData to see what Cashfree actually returns
-    console.log('📋 Full Cashfree order response:', JSON.stringify(orderData, null, 2));
 
     res.json(responsePayload);
   } catch (error) {
