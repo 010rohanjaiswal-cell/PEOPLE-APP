@@ -170,7 +170,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     // PhonePe SDK Order Request Body
     // For React Native SDK, we need to create an SDK order that returns orderToken
-    // Minimal request format for SDK orders (removed fields that might cause 500 error)
+    // Try minimal request format - only required fields
     const orderRequestBody = {
       merchantId: credentials.merchantId,
       merchantOrderId: merchantOrderId,
@@ -181,14 +181,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       paymentFlow: {
         type: 'SDK', // SDK flow for React Native SDK
       },
-      // NOTE: Removed merchantUserId, redirectMode, and paymentInstrument
-      // These fields might be causing the 500 error for SDK orders
     };
 
-    // Add mobileNumber if available (optional field)
-    if (user.phone && user.phone.trim().length > 0) {
-      orderRequestBody.mobileNumber = user.phone.trim();
-    }
+    // Try without mobileNumber first - it might be causing issues
+    // If needed, we can add it back later
+    // if (user.phone && user.phone.trim().length > 0) {
+    //   orderRequestBody.mobileNumber = user.phone.trim();
+    // }
 
     // PhonePe SDK Order endpoint
     const orderEndpoint = '/checkout/v2/sdk/order';
