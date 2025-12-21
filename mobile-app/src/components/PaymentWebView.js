@@ -195,12 +195,25 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
             onLoadStart={handleLoadStart}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
+            onHttpError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error('❌ WebView HTTP error:', nativeEvent);
+              console.error('   Status code:', nativeEvent.statusCode);
+              console.error('   URL:', nativeEvent.url);
+            }}
+            onMessage={(event) => {
+              console.log('📨 WebView message:', event.nativeEvent.data);
+            }}
             startInLoadingState={true}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
             allowsBackForwardNavigationGestures={true}
+            mixedContentMode="always"
+            originWhitelist={['*']}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
           />
         ) : (
           <View style={styles.loadingContainer}>
