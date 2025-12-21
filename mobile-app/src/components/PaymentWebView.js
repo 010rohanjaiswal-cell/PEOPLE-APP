@@ -67,10 +67,10 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     }
 
     // Only update state if payment not completed
+    // Update state directly - React will batch and optimize
     if (!paymentCompletedRef.current) {
-      // Use functional updates to prevent stale closure issues
-      setCanGoBack(prev => navState.canGoBack !== prev ? navState.canGoBack : prev);
-      setLoading(prev => navState.loading !== prev ? navState.loading : prev);
+      setCanGoBack(navState.canGoBack);
+      setLoading(navState.loading);
     }
 
     // Check for payment return URL (our backend redirect page)
