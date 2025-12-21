@@ -190,15 +190,18 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
             ref={webViewRef}
             source={{ 
               uri: paymentUrl,
-              // Don't override User-Agent - let WebView use app's default
-              // Cashfree needs to identify the app by its actual User-Agent for whitelisting
               headers: {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
               }
             }}
-            // Use app's default User-Agent (includes package name for whitelisting)
-            userAgent={undefined}
+            // Remove "; wv" from User-Agent to prevent Cashfree from detecting WebView
+            // Cashfree blocks WebView requests even if app is whitelisted
+            // This makes it look like a regular browser request
+            userAgent={Platform.select({
+              android: 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+              ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+            })}
             style={styles.webview}
             onNavigationStateChange={handleNavigationStateChange}
             onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
