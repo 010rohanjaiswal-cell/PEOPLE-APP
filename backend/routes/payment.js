@@ -476,7 +476,11 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       hasPaymentSessionId: !!paymentSessionId,
       orderId: cashfreeOrderId,
       merchantOrderId,
+      finalPaymentUrl: finalPaymentUrl.substring(0, 100) + '...',
     });
+    
+    // Log full orderData to see what Cashfree actually returns
+    console.log('📋 Full Cashfree order response:', JSON.stringify(orderData, null, 2));
 
     res.json(responsePayload);
   } catch (error) {
