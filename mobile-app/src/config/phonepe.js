@@ -4,6 +4,7 @@
  */
 
 import PhonePe from 'react-native-phonepe-pg';
+import { Platform } from 'react-native';
 
 // PhonePe Merchant Configuration
 // These should match your backend environment variables
@@ -143,11 +144,20 @@ export const startPhonePeTransaction = async (params) => {
     
     try {
       // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
+      // For Android, appSchema should be null (not needed)
+      // For iOS, appSchema is required
+      const Platform = require('react-native').Platform;
+      const appSchemaForSDK = Platform.OS === 'ios' ? appSchema : null;
+      
+      console.log('📱 Platform:', Platform.OS);
+      console.log('📱 App schema for SDK:', appSchemaForSDK);
+      
+      // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
       // Note: The SDK may open the payment UI and handle the flow internally
       // The response might come immediately or after payment completion
       const response = await PhonePe.startTransaction(
         requestBodyString, // Request body as JSON string
-        appSchema          // App scheme for deep linking (optional, not needed for Android)
+        appSchemaForSDK    // App scheme for deep linking (null for Android, required for iOS)
       );
       
       console.log('✅ PhonePe SDK transaction response:', response);
