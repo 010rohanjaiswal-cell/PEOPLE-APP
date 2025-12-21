@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import { colors, spacing, typography } from '../theme';
 
 const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => {
