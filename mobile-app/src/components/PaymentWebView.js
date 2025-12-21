@@ -37,27 +37,19 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       return;
     }
 
-    // Update state - React will optimize re-renders
-    setCanGoBack(navState.canGoBack);
-    if (!paymentCompletedRef.current) {
-      setLoading(navState.loading);
-    }
-
-    // Check if payment is complete by detecting deep link or success URL
     const url = navState.url || '';
     
-    // Check for deep link callback
+    // Check for deep link callback FIRST (before state updates)
     if (url.includes('people-app://payment/callback')) {
-      // Extract orderId from URL
       try {
         const urlObj = new URL(url.replace('people-app://', 'https://'));
         const orderId = urlObj.searchParams.get('orderId');
         if (orderId && !paymentCompletedRef.current) {
           paymentCompletedRef.current = true;
-          // Use setTimeout to break the update cycle
-          setTimeout(() => {
+          // Use requestAnimationFrame to break the update cycle
+          requestAnimationFrame(() => {
             onPaymentComplete(orderId);
-          }, 0);
+          });
           return;
         }
       } catch (e) {
@@ -65,15 +57,19 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       }
     }
 
+    // Only update state if payment not completed
+    if (!paymentCompletedRef.current) {
+      // Use functional updates to prevent stale closure issues
+      setCanGoBack(prev => navState.canGoBack !== prev ? navState.canGoBack : prev);
+      setLoading(prev => navState.loading !== prev ? navState.loading : prev);
+    }
+
     // Check for payment return URL (our backend redirect page)
     if (url.includes('/api/payment/return')) {
-      // Extract orderId from return URL
       try {
         const urlObj = new URL(url);
         const orderId = urlObj.searchParams.get('orderId');
         if (orderId) {
-          // The return page will try to redirect to deep link
-          // We'll detect it in handleShouldStartLoadWithRequest
           console.log('📥 Payment return page detected, orderId:', orderId);
         }
       } catch (e) {
@@ -104,10 +100,10 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
         const orderId = urlObj.searchParams.get('orderId');
         if (orderId && !paymentCompletedRef.current) {
           paymentCompletedRef.current = true;
-          // Use setTimeout to break the update cycle
-          setTimeout(() => {
+          // Use requestAnimationFrame to break the update cycle
+          requestAnimationFrame(() => {
             onPaymentComplete(orderId);
-          }, 0);
+          });
         }
       } catch (e) {
         console.error('Error parsing deep link:', e);
