@@ -3,7 +3,7 @@
  * Displays Cashfree payment page in-app using WebView
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import {
   View,
   StyleSheet,
@@ -29,14 +29,19 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     if (visible) {
       paymentCompletedRef.current = false;
       lastUrlRef.current = '';
-      setLoading(true);
-      setCanGoBack(false);
+      // Use startTransition to prevent blocking updates
+      startTransition(() => {
+        setLoading(true);
+        setCanGoBack(false);
+      });
     } else {
       // Reset when modal closes
       paymentCompletedRef.current = false;
       lastUrlRef.current = '';
-      setLoading(false);
-      setCanGoBack(false);
+      startTransition(() => {
+        setLoading(false);
+        setCanGoBack(false);
+      });
     }
   }, [visible]);
 
