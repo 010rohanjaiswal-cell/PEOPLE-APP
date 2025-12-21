@@ -151,10 +151,12 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
         </View>
 
         {/* WebView */}
-        <WebView
-          ref={(ref) => setWebViewRef(ref)}
-          source={{ uri: paymentUrl }}
-          style={styles.webview}
+        {paymentUrl && (
+          <WebView
+            key={paymentUrl} // Force remount when URL changes
+            ref={(ref) => setWebViewRef(ref)}
+            source={{ uri: paymentUrl }}
+            style={styles.webview}
           onNavigationStateChange={handleNavigationStateChange}
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           startInLoadingState={true}
