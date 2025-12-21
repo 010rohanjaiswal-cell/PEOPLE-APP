@@ -31,24 +31,20 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     }
   }, [visible]);
 
-  const handleNavigationStateChange = (navState) => {
-    // Only update state if values actually changed to prevent infinite loops
-    if (navState.canGoBack !== canGoBack) {
-      setCanGoBack(navState.canGoBack);
+  const handleNavigationStateChange = React.useCallback((navState) => {
+    // Prevent multiple payment completion calls
+    if (paymentCompletedRef.current) {
+      return;
     }
-    
-    // Only update loading if it's different and not already processing payment
-    if (navState.loading !== loading && !paymentCompletedRef.current) {
+
+    // Update state - React will optimize re-renders
+    setCanGoBack(navState.canGoBack);
+    if (!paymentCompletedRef.current) {
       setLoading(navState.loading);
     }
 
     // Check if payment is complete by detecting deep link or success URL
     const url = navState.url || '';
-    
-    // Prevent multiple payment completion calls
-    if (paymentCompletedRef.current) {
-      return;
-    }
     
     // Check for deep link callback
     if (url.includes('people-app://payment/callback')) {
@@ -56,9 +52,12 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       try {
         const urlObj = new URL(url.replace('people-app://', 'https://'));
         const orderId = urlObj.searchParams.get('orderId');
-        if (orderId) {
+        if (orderId && !paymentCompletedRef.current) {
           paymentCompletedRef.current = true;
-          onPaymentComplete(orderId);
+          // Use setTimeout to break the update cycle
+          setTimeout(() => {
+            onPaymentComplete(orderId);
+          }, 0);
           return;
         }
       } catch (e) {
@@ -87,9 +86,9 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       // Payment page redirected to success/failure
       // We'll handle this via deep link or status check
     }
-  };
+  }, [onPaymentComplete]);
 
-  const handleShouldStartLoadWithRequest = (request) => {
+  const handleShouldStartLoadWithRequest = React.useCallback((request) => {
     const url = request.url || '';
     
     // Prevent multiple calls
@@ -103,9 +102,12 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
       try {
         const urlObj = new URL(url.replace('people-app://', 'https://'));
         const orderId = urlObj.searchParams.get('orderId');
-        if (orderId) {
+        if (orderId && !paymentCompletedRef.current) {
           paymentCompletedRef.current = true;
-          onPaymentComplete(orderId);
+          // Use setTimeout to break the update cycle
+          setTimeout(() => {
+            onPaymentComplete(orderId);
+          }, 0);
         }
       } catch (e) {
         console.error('Error parsing deep link:', e);
@@ -114,7 +116,7 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     }
     
     return true; // Allow navigation
-  };
+  }, [onPaymentComplete]);
 
   const handleGoBack = () => {
     if (webViewRef && canGoBack) {
@@ -167,6 +169,13 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
             }
           }}
           onLoadEnd={() => {
+            if (!paymentCompletedRef.current) {
+              setLoading(false);
+            }
+          }}
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView error:', nativeEvent);
             if (!paymentCompletedRef.current) {
               setLoading(false);
             }
