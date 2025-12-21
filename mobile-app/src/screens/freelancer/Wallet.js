@@ -144,16 +144,16 @@ const Wallet = () => {
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
                 const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
                 
-                // Use React.startTransition to mark these as non-urgent updates
-                // This prevents blocking the UI and reduces chance of infinite loops
-                React.startTransition(() => {
-                  setCurrentOrderId(merchantOrderId);
-                  setPaymentUrl(checkoutUrl);
-                  setPaying(false); // WebView handles its own loading state
-                });
+                // Set states in a single batch - React 18+ will auto-batch these
+                // Set URL and order ID first, then open modal
+                setCurrentOrderId(merchantOrderId);
+                setPaymentUrl(checkoutUrl);
+                setPaying(false);
                 
-                // Set modal visibility separately to ensure it opens after URL is set
-                setShowPaymentWebView(true);
+                // Use setTimeout to ensure URL is set before modal opens
+                setTimeout(() => {
+                  setShowPaymentWebView(true);
+                }, 50);
               } catch (paymentError) {
                 console.error('❌ Payment error:', paymentError);
                 subscription.remove();
