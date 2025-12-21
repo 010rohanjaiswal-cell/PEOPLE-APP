@@ -397,6 +397,14 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       amount: totalDues,
       paymentFlow: orderRequestBody.paymentFlow,
     });
+    
+    // Log the complete request body for debugging and comparison with web version
+    console.log('📋 Complete PhonePe request body:', JSON.stringify(orderRequestBody, null, 2));
+    console.log('📋 Request headers:', {
+      'Content-Type': 'application/json',
+      'Authorization': `O-Bearer ${authToken.substring(0, 20)}...`,
+      'Accept': 'application/json',
+    });
 
     // For /checkout/v2/sdk/order, we use Authorization header (not X-VERIFY)
     // X-VERIFY is only for /pg/v1/pay endpoint (which doesn't exist)
