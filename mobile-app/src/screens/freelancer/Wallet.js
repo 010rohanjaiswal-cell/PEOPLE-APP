@@ -3,7 +3,7 @@
  * Implements commission/dues wallet as per APP_COMPLETE_DOCUMENTATION.md
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -563,22 +563,22 @@ const Wallet = () => {
     );
   }
 
-  const handlePaymentWebViewClose = () => {
+  const handlePaymentWebViewClose = useCallback(() => {
     setShowPaymentWebView(false);
     setPaymentUrl(null);
     // Check payment status when WebView is closed
     if (currentOrderId) {
       checkPaymentStatus(currentOrderId);
     }
-  };
+  }, [currentOrderId]);
 
-  const handlePaymentComplete = async (orderId) => {
+  const handlePaymentComplete = useCallback(async (orderId) => {
     setShowPaymentWebView(false);
     setPaymentUrl(null);
     setCurrentOrderId(null);
     setPaying(false);
     await checkPaymentStatus(orderId);
-  };
+  }, []);
 
   return (
     <>
