@@ -64,16 +64,19 @@ const getAuthToken = async () => {
     }
 
     // Get OAuth token
+    // PhonePe OAuth endpoint expects application/x-www-form-urlencoded format
+    const authParams = new URLSearchParams({
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      grant_type: 'client_credentials',
+    });
+
     const authResponse = await axios.post(
       config.AUTH_URL,
-      {
-        client_id: credentials.clientId,
-        client_secret: credentials.clientSecret,
-        grant_type: 'client_credentials',
-      },
+      authParams.toString(), // Send as URL-encoded string
       {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
         },
         timeout: 10000,
