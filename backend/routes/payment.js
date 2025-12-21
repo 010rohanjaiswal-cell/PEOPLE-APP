@@ -444,19 +444,30 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const paymentSessionId = orderData.payment_session_id;
     const cashfreeOrderId = orderData.order_id || merchantOrderId;
 
+    // Check what payment URL fields are available
+    const paymentLink = orderData.payment_link;
+    const paymentUrl = orderData.payment_url;
+    
     console.log('✅ Cashfree order created:', {
       paymentSessionId: paymentSessionId ? `${paymentSessionId.substring(0, 20)}...` : null,
       orderId: cashfreeOrderId,
       merchantOrderId,
+      hasPaymentLink: !!paymentLink,
+      hasPaymentUrl: !!paymentUrl,
+      paymentLink: paymentLink || '(not provided)',
+      paymentUrl: paymentUrl || '(not provided)',
     });
 
     // Return payment session ID and order ID for frontend
+    // Prefer payment_link or payment_url from API, otherwise construct URL
+    const finalPaymentUrl = paymentLink || paymentUrl || `https://payments.cashfree.com/checkout/paylink/${paymentSessionId}`;
+    
     const responsePayload = {
       success: true,
       merchantOrderId,
       orderId: cashfreeOrderId,
       paymentSessionId: paymentSessionId, // For Cashfree checkout
-      paymentUrl: orderData.payment_link || null, // Optional payment link
+      paymentUrl: finalPaymentUrl, // Use API response or construct URL
       amount: totalDues,
       message: 'Payment order created successfully',
     };
