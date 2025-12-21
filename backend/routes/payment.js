@@ -348,40 +348,43 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    if (!credentials.clientId || !credentials.clientSecret) {
+    if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
       return res.status(500).json({
         success: false,
-        error: 'Cashfree credentials not configured',
+        error: 'PhonePe credentials not configured',
       });
     }
 
-    // Generate merchant order ID
-    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`;
+    // Generate merchant order ID (max 63 chars for PhonePe)
+    const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // Cashfree order request body
+    // PhonePe PAY_PAGE redirect flow for WebView
+    const authToken = await getAuthToken();
+    
     const orderRequestBody = {
-      order_id: merchantOrderId,
-      order_amount: totalDues,
-      order_currency: 'INR',
-      customer_details: {
-        customer_id: freelancerId.toString(),
-        customer_name: user.name || 'Freelancer',
-        customer_email: user.email || '',
-        customer_phone: user.phone || '',
-      },
-      order_meta: {
-        // Cashfree requires HTTPS return_url, not deep links
-        // We'll handle the deep link callback via WebView navigation detection
-        return_url: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
-        notify_url: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
+      merchantId: credentials.merchantId,
+      merchantOrderId: merchantOrderId,
+      amount: totalDues * 100, // Amount in paise
+      expireAfter: 1200, // Order expiry in seconds (20 minutes)
+      merchantUserId: freelancerId.toString(),
+      redirectUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
+      paymentFlow: {
+        type: 'PAY_PAGE', // Use PAY_PAGE for WebView redirect flow
       },
     };
 
-    // Cashfree API endpoint
-    const orderEndpoint = '/pg/orders';
+    // Add mobileNumber if available
+    if (user.phone && user.phone.trim().length > 0) {
+      orderRequestBody.mobileNumber = user.phone.trim();
+    }
+
+    // PhonePe API endpoint for redirect flow
+    const orderEndpoint = '/pg/v1/pay';
     const orderUrl = `${config.API_URL}${orderEndpoint}`;
 
-    console.log('📤 Creating Cashfree order:', {
+    console.log('📤 Creating PhonePe order (WebView redirect):', {
       endpoint: orderUrl,
       merchantOrderId,
       amount: totalDues,
@@ -401,6 +404,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
             'Content-Type': 'application/json',
             'X-VERIFY': xVerify,
             'Authorization': `O-Bearer ${authToken}`,
+            'Accept': 'application/json',
           },
           timeout: 10000,
           validateStatus: (status) => status < 600,
@@ -525,9 +529,8 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       statusResponse = await axios.get(fullUrl, {
         headers: {
           'Content-Type': 'application/json',
-          'x-client-id': credentials.clientId,
-          'x-client-secret': credentials.clientSecret,
-          'x-api-version': credentials.apiVersion,
+          'Authorization': `O-Bearer ${authToken}`,
+          'Accept': 'application/json',
         },
         timeout: 10000,
         validateStatus: (status) => status < 500,
@@ -554,9 +557,9 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       throw requestError;
     }
 
-    const responseData = statusResponse.data;
+    const responseData = statusResponse.data?.data || statusResponse.data;
 
-    // Cashfree order status response format
+    // PhonePe order status response format
     // Check if it's an error response
     if (responseData.status === 'ERROR' || responseData.message) {
       return res.status(500).json({
@@ -567,27 +570,27 @@ router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
       });
     }
 
-    // Cashfree order status: PAID, ACTIVE, EXPIRED, etc.
-    const orderStatus = responseData.order_status; // PAID, ACTIVE, EXPIRED
-    const orderId = responseData.order_id;
-    const orderAmount = responseData.order_amount;
-    const paymentSessionId = responseData.payment_session_id;
+    // PhonePe order status: COMPLETED, PENDING, FAILED, etc.
+    const orderStatus = responseData.state || responseData.status; // COMPLETED, PENDING, FAILED
+    const orderId = responseData.orderId || responseData.order_id;
+    const orderAmount = responseData.amount ? responseData.amount / 100 : null; // Convert from paise to rupees
+    const transactionId = responseData.transactionId || responseData.transaction_id;
     
-    // Map Cashfree status to our status
-    const isSuccess = orderStatus === 'PAID';
-    const isPending = orderStatus === 'ACTIVE';
-    const isFailed = orderStatus === 'EXPIRED' || orderStatus === 'CANCELLED';
+    // Map PhonePe status to our status
+    const isSuccess = orderStatus === 'COMPLETED' || orderStatus === 'PAYMENT_SUCCESS';
+    const isPending = orderStatus === 'PENDING' || orderStatus === 'PAYMENT_PENDING';
+    const isFailed = orderStatus === 'FAILED' || orderStatus === 'PAYMENT_ERROR' || orderStatus === 'PAYMENT_DECLINED';
 
     res.json({
       success: true,
       orderId,
       state: orderStatus,
       amount: orderAmount,
-      transactionId: responseData.payment_session_id || null,
+      transactionId: transactionId || null,
       isSuccess,
       isPending,
       isFailed,
-      paymentDetails: responseData.payment_details || [],
+      paymentDetails: responseData.paymentDetails || responseData.payment_details || [],
       data: responseData,
     });
   } catch (error) {
