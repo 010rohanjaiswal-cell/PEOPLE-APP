@@ -362,12 +362,14 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Use SDK endpoint but without paymentInstrument to get web redirect URL
     const authToken = await getAuthToken();
     
+    // Try minimal request format - remove optional fields that might cause issues
     const orderRequestBody = {
       merchantId: credentials.merchantId,
       merchantOrderId: merchantOrderId,
       amount: totalDues * 100, // Amount in paise
       expireAfter: 1200, // Order expiry in seconds (20 minutes)
-      merchantUserId: freelancerId.toString(),
+      // Try without merchantUserId - not in PhonePe sample, might cause issues
+      // merchantUserId: freelancerId.toString(),
       redirectUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
       // Try without redirectMode - it might not be needed for web redirects
       // redirectMode: 'REDIRECT',
