@@ -1,12 +1,11 @@
 /**
- * Payment Routes - PhonePe React Native SDK Integration
+ * Payment Routes - PhonePe Node.js SDK Integration
  * Handles PhonePe payment gateway integration for commission dues payment
- * Uses React Native SDK flow (SDK orders with orderToken)
+ * Uses PhonePe official Node.js SDK (v2.0.3)
  */
 
 const express = require('express');
-const axios = require('axios');
-const crypto = require('crypto');
+const { StandardCheckoutClient, Env, CreateSdkOrderRequest } = require('pg-sdk-node');
 const { authenticate } = require('../middleware/auth');
 const CommissionTransaction = require('../models/CommissionTransaction');
 const User = require('../models/User');
@@ -14,90 +13,40 @@ const User = require('../models/User');
 const router = express.Router();
 
 // ============================================================================
-// PHONEPE CONFIGURATION
+// PHONEPE SDK INITIALIZATION
 // ============================================================================
 
-const PHONEPE_CONFIG = {
-  SANDBOX: {
-    AUTH_URL: 'https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token',
-    API_URL: 'https://api-preprod.phonepe.com/apis/pg-sandbox',
-  },
-  PRODUCTION: {
-    AUTH_URL: 'https://api.phonepe.com/apis/identity-manager/v1/oauth/token',
-    API_URL: 'https://api.phonepe.com/apis/pg',
-  },
-};
+// Initialize PhonePe SDK client (singleton - can only be initialized once)
+let phonePeClient = null;
 
-const getConfig = () => {
-  const phonepeEnv = process.env.PHONEPE_ENV || 'production';
-  return phonepeEnv === 'sandbox' ? PHONEPE_CONFIG.SANDBOX : PHONEPE_CONFIG.PRODUCTION;
-};
+const getPhonePeClient = () => {
+  if (!phonePeClient) {
+    const clientId = process.env.PHONEPE_CLIENT_ID;
+    const clientSecret = process.env.PHONEPE_CLIENT_SECRET;
+    const clientVersion = parseInt(process.env.PHONEPE_CLIENT_VERSION || '1', 10);
+    const env = process.env.PHONEPE_ENV === 'sandbox' ? Env.SANDBOX : Env.PRODUCTION;
 
-const getPhonePeCredentials = () => {
-  return {
-    merchantId: process.env.PHONEPE_MERCHANT_ID,
-    clientId: process.env.PHONEPE_CLIENT_ID,
-    clientSecret: process.env.PHONEPE_CLIENT_SECRET,
-    saltKey: process.env.PHONEPE_SALT_KEY || process.env.PHONEPE_CLIENT_SECRET,
-    saltIndex: process.env.PHONEPE_SALT_INDEX || '1',
-    webhookUsername: process.env.PHONEPE_WEBHOOK_USERNAME,
-    webhookPassword: process.env.PHONEPE_WEBHOOK_PASSWORD,
-  };
-};
-
-// In-memory cache for PhonePe OAuth token
-let cachedAuthToken = null;
-let cachedAuthTokenExpiresAt = null;
-
-const getAuthToken = async () => {
-  try {
-    // Return cached token if still valid (with 5 minute buffer)
-    if (cachedAuthToken && cachedAuthTokenExpiresAt && Date.now() < cachedAuthTokenExpiresAt - 5 * 60 * 1000) {
-      return cachedAuthToken;
-    }
-
-    const credentials = getPhonePeCredentials();
-    const config = getConfig();
-
-    if (!credentials.clientId || !credentials.clientSecret) {
+    if (!clientId || !clientSecret) {
       throw new Error('PhonePe credentials not configured');
     }
 
-    // Get OAuth token
-    // PhonePe OAuth endpoint expects application/x-www-form-urlencoded format
-    const authParams = new URLSearchParams({
-      client_id: credentials.clientId,
-      client_secret: credentials.clientSecret,
-      grant_type: 'client_credentials',
+    console.log('🔧 Initializing PhonePe Node.js SDK:', {
+      clientId: clientId ? `${clientId.substring(0, 10)}...` : 'missing',
+      clientVersion,
+      env: env === Env.PRODUCTION ? 'PRODUCTION' : 'SANDBOX',
     });
 
-    const authResponse = await axios.post(
-      config.AUTH_URL,
-      authParams.toString(), // Send as URL-encoded string
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-        },
-        timeout: 10000,
-      }
+    phonePeClient = StandardCheckoutClient.getInstance(
+      clientId,
+      clientSecret,
+      clientVersion,
+      env
     );
 
-    if (authResponse.status !== 200 || !authResponse.data?.access_token) {
-      throw new Error('Failed to get PhonePe auth token');
-    }
-
-    const { access_token, expires_in } = authResponse.data;
-
-    // Cache token
-    cachedAuthToken = access_token;
-    cachedAuthTokenExpiresAt = Date.now() + (expires_in * 1000);
-
-    return access_token;
-  } catch (error) {
-    console.error('Error getting PhonePe auth token:', error);
-    throw error;
+    console.log('✅ PhonePe Node.js SDK initialized successfully');
   }
+
+  return phonePeClient;
 };
 
 // ============================================================================
@@ -109,10 +58,8 @@ const getAuthToken = async () => {
  * POST /api/payment/create-dues-order
  * Requires authentication as freelancer
  * 
- * For React Native SDK flow:
- * 1. Backend creates SDK order using /checkout/v2/sdk/order
- * 2. Backend returns orderToken and orderId
- * 3. Mobile app uses PhonePe.startTransaction(orderToken, orderId, ...)
+ * Uses PhonePe Node.js SDK to create SDK order
+ * Returns orderToken and orderId for React Native SDK
  */
 router.post('/create-dues-order', authenticate, async (req, res) => {
   try {
@@ -152,182 +99,77 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       });
     }
 
-    const credentials = getPhonePeCredentials();
-    const config = getConfig();
-
-    if (!credentials.merchantId || !credentials.clientId || !credentials.clientSecret) {
-      return res.status(500).json({
-        success: false,
-        error: 'PhonePe credentials not configured',
-      });
-    }
-
     // Generate merchant order ID (max 63 chars for PhonePe)
     const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // Get OAuth token
-    const authToken = await getAuthToken();
+    // Get PhonePe SDK client
+    const client = getPhonePeClient();
 
-    // PhonePe SDK Order Request Body
-    // For React Native SDK, we need to create an SDK order that returns orderToken
-    // Try minimal request format - only required fields
-    const orderRequestBody = {
-      merchantId: credentials.merchantId,
-      merchantOrderId: merchantOrderId,
-      amount: totalDues * 100, // Amount in paise
-      expireAfter: 1200, // Order expiry in seconds (20 minutes)
-      redirectUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
-      callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
-      paymentFlow: {
-        type: 'SDK', // SDK flow for React Native SDK
-      },
-    };
+    // Build SDK order request using PhonePe SDK
+    const redirectUrl = `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`;
 
-    // Try without mobileNumber first - it might be causing issues
-    // If needed, we can add it back later
-    // if (user.phone && user.phone.trim().length > 0) {
-    //   orderRequestBody.mobileNumber = user.phone.trim();
-    // }
+    const sdkOrderRequest = CreateSdkOrderRequest.StandardCheckoutBuilder()
+      .merchantOrderId(merchantOrderId)
+      .amount(totalDues * 100) // Amount in paise
+      .redirectUrl(redirectUrl)
+      .expireAfter(1200) // 20 minutes in seconds
+      .build();
 
-    // PhonePe SDK Order endpoint
-    const orderEndpoint = '/checkout/v2/sdk/order';
-    const orderUrl = `${config.API_URL}${orderEndpoint}`;
-
-    // Log complete request body for debugging
-    console.log('📤 Creating PhonePe SDK order (React Native SDK):', {
-      endpoint: orderUrl,
+    console.log('📤 Creating PhonePe SDK order using Node.js SDK:', {
       merchantOrderId,
       amount: totalDues,
       amountInPaise: totalDues * 100,
-    });
-    
-    console.log('📋 Complete PhonePe SDK order request body:', JSON.stringify(orderRequestBody, null, 2));
-    console.log('📋 Request headers:', {
-      'Content-Type': 'application/json',
-      'Authorization': `O-Bearer ${authToken ? authToken.substring(0, 20) + '...' : 'missing'}`,
-      'Accept': 'application/json',
+      redirectUrl,
     });
 
-    let orderResponse;
-    try {
-      // PhonePe API requires explicit JSON string and Content-Type header
-      // Ensure the request body is properly formatted
-      orderResponse = await axios.post(
-        orderUrl,
-        JSON.stringify(orderRequestBody), // Explicitly stringify the body
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `O-Bearer ${authToken}`,
-            'Accept': 'application/json',
-          },
-          timeout: 10000,
-          validateStatus: (status) => status < 600,
-        }
-      );
-    } catch (requestError) {
-      console.error('❌ PhonePe SDK order request failed:', {
-        message: requestError.message,
-        code: requestError.code,
-        response: requestError.response ? {
-          status: requestError.response.status,
-          statusText: requestError.response.statusText,
-          data: requestError.response.data,
-        } : null,
-      });
-      throw requestError;
-    }
+    // Create SDK order using PhonePe SDK
+    const sdkOrderResponse = await client.createSdkOrder(sdkOrderRequest);
 
-    // Check for error response
-    if (orderResponse.status !== 200 && orderResponse.status !== 201) {
-      const errorData = orderResponse.data || {};
-      console.error('❌ PhonePe SDK order creation failed:', {
-        status: orderResponse.status,
-        statusText: orderResponse.statusText,
-        error: errorData.message || errorData.error || 'Unknown error',
-        code: errorData.code,
-        fullResponse: JSON.stringify(errorData, null, 2),
-        requestBody: JSON.stringify(orderRequestBody, null, 2),
-      });
-      
-      // Return the exact error from PhonePe
-      return res.status(orderResponse.status).json({
-        success: false,
-        error: errorData.message || errorData.error || 'Failed to create payment order',
-        code: errorData.code || 'ORDER_CREATION_FAILED',
-        debug: process.env.NODE_ENV === 'development' ? {
-          phonepeResponse: errorData,
-          requestBody: orderRequestBody,
-        } : undefined,
-      });
-    }
-
-    const orderData = orderResponse.data?.data || orderResponse.data;
-    
-    // PhonePe SDK order response should contain orderToken and orderId
-    // These are required for React Native SDK startTransaction
-    let orderToken = null;
-    let phonepeOrderId = merchantOrderId;
-    
-    console.log('📋 PhonePe SDK order response structure:', {
-      hasData: !!orderData,
-      dataKeys: orderData ? Object.keys(orderData) : null,
-      fullResponse: JSON.stringify(orderResponse.data, null, 2),
-    });
-    
-    // Extract orderToken and orderId from response
-    if (orderData?.orderToken) {
-      orderToken = orderData.orderToken;
-      phonepeOrderId = orderData.orderId || merchantOrderId;
-      console.log('✅ Found orderToken in SDK order response');
-    } else if (orderData?.instrumentResponse?.orderToken) {
-      orderToken = orderData.instrumentResponse.orderToken;
-      phonepeOrderId = orderData.orderId || merchantOrderId;
-      console.log('✅ Found orderToken in instrumentResponse');
-    } else {
-      console.error('❌ PhonePe SDK order response missing orderToken:', {
-        fullResponse: JSON.stringify(orderResponse.data, null, 2),
-        orderDataKeys: orderData ? Object.keys(orderData) : null,
-      });
-      throw new Error('Failed to create SDK order: missing orderToken in response. Check logs for full response structure.');
-    }
-    
     console.log('✅ PhonePe SDK order created:', {
-      orderId: phonepeOrderId,
+      orderId: sdkOrderResponse.orderId,
       merchantOrderId,
-      hasOrderToken: !!orderToken,
-      orderTokenLength: orderToken?.length || 0,
+      state: sdkOrderResponse.state,
+      hasToken: !!sdkOrderResponse.token,
+      expireAt: sdkOrderResponse.expireAt,
     });
 
     // Return orderToken and orderId for React Native SDK
     const responsePayload = {
       success: true,
       merchantOrderId,
-      orderId: phonepeOrderId,
-      orderToken: orderToken, // Required for React Native SDK startTransaction
-      merchantId: credentials.merchantId, // Required for React Native SDK request body
+      orderId: sdkOrderResponse.orderId,
+      orderToken: sdkOrderResponse.token, // Required for React Native SDK startTransaction
+      merchantId: process.env.PHONEPE_MERCHANT_ID, // Required for React Native SDK request body
       amount: totalDues,
       message: 'Payment order created successfully',
     };
 
     console.log('📤 Sending response to frontend (PhonePe React Native SDK):', {
-      orderId: phonepeOrderId,
+      orderId: sdkOrderResponse.orderId,
       merchantOrderId,
-      hasOrderToken: !!orderToken,
+      hasOrderToken: !!sdkOrderResponse.token,
     });
 
     res.json(responsePayload);
   } catch (error) {
     console.error('Error creating PhonePe SDK order:', {
-      status: error.response?.status,
-      data: error.response?.data,
       message: error.message,
+      code: error.code,
+      status: error.status,
+      data: error.data,
     });
+
     res.status(500).json({
       success: false,
-      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create payment order',
+      error: error.message || 'Failed to create payment order',
+      code: error.code || 'ORDER_CREATION_FAILED',
       debug: process.env.NODE_ENV === 'development' ? {
-        response: error.response?.data,
+        errorDetails: {
+          message: error.message,
+          code: error.code,
+          status: error.status,
+          data: error.data,
+        },
       } : undefined,
     });
   }
@@ -341,82 +183,51 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
   try {
     const { merchantOrderId } = req.params;
-    const credentials = getPhonePeCredentials();
-    const config = getConfig();
-    const authToken = await getAuthToken();
 
-    if (!credentials.merchantId) {
-      return res.status(500).json({
-        success: false,
-        error: 'PhonePe credentials not configured',
-      });
-    }
-
-    // PhonePe order status endpoint
-    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
-    const fullUrl = `${config.API_URL}${endpoint}`;
+    // Get PhonePe SDK client
+    const client = getPhonePeClient();
 
     console.log('🔍 Checking PhonePe order status:', {
       merchantOrderId,
-      endpoint: fullUrl,
     });
 
-    let statusResponse;
-    try {
-      statusResponse = await axios.get(fullUrl, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `O-Bearer ${authToken}`,
-          'Accept': 'application/json',
-        },
-        timeout: 10000,
-        validateStatus: (status) => status < 500,
-      });
-      
-      console.log('📥 Order status response:', {
-        status: statusResponse.status,
-        statusText: statusResponse.statusText,
-        dataPreview: JSON.stringify(statusResponse.data).substring(0, 200),
-      });
-    } catch (statusError) {
-      console.error('❌ Error checking order status:', {
-        message: statusError.message,
-        response: statusError.response?.data,
-      });
-      throw statusError;
-    }
+    // Check order status using PhonePe SDK
+    const statusResponse = await client.getOrderStatus(merchantOrderId);
 
-    if (statusResponse.status !== 200) {
-      const errorData = statusResponse.data || {};
-      return res.status(statusResponse.status).json({
-        success: false,
-        error: errorData.message || errorData.error || 'Failed to check order status',
-        code: errorData.code || 'STATUS_CHECK_FAILED',
-      });
-    }
-
-    const statusData = statusResponse.data?.data || statusResponse.data;
-    const orderStatus = statusData?.status || statusData?.orderStatus || 'UNKNOWN';
-    const paymentStatus = statusData?.paymentStatus || statusData?.payment?.status || 'UNKNOWN';
+    console.log('📥 Order status response:', {
+      orderId: statusResponse.order_id,
+      state: statusResponse.state,
+      amount: statusResponse.amount,
+    });
 
     // Determine if payment is successful
-    const isSuccess = orderStatus === 'PAYMENT_SUCCESS' || 
-                     orderStatus === 'SUCCESS' ||
-                     paymentStatus === 'SUCCESS' ||
-                     paymentStatus === 'PAYMENT_SUCCESS';
+    const isSuccess = statusResponse.state === 'COMPLETED';
+    const isFailed = statusResponse.state === 'FAILED';
+    const isPending = statusResponse.state === 'PENDING';
 
     res.json({
       success: true,
-      orderStatus,
-      paymentStatus,
+      orderStatus: statusResponse.state,
+      paymentStatus: statusResponse.state,
       isSuccess,
-      data: statusData,
+      isFailed,
+      isPending,
+      orderId: statusResponse.order_id,
+      amount: statusResponse.amount,
+      expireAt: statusResponse.expire_at,
+      paymentDetails: statusResponse.payment_details || [],
     });
   } catch (error) {
-    console.error('Error checking order status:', error);
+    console.error('Error checking order status:', {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+    });
+
     res.status(500).json({
       success: false,
-      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to check order status',
+      error: error.message || 'Failed to check order status',
+      code: error.code || 'STATUS_CHECK_FAILED',
     });
   }
 });
@@ -497,21 +308,43 @@ router.get('/return', async (req, res) => {
 router.post('/webhook', async (req, res) => {
   try {
     const webhookData = req.body;
+    const authHeader = req.headers.authorization;
     
     console.log('📥 PhonePe Webhook Received:', {
       type: webhookData.type,
       orderId: webhookData.data?.order?.merchantOrderId,
-      orderStatus: webhookData.data?.order?.status,
-      paymentStatus: webhookData.data?.payment?.status,
+      orderStatus: webhookData.data?.order?.state,
+      paymentStatus: webhookData.data?.payment?.state,
     });
 
-    // PhonePe webhook structure: { type, data: { order: {...}, payment: {...} } }
-    if (!webhookData.type || !webhookData.data) {
-      console.error('❌ Invalid PhonePe webhook format');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid webhook format' 
-      });
+    // Get PhonePe SDK client for webhook validation
+    const client = getPhonePeClient();
+    const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME;
+    const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD;
+
+    // Validate webhook using PhonePe SDK
+    if (webhookUsername && webhookPassword && authHeader) {
+      try {
+        const callbackResponse = client.validateCallback(
+          webhookUsername,
+          webhookPassword,
+          authHeader,
+          JSON.stringify(webhookData)
+        );
+
+        if (!callbackResponse.isValid) {
+          console.error('❌ Invalid PhonePe webhook - validation failed');
+          return res.status(401).json({ 
+            success: false, 
+            error: 'Invalid webhook signature' 
+          });
+        }
+
+        console.log('✅ PhonePe webhook validated successfully');
+      } catch (validationError) {
+        console.error('❌ Error validating webhook:', validationError);
+        // Continue processing even if validation fails (for development)
+      }
     }
 
     // Handle payment status updates
@@ -519,17 +352,17 @@ router.post('/webhook', async (req, res) => {
     const paymentData = webhookData.data?.payment;
 
     if (orderData && paymentData) {
-      const orderStatus = orderData.status;
-      const paymentStatus = paymentData.status;
+      const orderStatus = orderData.state;
+      const paymentStatus = paymentData.state;
       const merchantOrderId = orderData.merchantOrderId;
 
       // If payment is successful, process dues
-      if (orderStatus === 'PAYMENT_SUCCESS' && paymentStatus === 'SUCCESS') {
+      if (orderStatus === 'COMPLETED' && paymentStatus === 'COMPLETED') {
         await handlePhonePeOrderCompleted({
           merchantOrderId: merchantOrderId,
           amount: orderData.amount / 100, // Convert from paise to rupees
         });
-      } else if (paymentStatus === 'FAILED' || orderStatus === 'PAYMENT_ERROR') {
+      } else if (paymentStatus === 'FAILED' || orderStatus === 'FAILED') {
         console.log('❌ Payment failed:', {
           merchantOrderId,
           orderStatus,
