@@ -44,6 +44,11 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
 
     const url = navState.url || '';
     
+    // Log navigation for debugging
+    if (url && !url.includes('people-app://')) {
+      console.log('🔗 WebView navigating to:', url.substring(0, 100) + (url.length > 100 ? '...' : ''));
+    }
+    
     // Check for deep link callback
     if (url.includes('people-app://payment/callback')) {
       isProcessingRef.current = true;
@@ -131,18 +136,25 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
   };
 
   const handleLoadStart = () => {
+    console.log('🌐 WebView load started');
     if (!paymentCompletedRef.current) {
       setLoading(true);
     }
   };
 
   const handleLoadEnd = () => {
+    console.log('✅ WebView load ended');
     if (!paymentCompletedRef.current) {
       setLoading(false);
     }
   };
 
-  const handleError = () => {
+  const handleError = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    console.error('❌ WebView error:', nativeEvent);
+    console.error('   Error URL:', nativeEvent.url);
+    console.error('   Error code:', nativeEvent.code);
+    console.error('   Error description:', nativeEvent.description);
     if (!paymentCompletedRef.current) {
       setLoading(false);
     }
