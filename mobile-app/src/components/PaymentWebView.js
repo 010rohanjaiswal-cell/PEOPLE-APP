@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { colors, spacing, typography } from '../theme';
 
 const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => {
@@ -190,12 +191,15 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
             ref={webViewRef}
             source={{ 
               uri: paymentUrl,
+              // Don't override User-Agent - let WebView use app's default
+              // Cashfree needs to identify the app by its actual User-Agent for whitelisting
               headers: {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
               }
             }}
+            // Use app's default User-Agent (includes package name for whitelisting)
+            userAgent={undefined}
             style={styles.webview}
             onNavigationStateChange={handleNavigationStateChange}
             onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
