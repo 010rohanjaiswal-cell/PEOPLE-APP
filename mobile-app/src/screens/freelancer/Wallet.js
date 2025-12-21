@@ -144,10 +144,14 @@ const Wallet = () => {
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
                 const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
                 
-                setCurrentOrderId(merchantOrderId);
-                setPaymentUrl(checkoutUrl);
-                setShowPaymentWebView(true);
-                setPaying(false); // WebView handles its own loading state
+                // Batch state updates to prevent multiple re-renders
+                // Use setTimeout to ensure state updates happen after current render cycle
+                setTimeout(() => {
+                  setCurrentOrderId(merchantOrderId);
+                  setPaymentUrl(checkoutUrl);
+                  setPaying(false); // WebView handles its own loading state
+                  setShowPaymentWebView(true); // Set this last to open modal
+                }, 0);
               } catch (paymentError) {
                 console.error('❌ Payment error:', paymentError);
                 subscription.remove();
