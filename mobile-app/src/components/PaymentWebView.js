@@ -197,9 +197,9 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
           </View>
         )}
 
-        {/* Loading Indicator */}
-        {loading && (
-          <View style={styles.loadingContainer}>
+        {/* Loading Indicator - Show when WebView is loading */}
+        {loading && paymentUrl && (
+          <View style={styles.overlayLoadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         )}
@@ -238,6 +238,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    ...typography.body,
+    color: colors.textSecondary || colors.text,
+  },
+  overlayLoadingContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
