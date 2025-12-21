@@ -358,7 +358,8 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // Generate merchant order ID (max 63 chars for PhonePe)
     const merchantOrderId = `DUES_${freelancerId.toString()}_${Date.now()}`.substring(0, 63);
 
-    // PhonePe PAY_PAGE redirect flow for WebView
+    // PhonePe web redirect flow for WebView (same format as web version)
+    // Use SDK endpoint but without paymentInstrument to get web redirect URL
     const authToken = await getAuthToken();
     
     const orderRequestBody = {
@@ -371,8 +372,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       paymentFlow: {
-        type: 'PAY_PAGE', // Use PAY_PAGE for WebView redirect flow
+        type: 'SDK', // Use SDK flow (same as web version)
       },
+      // Don't include paymentInstrument - this allows PhonePe to return web redirect URL
+      // instead of orderToken for native SDK
     };
 
     // Add mobileNumber if available
