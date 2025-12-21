@@ -28,6 +28,12 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     if (visible) {
       paymentCompletedRef.current = false;
       setLoading(true);
+      setCanGoBack(false);
+    } else {
+      // Reset when modal closes
+      paymentCompletedRef.current = false;
+      setLoading(false);
+      setCanGoBack(false);
     }
   }, [visible]);
 

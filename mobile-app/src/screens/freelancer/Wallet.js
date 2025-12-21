@@ -144,14 +144,12 @@ const Wallet = () => {
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
                 const checkoutUrl = orderPaymentUrl || `https://www.cashfree.com/checkout/paylink/${paymentSessionId}`;
                 
-                // Batch state updates to prevent multiple re-renders
-                // Use setTimeout to ensure state updates happen after current render cycle
-                setTimeout(() => {
-                  setCurrentOrderId(merchantOrderId);
-                  setPaymentUrl(checkoutUrl);
-                  setPaying(false); // WebView handles its own loading state
-                  setShowPaymentWebView(true); // Set this last to open modal
-                }, 0);
+                // Set all states at once using React's automatic batching (React 18+)
+                // This prevents multiple re-renders
+                setCurrentOrderId(merchantOrderId);
+                setPaymentUrl(checkoutUrl);
+                setPaying(false); // WebView handles its own loading state
+                setShowPaymentWebView(true); // Open modal
               } catch (paymentError) {
                 console.error('❌ Payment error:', paymentError);
                 subscription.remove();
