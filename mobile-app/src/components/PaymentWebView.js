@@ -148,11 +148,6 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
     }
   };
 
-  // Don't render if no payment URL
-  if (!paymentUrl) {
-    return null;
-  }
-
   return (
     <Modal
       visible={visible}
@@ -177,23 +172,30 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
           <View style={styles.placeholder} />
         </View>
 
-        {/* WebView */}
-        <WebView
-          ref={webViewRef}
-          source={{ uri: paymentUrl }}
-          style={styles.webview}
-          onNavigationStateChange={handleNavigationStateChange}
-          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
-          onLoadStart={handleLoadStart}
-          onLoadEnd={handleLoadEnd}
-          onError={handleError}
-          startInLoadingState={true}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          sharedCookiesEnabled={true}
-          thirdPartyCookiesEnabled={true}
-          allowsBackForwardNavigationGestures={true}
-        />
+        {/* WebView - Only render if paymentUrl is available */}
+        {paymentUrl ? (
+          <WebView
+            ref={webViewRef}
+            source={{ uri: paymentUrl }}
+            style={styles.webview}
+            onNavigationStateChange={handleNavigationStateChange}
+            onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+            onLoadStart={handleLoadStart}
+            onLoadEnd={handleLoadEnd}
+            onError={handleError}
+            startInLoadingState={true}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            sharedCookiesEnabled={true}
+            thirdPartyCookiesEnabled={true}
+            allowsBackForwardNavigationGestures={true}
+          />
+        ) : (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading payment page...</Text>
+          </View>
+        )}
 
         {/* Loading Indicator */}
         {loading && (
