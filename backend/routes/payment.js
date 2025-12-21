@@ -369,13 +369,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       expireAfter: 1200, // Order expiry in seconds (20 minutes)
       merchantUserId: freelancerId.toString(),
       redirectUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`,
-      redirectMode: 'REDIRECT',
+      // Try without redirectMode - it might not be needed for web redirects
+      // redirectMode: 'REDIRECT',
       callbackUrl: `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/webhook`,
       paymentFlow: {
         type: 'SDK', // Use SDK flow (same as web version)
       },
       // Include paymentInstrument - PhonePe requires this for SDK orders
-      // Even for web redirect, we need this field
       paymentInstrument: {
         type: 'UPI_INTENT', // Required for SDK orders
       },
