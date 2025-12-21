@@ -374,8 +374,11 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       paymentFlow: {
         type: 'SDK', // Use SDK flow (same as web version)
       },
-      // Don't include paymentInstrument - this allows PhonePe to return web redirect URL
-      // instead of orderToken for native SDK
+      // Include paymentInstrument - PhonePe requires this for SDK orders
+      // Even for web redirect, we need this field
+      paymentInstrument: {
+        type: 'UPI_INTENT', // Required for SDK orders
+      },
     };
 
     // Add mobileNumber if available
