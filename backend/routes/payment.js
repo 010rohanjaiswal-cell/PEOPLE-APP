@@ -441,16 +441,30 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     const orderData = orderResponse.data?.data || orderResponse.data;
     
-    if (!orderData || !orderData.instrumentResponse || !orderData.instrumentResponse.redirectInfo) {
-      console.error('❌ PhonePe order response missing redirectInfo:', {
+    // PhonePe /checkout/v2/order response format might be different
+    // Check for redirectInfo or direct URL in response
+    let paymentUrl = null;
+    let phonepeOrderId = merchantOrderId;
+    
+    if (orderData?.instrumentResponse?.redirectInfo?.url) {
+      // Standard redirect response format
+      paymentUrl = orderData.instrumentResponse.redirectInfo.url;
+      phonepeOrderId = orderData.orderId || merchantOrderId;
+    } else if (orderData?.redirectUrl) {
+      // Direct redirect URL in response
+      paymentUrl = orderData.redirectUrl;
+      phonepeOrderId = orderData.orderId || merchantOrderId;
+    } else if (orderData?.url) {
+      // URL directly in response
+      paymentUrl = orderData.url;
+      phonepeOrderId = orderData.orderId || merchantOrderId;
+    } else {
+      console.error('❌ PhonePe order response missing payment URL:', {
         fullResponse: orderResponse.data,
+        orderDataKeys: orderData ? Object.keys(orderData) : null,
       });
-      throw new Error('Failed to create order: missing redirectInfo in response');
+      throw new Error('Failed to create order: missing payment URL in response');
     }
-
-    const redirectInfo = orderData.instrumentResponse.redirectInfo;
-    const paymentUrl = redirectInfo.url;
-    const phonepeOrderId = orderData.orderId || merchantOrderId;
     
     console.log('✅ PhonePe order created (WebView redirect):', {
       orderId: phonepeOrderId,
