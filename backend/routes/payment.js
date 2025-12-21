@@ -208,9 +208,11 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     let orderResponse;
     try {
+      // PhonePe API requires explicit JSON string and Content-Type header
+      // Ensure the request body is properly formatted
       orderResponse = await axios.post(
         orderUrl,
-        orderRequestBody,
+        JSON.stringify(orderRequestBody), // Explicitly stringify the body
         {
           headers: {
             'Content-Type': 'application/json',
