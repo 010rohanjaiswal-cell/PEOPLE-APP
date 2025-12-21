@@ -460,7 +460,9 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     // Return payment session ID and order ID for frontend
     // Prefer payment_link or payment_url from API, otherwise construct URL
-    const finalPaymentUrl = paymentLink || paymentUrl || `https://payments.cashfree.com/checkout/paylink/${paymentSessionId}`;
+    // Try different URL formats based on Cashfree documentation
+    const finalPaymentUrl = paymentLink || paymentUrl || 
+      `https://cashfree.com/checkout/post/submit?paymentSessionId=${paymentSessionId}`;
     
     const responsePayload = {
       success: true,

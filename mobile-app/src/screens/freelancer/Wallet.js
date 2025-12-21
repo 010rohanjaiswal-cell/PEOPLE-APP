@@ -148,8 +148,8 @@ const Wallet = () => {
                 });
                 
                 // Use paymentUrl if available, otherwise construct from paymentSessionId
-                // Cashfree checkout URL format: https://payments.cashfree.com/checkout/paylink/{paymentSessionId}
-                const checkoutUrl = orderPaymentUrl || `https://payments.cashfree.com/checkout/paylink/${paymentSessionId}`;
+                // Cashfree checkout URL format: https://cashfree.com/checkout/post/submit?paymentSessionId={paymentSessionId}
+                const checkoutUrl = orderPaymentUrl || `https://cashfree.com/checkout/post/submit?paymentSessionId=${paymentSessionId}`;
                 
                 console.log('🔗 Final checkout URL:', checkoutUrl);
                 
