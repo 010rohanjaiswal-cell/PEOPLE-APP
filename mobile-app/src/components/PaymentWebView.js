@@ -3,7 +3,7 @@
  * Displays Cashfree payment page in-app using WebView
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,13 +21,34 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [webViewRef, setWebViewRef] = useState(null);
+  const paymentCompletedRef = useRef(false); // Prevent multiple calls
+
+  // Reset payment completed flag when modal opens/closes
+  useEffect(() => {
+    if (visible) {
+      paymentCompletedRef.current = false;
+      setLoading(true);
+    }
+  }, [visible]);
 
   const handleNavigationStateChange = (navState) => {
-    setCanGoBack(navState.canGoBack);
-    setLoading(navState.loading);
+    // Only update state if values actually changed to prevent infinite loops
+    if (navState.canGoBack !== canGoBack) {
+      setCanGoBack(navState.canGoBack);
+    }
+    
+    // Only update loading if it's different and not already processing payment
+    if (navState.loading !== loading && !paymentCompletedRef.current) {
+      setLoading(navState.loading);
+    }
 
     // Check if payment is complete by detecting deep link or success URL
     const url = navState.url || '';
+    
+    // Prevent multiple payment completion calls
+    if (paymentCompletedRef.current) {
+      return;
+    }
     
     // Check for deep link callback
     if (url.includes('people-app://payment/callback')) {
@@ -36,6 +57,7 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
         const urlObj = new URL(url.replace('people-app://', 'https://'));
         const orderId = urlObj.searchParams.get('orderId');
         if (orderId) {
+          paymentCompletedRef.current = true;
           onPaymentComplete(orderId);
           return;
         }
@@ -70,9 +92,24 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
   const handleShouldStartLoadWithRequest = (request) => {
     const url = request.url || '';
     
+    // Prevent multiple calls
+    if (paymentCompletedRef.current) {
+      return false;
+    }
+    
     // Intercept deep link callbacks
     if (url.startsWith('people-app://')) {
-      handleNavigationStateChange({ url });
+      // Extract orderId and call completion handler directly
+      try {
+        const urlObj = new URL(url.replace('people-app://', 'https://'));
+        const orderId = urlObj.searchParams.get('orderId');
+        if (orderId) {
+          paymentCompletedRef.current = true;
+          onPaymentComplete(orderId);
+        }
+      } catch (e) {
+        console.error('Error parsing deep link:', e);
+      }
       return false; // Don't load in WebView, handle via deep link
     }
     
@@ -124,8 +161,16 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
           sharedCookiesEnabled={true}
           thirdPartyCookiesEnabled={true}
           allowsBackForwardNavigationGestures={true}
-          onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => setLoading(false)}
+          onLoadStart={() => {
+            if (!paymentCompletedRef.current) {
+              setLoading(true);
+            }
+          }}
+          onLoadEnd={() => {
+            if (!paymentCompletedRef.current) {
+              setLoading(false);
+            }
+          }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.error('WebView error:', nativeEvent);
