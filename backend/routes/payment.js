@@ -396,13 +396,14 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     let orderResponse;
     try {
+      // Use Authorization header (not X-VERIFY) for /checkout/v2/sdk/order
+      // This is the same format that works on web
       orderResponse = await axios.post(
         orderUrl,
         orderRequestBody,
         {
           headers: {
             'Content-Type': 'application/json',
-            'X-VERIFY': xVerify,
             'Authorization': `O-Bearer ${authToken}`,
             'Accept': 'application/json',
           },
@@ -441,29 +442,55 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 
     const orderData = orderResponse.data?.data || orderResponse.data;
     
-    // PhonePe /checkout/v2/order response format might be different
-    // Check for redirectInfo or direct URL in response
+    // PhonePe /checkout/v2/sdk/order response format for PAY_PAGE flow
+    // Check for redirectInfo or direct URL in response (same as web version)
     let paymentUrl = null;
     let phonepeOrderId = merchantOrderId;
     
+    // Log full response to see what PhonePe returns
+    console.log('📋 PhonePe order response structure:', {
+      hasData: !!orderData,
+      dataKeys: orderData ? Object.keys(orderData) : null,
+      fullResponse: JSON.stringify(orderResponse.data, null, 2).substring(0, 500),
+    });
+    
     if (orderData?.instrumentResponse?.redirectInfo?.url) {
-      // Standard redirect response format
+      // Standard redirect response format (most common)
       paymentUrl = orderData.instrumentResponse.redirectInfo.url;
       phonepeOrderId = orderData.orderId || merchantOrderId;
+      console.log('✅ Found redirect URL in instrumentResponse.redirectInfo.url');
+    } else if (orderData?.redirectInfo?.url) {
+      // Alternative format: redirectInfo directly in orderData
+      paymentUrl = orderData.redirectInfo.url;
+      phonepeOrderId = orderData.orderId || merchantOrderId;
+      console.log('✅ Found redirect URL in redirectInfo.url');
     } else if (orderData?.redirectUrl) {
       // Direct redirect URL in response
       paymentUrl = orderData.redirectUrl;
       phonepeOrderId = orderData.orderId || merchantOrderId;
+      console.log('✅ Found redirect URL in redirectUrl');
     } else if (orderData?.url) {
       // URL directly in response
       paymentUrl = orderData.url;
       phonepeOrderId = orderData.orderId || merchantOrderId;
+      console.log('✅ Found redirect URL in url');
+    } else if (orderData?.orderToken) {
+      // If we get orderToken instead of redirect URL, construct payment URL
+      // PhonePe web payment URL format: https://mercury-uat.phonepe.com/v4/pay?token={orderToken}
+      // For production: https://mercury.phonepe.com/v4/pay?token={orderToken}
+      const isProduction = process.env.PHONEPE_ENV !== 'sandbox';
+      const baseUrl = isProduction 
+        ? 'https://mercury.phonepe.com' 
+        : 'https://mercury-uat.phonepe.com';
+      paymentUrl = `${baseUrl}/v4/pay?token=${orderData.orderToken}`;
+      phonepeOrderId = orderData.orderId || merchantOrderId;
+      console.log('✅ Constructed payment URL from orderToken');
     } else {
       console.error('❌ PhonePe order response missing payment URL:', {
-        fullResponse: orderResponse.data,
+        fullResponse: JSON.stringify(orderResponse.data, null, 2),
         orderDataKeys: orderData ? Object.keys(orderData) : null,
       });
-      throw new Error('Failed to create order: missing payment URL in response');
+      throw new Error('Failed to create order: missing payment URL in response. Check logs for full response structure.');
     }
     
     console.log('✅ PhonePe order created (WebView redirect):', {
