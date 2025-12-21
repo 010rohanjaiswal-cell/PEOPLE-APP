@@ -178,11 +178,8 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
               setLoading(false);
             }
           }}
-          onError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.error('WebView error:', nativeEvent);
-          }}
         />
+        )}
 
         {/* Loading Indicator */}
         {loading && (
