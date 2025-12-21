@@ -470,10 +470,12 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     
     // If no payment URL in response, construct it using payment session ID
     // According to Cashfree documentation, the correct checkout URL format is:
-    // https://cashfree.com/pg/checkout?payment_session_id={payment_session_id}
+    // https://www.cashfree.com/pg/checkout?payment_session_id={payment_session_id}
+    // Using www. prefix as logs show redirect from cashfree.com to www.cashfree.com
     if (!finalPaymentUrl && paymentSessionId) {
       // Cashfree standard checkout URL format (from official docs)
-      finalPaymentUrl = `https://cashfree.com/pg/checkout?payment_session_id=${paymentSessionId}`;
+      // Using www. prefix to avoid redirect
+      finalPaymentUrl = `https://www.cashfree.com/pg/checkout?payment_session_id=${paymentSessionId}`;
       console.log('⚠️  No payment URL in response, using constructed URL:', finalPaymentUrl);
     }
     
