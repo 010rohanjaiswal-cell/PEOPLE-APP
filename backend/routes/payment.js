@@ -504,21 +504,22 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
 router.get('/order-status/:merchantOrderId', authenticate, async (req, res) => {
   try {
     const { merchantOrderId } = req.params;
-    const credentials = getCashfreeCredentials();
-    const config = getCashfreeConfig();
+    const credentials = getPhonePeCredentials();
+    const config = getConfig();
+    const authToken = await getAuthToken();
 
-    if (!credentials.clientId || !credentials.clientSecret) {
+    if (!credentials.merchantId) {
       return res.status(500).json({
         success: false,
-        error: 'Cashfree credentials not configured',
+        error: 'PhonePe credentials not configured',
       });
     }
 
-    // Cashfree order status endpoint
-    const endpoint = `/pg/orders/${merchantOrderId}`;
+    // PhonePe order status endpoint
+    const endpoint = `/checkout/v2/order/${merchantOrderId}/status`;
     const fullUrl = `${config.API_URL}${endpoint}`;
 
-    console.log('🔍 Checking Cashfree order status:', {
+    console.log('🔍 Checking PhonePe order status:', {
       merchantOrderId,
       endpoint: fullUrl,
     });
