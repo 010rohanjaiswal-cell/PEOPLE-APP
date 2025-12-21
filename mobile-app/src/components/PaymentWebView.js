@@ -48,6 +48,12 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
 
     const url = navState.url || '';
     
+    // Prevent processing the same URL multiple times (deduplication)
+    if (url === lastUrlRef.current && url !== '') {
+      return; // Skip if we've already processed this URL
+    }
+    lastUrlRef.current = url;
+    
     // Check for deep link callback FIRST (before state updates)
     if (url.includes('people-app://payment/callback')) {
       try {
@@ -55,6 +61,7 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
         const orderId = urlObj.searchParams.get('orderId');
         if (orderId && !paymentCompletedRef.current) {
           paymentCompletedRef.current = true;
+          lastUrlRef.current = ''; // Reset to allow future navigation
           // Use requestAnimationFrame to break the update cycle
           requestAnimationFrame(() => {
             onPaymentComplete(orderId);
