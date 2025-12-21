@@ -380,19 +380,20 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       orderRequestBody.mobileNumber = user.phone.trim();
     }
 
-    // PhonePe API endpoint for redirect flow
-    const orderEndpoint = '/pg/v1/pay';
+    // Use the SAME endpoint that works on web: /checkout/v2/sdk/order
+    // This endpoint works for both SDK and web redirect flows
+    const orderEndpoint = '/checkout/v2/sdk/order';
     const orderUrl = `${config.API_URL}${orderEndpoint}`;
 
-    console.log('📤 Creating PhonePe order (WebView redirect):', {
+    console.log('📤 Creating PhonePe order (WebView redirect - same as web):', {
       endpoint: orderUrl,
       merchantOrderId,
       amount: totalDues,
+      paymentFlow: orderRequestBody.paymentFlow,
     });
 
-    // Generate X-VERIFY header for PhonePe
-    const payload = JSON.stringify(orderRequestBody);
-    const xVerify = generateXVerify(payload, orderEndpoint);
+    // For /checkout/v2/sdk/order, we use Authorization header (not X-VERIFY)
+    // X-VERIFY is only for /pg/v1/pay endpoint (which doesn't exist)
 
     let orderResponse;
     try {
