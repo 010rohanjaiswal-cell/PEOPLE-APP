@@ -147,19 +147,16 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     };
     const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
     
-    // Generate checksum using PhonePe format
-    // Try format 1: SHA256(base64(request body) + salt key)
+    // Generate checksum using PhonePe standard format
+    // PhonePe checksum: SHA256(base64(request body) + salt key + endpoint)
+    // For SDK orders, the endpoint is typically /pg/v1/pay
     const saltKey = process.env.PHONEPE_CLIENT_SECRET;
     const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
+    const endpoint = '/pg/v1/pay'; // PhonePe payment endpoint
     
-    // For SDK orders, try simpler format first (without endpoint)
-    let checkSumString = base64RequestBody + saltKey;
-    let checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
-    
-    // If that doesn't work, we might need: base64(request body) + salt key + endpoint
-    // const endpoint = '/pg/v1/pay';
-    // checkSumString = base64RequestBody + saltKey + endpoint;
-    // checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
+    // Standard PhonePe checksum format
+    const checkSumString = base64RequestBody + saltKey + endpoint;
+    const checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
     
     console.log('🔐 Generated checksum for SDK transaction:', {
       requestBodyLength: sdkRequestBodyString.length,
