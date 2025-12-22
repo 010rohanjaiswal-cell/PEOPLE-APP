@@ -177,25 +177,12 @@ export const startPhonePeTransaction = async (params) => {
       // For iOS: appSchema is required
       let response;
       
+      // React Native bridge on Android cannot handle null for optional parameters
+      // Always pass a string value - use empty string for Android, appSchema for iOS
       if (Platform.OS === 'android') {
-        // For Android, try different appSchema values to avoid NativeArgumentsParseException
-        console.log('📱 Android: Trying with null appSchema...');
-        try {
-          // Try with null first (most likely to work)
-          response = await PhonePe.startTransaction(requestBodyString, null);
-          console.log('✅ Android call with null appSchema succeeded');
-        } catch (error1) {
-          console.log('⚠️ Android call with null failed, trying with empty string...');
-          try {
-            // Try with empty string
-            response = await PhonePe.startTransaction(requestBodyString, '');
-            console.log('✅ Android call with empty string succeeded');
-          } catch (error2) {
-            console.log('⚠️ Android call with empty string failed, trying with appSchema...');
-            // Last resort: try with actual appSchema
-            response = await PhonePe.startTransaction(requestBodyString, appSchema);
-          }
-        }
+        // For Android, use empty string instead of null (React Native bridge limitation)
+        console.log('📱 Android: Using empty string for appSchema (React Native bridge cannot handle null)');
+        response = await PhonePe.startTransaction(requestBodyString, '');
       } else {
         // For iOS, appSchema is required
         console.log('📱 iOS: Calling with appSchema:', appSchema);
