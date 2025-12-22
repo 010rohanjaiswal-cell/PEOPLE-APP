@@ -9,6 +9,7 @@ const { StandardCheckoutClient, Env, CreateSdkOrderRequest } = require('pg-sdk-n
 const { authenticate } = require('../middleware/auth');
 const CommissionTransaction = require('../models/CommissionTransaction');
 const User = require('../models/User');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -133,13 +134,33 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       expireAt: sdkOrderResponse.expireAt,
     });
 
-    // Return orderToken and orderId for React Native SDK
+    // Generate checksum for React Native SDK startTransaction
+    // PhonePe checksum: SHA256(request body + salt key)
+    // For SDK orders, the request body will be: {orderId, merchantId, token, paymentMode: {type: "PAY_PAGE"}}
+    const sdkRequestBody = {
+      orderId: sdkOrderResponse.orderId,
+      merchantId: process.env.PHONEPE_MERCHANT_ID,
+      token: sdkOrderResponse.token,
+      paymentMode: {
+        type: 'PAY_PAGE',
+      },
+    };
+    const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
+    
+    // Generate checksum using SHA256(request body + salt key)
+    // Salt key is the same as clientSecret for PhonePe
+    const saltKey = process.env.PHONEPE_CLIENT_SECRET;
+    const checkSumString = sdkRequestBodyString + saltKey;
+    const checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
+
+    // Return orderToken, orderId, and checkSum for React Native SDK
     const responsePayload = {
       success: true,
       merchantOrderId,
       orderId: sdkOrderResponse.orderId,
       orderToken: sdkOrderResponse.token, // Required for React Native SDK startTransaction
       merchantId: process.env.PHONEPE_MERCHANT_ID, // Required for React Native SDK request body
+      checkSum: checkSum, // Required for React Native SDK startTransaction
       amount: totalDues,
       message: 'Payment order created successfully',
     };
