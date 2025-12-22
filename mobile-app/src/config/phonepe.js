@@ -209,19 +209,13 @@ export const startPhonePeTransaction = async (params) => {
       // This wrapper accepts 2 parameters and internally handles the 4-parameter call
       
       // The native module requires a non-empty checksum
-      // If checkSum is provided, use it; otherwise generate a fallback
-      // Note: Backend should provide the checksum, but we handle the case where it's missing
-      let finalCheckSum = checkSum;
-      if (!finalCheckSum || finalCheckSum.trim().length === 0) {
-        // Generate a simple checksum from the request body as fallback
-        // This is a workaround - ideally backend should provide checksum
-        // Using a simple hash of the request body
-        const crypto = require('crypto');
-        finalCheckSum = crypto.createHash('sha256')
-          .update(requestBodyString)
-          .digest('hex');
-        console.log('⚠️ No checksum provided by backend, generated fallback checksum');
+      // Backend MUST provide the checksum (it's generated with salt key which is only on backend)
+      // React Native doesn't have Node's crypto module, so we can't generate it here
+      if (!checkSum || checkSum.trim().length === 0) {
+        throw new Error('Checksum is required and must be provided by the backend. React Native cannot generate checksum without the salt key.');
       }
+      
+      const finalCheckSum = checkSum;
       
       const packageName = null; // Optional package name (always null per native module)
       
