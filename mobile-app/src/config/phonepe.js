@@ -68,12 +68,20 @@ export const initializePhonePe = async (flowId = null) => {
  * 4. SDK uses request body string to start transaction
  * 
  * PhonePe React Native SDK startTransaction signature: 
- * startTransaction(orderToken: string, orderId: string, packageName: string | null, appSchema: string | null)
+ * startTransaction(requestBodyString: string, appSchema: string | null)
+ * 
+ * Request body format (as JSON string):
+ * {
+ *   "orderId": <orderId>,
+ *   "merchantId": <merchantId>,
+ *   "token": <orderToken>,
+ *   "paymentMode": {
+ *     "type": "PAY_PAGE"
+ *   }
+ * }
  * 
  * Parameters:
- * - orderToken: Order token from SDK order (REQUIRED)
- * - orderId: Order ID from SDK order (REQUIRED)
- * - packageName: Package name (optional, can be null)
+ * - requestBodyString: JSON string containing orderId, merchantId, token, paymentMode (REQUIRED)
  * - appSchema: App scheme for deep linking (optional for Android, required for iOS)
  * 
  * @param {Object} params - Transaction parameters
@@ -123,13 +131,33 @@ export const startPhonePeTransaction = async (params) => {
       methodType: typeof PhonePe.startTransaction,
     });
 
-    // PhonePe React Native SDK startTransaction signature (based on documentation):
-    // startTransaction(orderToken: string, orderId: string, packageName: string | null, appSchema: string | null)
-    // NOT a JSON string - individual parameters!
+    // PhonePe React Native SDK startTransaction signature (based on sample app):
+    // startTransaction(requestBodyString: string, appSchema: string | null)
+    // requestBodyString is a JSON string containing: orderId, merchantId, token, paymentMode
     
     // Validate all required fields
-    if (!orderToken || !orderId) {
-      throw new Error('Order token and order ID are required for PhonePe SDK transaction');
+    if (!orderToken || !orderId || !merchantId) {
+      throw new Error('Order token, order ID, and merchant ID are required for PhonePe SDK transaction');
+    }
+
+    // Construct request body as per PhonePe sample app
+    const requestBody = {
+      orderId: String(orderId).trim(),
+      merchantId: String(merchantId).trim(),
+      token: String(orderToken).trim(),
+      paymentMode: {
+        type: 'PAY_PAGE', // For Standard Checkout
+      },
+    };
+
+    // Convert to JSON string (required by SDK)
+    const requestBodyString = JSON.stringify(requestBody);
+    
+    // Validate JSON string
+    try {
+      JSON.parse(requestBodyString);
+    } catch (jsonError) {
+      throw new Error(`Invalid JSON format for PhonePe transaction request: ${jsonError.message}`);
     }
 
     console.log('🚀 Starting PhonePe React Native SDK transaction:', {
@@ -137,60 +165,41 @@ export const startPhonePeTransaction = async (params) => {
       merchantId,
       tokenLength: orderToken?.length || 0,
       appSchema,
+      requestBodyPreview: requestBodyString.substring(0, 100) + '...',
     });
 
-    console.log('📞 Calling PhonePe.startTransaction with individual parameters...');
+    console.log('📞 Calling PhonePe.startTransaction with JSON string...');
     console.log('📱 Platform:', Platform.OS);
     
     try {
-      // PhonePe SDK expects: startTransaction(orderToken, orderId, packageName, appSchema)
-      // packageName is optional (can be null)
-      // appSchema is optional for Android, required for iOS
-      const packageName = null; // Not needed for our use case
-      
+      // PhonePe SDK expects: startTransaction(requestBodyString, appSchema)
+      // For Android: appSchema can be null, empty string, or omitted
+      // For iOS: appSchema is required
       let response;
       
       if (Platform.OS === 'android') {
-        // For Android, appSchema might be optional
-        console.log('📱 Android: Calling with orderToken, orderId, packageName=null, appSchema');
-        // Try with appSchema first (some versions might need it)
+        // For Android, try different appSchema values to avoid NativeArgumentsParseException
+        console.log('📱 Android: Trying with null appSchema...');
         try {
-          response = await PhonePe.startTransaction(
-            orderToken,
-            orderId,
-            packageName,
-            appSchema
-          );
+          // Try with null first (most likely to work)
+          response = await PhonePe.startTransaction(requestBodyString, null);
+          console.log('✅ Android call with null appSchema succeeded');
         } catch (error1) {
-          console.log('⚠️ Android call with appSchema failed, trying without appSchema...');
-          // Try without appSchema (pass null)
+          console.log('⚠️ Android call with null failed, trying with empty string...');
           try {
-            response = await PhonePe.startTransaction(
-              orderToken,
-              orderId,
-              packageName,
-              null
-            );
+            // Try with empty string
+            response = await PhonePe.startTransaction(requestBodyString, '');
+            console.log('✅ Android call with empty string succeeded');
           } catch (error2) {
-            console.log('⚠️ Android call without appSchema failed, trying with undefined...');
-            // Try with undefined
-            response = await PhonePe.startTransaction(
-              orderToken,
-              orderId,
-              packageName,
-              undefined
-            );
+            console.log('⚠️ Android call with empty string failed, trying with appSchema...');
+            // Last resort: try with actual appSchema
+            response = await PhonePe.startTransaction(requestBodyString, appSchema);
           }
         }
       } else {
         // For iOS, appSchema is required
-        console.log('📱 iOS: Calling with orderToken, orderId, packageName=null, appSchema');
-        response = await PhonePe.startTransaction(
-          orderToken,
-          orderId,
-          packageName,
-          appSchema
-        );
+        console.log('📱 iOS: Calling with appSchema:', appSchema);
+        response = await PhonePe.startTransaction(requestBodyString, appSchema);
       }
       
       console.log('✅ PhonePe SDK transaction response:', response);
