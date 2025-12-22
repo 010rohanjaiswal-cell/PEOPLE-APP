@@ -148,19 +148,14 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
     
     // Generate checksum for React Native SDK startTransaction
-    // PhonePe checksum format varies - trying multiple formats to find the correct one
+    // PhonePe checksum format for SDK orders - trying format without endpoint
+    // Based on 400 error, the format might be different for SDK orders
     const saltKey = process.env.PHONEPE_CLIENT_SECRET;
     const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
     
-    // Try different checksum formats (PhonePe documentation is unclear for SDK orders)
-    // Format 1: SHA256(base64(request body) + salt key + endpoint) - Standard format
-    const endpoint = '/pg/v1/pay';
-    let checkSum = crypto.createHash('sha256').update(base64RequestBody + saltKey + endpoint).digest('hex');
-    
-    // Alternative formats to try if Format 1 doesn't work:
-    // Format 2: SHA256(base64(request body) + salt key) - Without endpoint
-    // Format 3: SHA256(request body + salt key) - Without base64
-    // Format 4: Just use orderToken as checksum (some SDKs do this)
+    // Format: SHA256(base64(request body) + salt key) - Without endpoint
+    // This is a common format for SDK orders where the endpoint is not included
+    const checkSum = crypto.createHash('sha256').update(base64RequestBody + saltKey).digest('hex');
     
     console.log('🔐 Generated checksum for SDK transaction:', {
       requestBody: sdkRequestBodyString,
@@ -169,10 +164,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       base64Length: base64RequestBody.length,
       checkSumLength: checkSum.length,
       checkSum: checkSum,
-      format: 'SHA256(base64(body) + salt + endpoint)',
-      endpoint,
+      format: 'SHA256(base64(body) + salt) - WITHOUT endpoint',
       saltKeyLength: saltKey?.length || 0,
       saltKeyPreview: saltKey ? saltKey.substring(0, 10) + '...' : 'missing',
+      note: 'Trying format without endpoint as SDK orders may use different checksum format',
     });
 
     // Return orderToken, orderId, and checkSum for React Native SDK
