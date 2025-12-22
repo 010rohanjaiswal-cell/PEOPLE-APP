@@ -135,7 +135,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     });
 
     // Generate checksum for React Native SDK startTransaction
-    // PhonePe checksum: SHA256(request body + salt key)
+    // PhonePe checksum format: SHA256(base64(request body) + salt key + /pg/v1/pay)
     // For SDK orders, the request body will be: {orderId, merchantId, token, paymentMode: {type: "PAY_PAGE"}}
     const sdkRequestBody = {
       orderId: sdkOrderResponse.orderId,
@@ -147,11 +147,26 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     };
     const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
     
-    // Generate checksum using SHA256(request body + salt key)
-    // Salt key is the same as clientSecret for PhonePe
+    // Generate checksum using PhonePe format
+    // Try format 1: SHA256(base64(request body) + salt key)
     const saltKey = process.env.PHONEPE_CLIENT_SECRET;
-    const checkSumString = sdkRequestBodyString + saltKey;
-    const checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
+    const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
+    
+    // For SDK orders, try simpler format first (without endpoint)
+    let checkSumString = base64RequestBody + saltKey;
+    let checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
+    
+    // If that doesn't work, we might need: base64(request body) + salt key + endpoint
+    // const endpoint = '/pg/v1/pay';
+    // checkSumString = base64RequestBody + saltKey + endpoint;
+    // checkSum = crypto.createHash('sha256').update(checkSumString).digest('hex');
+    
+    console.log('🔐 Generated checksum for SDK transaction:', {
+      requestBodyLength: sdkRequestBodyString.length,
+      base64Length: base64RequestBody.length,
+      checkSumLength: checkSum.length,
+      checkSumPreview: checkSum.substring(0, 20) + '...',
+    });
 
     // Return orderToken, orderId, and checkSum for React Native SDK
     const responsePayload = {
