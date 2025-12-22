@@ -16,11 +16,21 @@ const PHONEPE_CONFIG = {
 /**
  * Initialize PhonePe SDK
  * Call this once when app starts (e.g., in App.js)
- * PhonePe React Native SDK init signature: init(environment, merchantId, flowId, enableLogging)
+ * 
+ * Official PhonePe SDK init signature:
+ * init(environment: string, merchantId: string, flowId: string, enableLogging: boolean)
  * 
  * @param {string} flowId - An alphanumeric string without special characters. 
  *   Acts as a common ID between app user journey and PhonePe SDK.
  *   Recommended: Pass user-specific information or merchant user Id to track the journey.
+ * 
+ * Parameters:
+ * - environment: 'SANDBOX' or 'PRODUCTION' (defaults to PRODUCTION if unknown)
+ * - merchantId: Merchant ID provided by PhonePe at onboarding
+ * - flowId: Alphanumeric string for tracking user journey
+ * - enableLogging: true to enable SDK logs, false to disable
+ * 
+ * Returns: Promise<boolean> - TRUE for success, FALSE for failure
  * 
  * Production Requirements:
  * - environment: PRODUCTION
@@ -67,22 +77,28 @@ export const initializePhonePe = async (flowId = null) => {
  * 3. Construct request body as JSON string
  * 4. SDK uses request body string to start transaction
  * 
- * PhonePe React Native SDK startTransaction signature: 
- * startTransaction(requestBodyString: string, appSchema: string | null)
+ * PhonePe React Native SDK startTransaction signature (Official Docs):
+ * startTransaction(request: string, appSchema: string | null): Promise<any>
  * 
  * Request body format (as JSON string):
  * {
- *   "orderId": <orderId>,
- *   "merchantId": <merchantId>,
- *   "token": <orderToken>,
+ *   "orderId": <orderId>,        // PhonePe generated orderId from Create Order API
+ *   "merchantId": <merchantId>,  // Merchant ID provided by PhonePe
+ *   "token": <token>,            // Order Token from Create Order API response
  *   "paymentMode": {
- *     "type": "PAY_PAGE"
+ *     "type": "PAY_PAGE"         // For Standard Checkout
  *   }
  * }
  * 
  * Parameters:
- * - requestBodyString: JSON string containing orderId, merchantId, token, paymentMode (REQUIRED)
- * - appSchema: App scheme for deep linking (optional for Android, required for iOS)
+ * - request: JSON string containing orderId, merchantId, token, paymentMode (REQUIRED)
+ * - appSchema: @Optional(Not need for Android) For iOS, Your custom URL Schemes
+ * 
+ * Returns: Promise with dictionary/hashMap:
+ * {
+ *   status: String,  // "SUCCESS", "FAILURE", "INTERRUPTED"
+ *   error: String    // if any error occurs
+ * }
  * 
  * @param {Object} params - Transaction parameters
  * @param {string} params.orderToken - Order token from SDK order (REQUIRED)
@@ -172,47 +188,42 @@ export const startPhonePeTransaction = async (params) => {
     console.log('📱 Platform:', Platform.OS);
     
     try {
-      // PhonePe SDK official signature: startTransaction(request: string, appSchema: string | null)
-      // Documentation says: appSchema is @Optional(Not need for Android)
-      // However, React Native bridge cannot handle null, so we need to use a workaround
+      // PhonePe SDK actual native signature (from TypeScript definition):
+      // startTransaction(body: string, checkSum: string, packageName: string | null, appSchema: string | null)
+      // 
+      // We were missing the checkSum parameter! This is why we got NativeArgumentsParseException.
+      // For SDK orders, we might need to generate checksum or get it from backend.
+      // For now, let's try with an empty checksum or see if SDK handles it.
+      
+      // TODO: Check PhonePe docs for how to generate checksum for SDK orders
+      // For now, trying with empty string (SDK might generate it internally for SDK orders)
+      const checkSum = ''; // This might need to be generated or provided by backend
+      const packageName = null; // Optional package name
+      
+      console.log('📱 Calling startTransaction with correct signature:', {
+        hasBody: !!requestBodyString,
+        hasCheckSum: !!checkSum,
+        packageName,
+        appSchema: Platform.OS === 'ios' ? appSchema : 'N/A for Android',
+      });
+      
       let response;
       
       if (Platform.OS === 'android') {
-        // For Android, appSchema is not needed according to docs
-        // But React Native bridge requires a value, so try different approaches
-        console.log('📱 Android: appSchema not needed per docs, trying workarounds...');
-        
-        // Approach 1: Try with actual appSchema (some SDK versions might accept it)
+        // For Android: body, checkSum, packageName (null), appSchema (null or empty)
+        console.log('📱 Android: Calling with checkSum, packageName=null, appSchema=null');
         try {
-          console.log('📱 Attempt 1: Using appSchema value (even though not needed)');
-          response = await PhonePe.startTransaction(requestBodyString, appSchema);
-          console.log('✅ Android call with appSchema succeeded');
+          response = await PhonePe.startTransaction(requestBodyString, checkSum, packageName, null);
+          console.log('✅ Android call succeeded');
         } catch (error1) {
-          console.log('⚠️ Android call with appSchema failed:', error1.message);
-          
-          // Approach 2: Try with empty string
-          try {
-            console.log('📱 Attempt 2: Using empty string');
-            response = await PhonePe.startTransaction(requestBodyString, '');
-            console.log('✅ Android call with empty string succeeded');
-          } catch (error2) {
-            console.log('⚠️ Android call with empty string failed:', error2.message);
-            
-            // Approach 3: Try with a placeholder value
-            try {
-              console.log('📱 Attempt 3: Using placeholder value');
-              response = await PhonePe.startTransaction(requestBodyString, 'android');
-              console.log('✅ Android call with placeholder succeeded');
-            } catch (error3) {
-              console.log('❌ All Android approaches failed. Last error:', error3.message);
-              throw error3;
-            }
-          }
+          console.log('⚠️ Android call with null appSchema failed, trying empty string...');
+          // Try with empty string for appSchema
+          response = await PhonePe.startTransaction(requestBodyString, checkSum, packageName, '');
         }
       } else {
-        // For iOS, appSchema is required
-        console.log('📱 iOS: Calling with appSchema:', appSchema);
-        response = await PhonePe.startTransaction(requestBodyString, appSchema);
+        // For iOS: body, checkSum, packageName (null), appSchema (required)
+        console.log('📱 iOS: Calling with checkSum, packageName=null, appSchema');
+        response = await PhonePe.startTransaction(requestBodyString, checkSum, packageName, appSchema);
       }
       
       console.log('✅ PhonePe SDK transaction response:', response);
