@@ -172,17 +172,43 @@ export const startPhonePeTransaction = async (params) => {
     console.log('📱 Platform:', Platform.OS);
     
     try {
-      // PhonePe SDK expects: startTransaction(requestBodyString, appSchema)
-      // For Android: appSchema can be null, empty string, or omitted
-      // For iOS: appSchema is required
+      // PhonePe SDK official signature: startTransaction(request: string, appSchema: string | null)
+      // Documentation says: appSchema is @Optional(Not need for Android)
+      // However, React Native bridge cannot handle null, so we need to use a workaround
       let response;
       
-      // React Native bridge on Android cannot handle null for optional parameters
-      // Always pass a string value - use empty string for Android, appSchema for iOS
       if (Platform.OS === 'android') {
-        // For Android, use empty string instead of null (React Native bridge limitation)
-        console.log('📱 Android: Using empty string for appSchema (React Native bridge cannot handle null)');
-        response = await PhonePe.startTransaction(requestBodyString, '');
+        // For Android, appSchema is not needed according to docs
+        // But React Native bridge requires a value, so try different approaches
+        console.log('📱 Android: appSchema not needed per docs, trying workarounds...');
+        
+        // Approach 1: Try with actual appSchema (some SDK versions might accept it)
+        try {
+          console.log('📱 Attempt 1: Using appSchema value (even though not needed)');
+          response = await PhonePe.startTransaction(requestBodyString, appSchema);
+          console.log('✅ Android call with appSchema succeeded');
+        } catch (error1) {
+          console.log('⚠️ Android call with appSchema failed:', error1.message);
+          
+          // Approach 2: Try with empty string
+          try {
+            console.log('📱 Attempt 2: Using empty string');
+            response = await PhonePe.startTransaction(requestBodyString, '');
+            console.log('✅ Android call with empty string succeeded');
+          } catch (error2) {
+            console.log('⚠️ Android call with empty string failed:', error2.message);
+            
+            // Approach 3: Try with a placeholder value
+            try {
+              console.log('📱 Attempt 3: Using placeholder value');
+              response = await PhonePe.startTransaction(requestBodyString, 'android');
+              console.log('✅ Android call with placeholder succeeded');
+            } catch (error3) {
+              console.log('❌ All Android approaches failed. Last error:', error3.message);
+              throw error3;
+            }
+          }
+        }
       } else {
         // For iOS, appSchema is required
         console.log('📱 iOS: Calling with appSchema:', appSchema);
