@@ -68,17 +68,13 @@ export const initializePhonePe = async (flowId = null) => {
  * 4. SDK uses request body string to start transaction
  * 
  * PhonePe React Native SDK startTransaction signature: 
- * startTransaction(request: string, appSchema: string | null)
+ * startTransaction(orderToken: string, orderId: string, packageName: string | null, appSchema: string | null)
  * 
- * Request body format:
- * {
- *   "orderId": <orderId>,
- *   "merchantId": <merchantId>,
- *   "token": <token>,
- *   "paymentMode": {
- *     "type": "PAY_PAGE"
- *   }
- * }
+ * Parameters:
+ * - orderToken: Order token from SDK order (REQUIRED)
+ * - orderId: Order ID from SDK order (REQUIRED)
+ * - packageName: Package name (optional, can be null)
+ * - appSchema: App scheme for deep linking (optional for Android, required for iOS)
  * 
  * @param {Object} params - Transaction parameters
  * @param {string} params.orderToken - Order token from SDK order (REQUIRED)
@@ -127,31 +123,13 @@ export const startPhonePeTransaction = async (params) => {
       methodType: typeof PhonePe.startTransaction,
     });
 
-    // Construct request body as per React Native SDK documentation
-    // Ensure all values are strings (orderId, merchantId, token)
-    const requestBody = {
-      orderId: String(orderId).trim(),
-      merchantId: String(merchantId).trim(),
-      token: String(orderToken).trim(),
-      paymentMode: {
-        type: 'PAY_PAGE', // For Standard Checkout
-      },
-    };
-
-    // Validate all required fields are present and non-empty
-    if (!requestBody.orderId || !requestBody.merchantId || !requestBody.token) {
-      throw new Error('Missing required fields in PhonePe transaction request. orderId, merchantId, and token are required.');
-    }
-
-    // Convert to JSON string (required by SDK)
-    // Use JSON.stringify without spaces to ensure consistent format
-    const requestBodyString = JSON.stringify(requestBody);
+    // PhonePe React Native SDK startTransaction signature (based on documentation):
+    // startTransaction(orderToken: string, orderId: string, packageName: string | null, appSchema: string | null)
+    // NOT a JSON string - individual parameters!
     
-    // Validate JSON string is valid
-    try {
-      JSON.parse(requestBodyString);
-    } catch (jsonError) {
-      throw new Error(`Invalid JSON format for PhonePe transaction request: ${jsonError.message}`);
+    // Validate all required fields
+    if (!orderToken || !orderId) {
+      throw new Error('Order token and order ID are required for PhonePe SDK transaction');
     }
 
     console.log('🚀 Starting PhonePe React Native SDK transaction:', {
@@ -159,74 +137,60 @@ export const startPhonePeTransaction = async (params) => {
       merchantId,
       tokenLength: orderToken?.length || 0,
       appSchema,
-      requestBody: requestBodyString,
     });
 
-    console.log('📞 Calling PhonePe.startTransaction...');
+    console.log('📞 Calling PhonePe.startTransaction with individual parameters...');
+    console.log('📱 Platform:', Platform.OS);
     
     try {
-      // Validate request body string is not empty
-      if (!requestBodyString || typeof requestBodyString !== 'string') {
-        throw new Error('Invalid request body: must be a non-empty JSON string');
-      }
+      // PhonePe SDK expects: startTransaction(orderToken, orderId, packageName, appSchema)
+      // packageName is optional (can be null)
+      // appSchema is optional for Android, required for iOS
+      const packageName = null; // Not needed for our use case
       
-      console.log('📱 Platform:', Platform.OS);
-      console.log('📱 Request body string type:', typeof requestBodyString);
-      console.log('📱 Request body string length:', requestBodyString?.length);
-      console.log('📱 Request body preview:', requestBodyString.substring(0, 200));
-      
-      // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
-      // For Android: The native bridge may not handle null/empty string properly
-      // Try different approaches: single parameter, undefined, or actual value
       let response;
       
-      // For Android, the native bridge may have issues with optional parameters
-      // Try different approaches to find what works
       if (Platform.OS === 'android') {
-        console.log('📱 Android detected - trying different parameter combinations...');
-        
-        // Approach 1: Try with just request body (no second parameter)
-        // This works if the native module has method overloading
+        // For Android, appSchema might be optional
+        console.log('📱 Android: Calling with orderToken, orderId, packageName=null, appSchema');
+        // Try with appSchema first (some versions might need it)
         try {
-          console.log('📱 Attempt 1: Single parameter (request body only)');
-          response = await PhonePe.startTransaction(requestBodyString);
-          console.log('✅ Single parameter approach succeeded');
+          response = await PhonePe.startTransaction(
+            orderToken,
+            orderId,
+            packageName,
+            appSchema
+          );
         } catch (error1) {
-          console.log('❌ Single parameter failed:', error1.message);
-          
-          // Approach 2: Try with explicit null (some bridges handle this)
+          console.log('⚠️ Android call with appSchema failed, trying without appSchema...');
+          // Try without appSchema (pass null)
           try {
-            console.log('📱 Attempt 2: With explicit null');
-            response = await PhonePe.startTransaction(requestBodyString, null);
-            console.log('✅ Null parameter approach succeeded');
+            response = await PhonePe.startTransaction(
+              orderToken,
+              orderId,
+              packageName,
+              null
+            );
           } catch (error2) {
-            console.log('❌ Null parameter failed:', error2.message);
-            
-            // Approach 3: Try with empty string
-            try {
-              console.log('📱 Attempt 3: With empty string');
-              response = await PhonePe.startTransaction(requestBodyString, '');
-              console.log('✅ Empty string approach succeeded');
-            } catch (error3) {
-              console.log('❌ Empty string failed:', error3.message);
-              
-              // Approach 4: Try with the actual appSchema (maybe Android needs it too)
-              try {
-                console.log('📱 Attempt 4: With appSchema (same as iOS)');
-                response = await PhonePe.startTransaction(requestBodyString, appSchema);
-                console.log('✅ AppSchema approach succeeded');
-              } catch (error4) {
-                console.log('❌ All approaches failed. Last error:', error4.message);
-                // Re-throw the last error
-                throw error4;
-              }
-            }
+            console.log('⚠️ Android call without appSchema failed, trying with undefined...');
+            // Try with undefined
+            response = await PhonePe.startTransaction(
+              orderToken,
+              orderId,
+              packageName,
+              undefined
+            );
           }
         }
       } else {
         // For iOS, appSchema is required
-        console.log('📱 iOS detected - calling with appSchema:', appSchema);
-        response = await PhonePe.startTransaction(requestBodyString, appSchema);
+        console.log('📱 iOS: Calling with orderToken, orderId, packageName=null, appSchema');
+        response = await PhonePe.startTransaction(
+          orderToken,
+          orderId,
+          packageName,
+          appSchema
+        );
       }
       
       console.log('✅ PhonePe SDK transaction response:', response);
