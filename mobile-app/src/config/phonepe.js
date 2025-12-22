@@ -119,6 +119,14 @@ export const startPhonePeTransaction = async (params) => {
       throw new Error('PhonePe.startTransaction method not available. SDK may not be properly initialized. Please ensure PhonePe SDK is initialized before starting a transaction.');
     }
 
+    // Verify SDK is initialized by checking if init was called
+    // Note: PhonePe SDK doesn't expose an isInitialized method, so we rely on method existence
+    console.log('🔍 PhonePe SDK method check:', {
+      hasPhonePe: !!PhonePe,
+      hasStartTransaction: !!PhonePe.startTransaction,
+      methodType: typeof PhonePe.startTransaction,
+    });
+
     // Construct request body as per React Native SDK documentation
     // Ensure all values are strings (orderId, merchantId, token)
     const requestBody = {
@@ -168,24 +176,56 @@ export const startPhonePeTransaction = async (params) => {
       console.log('📱 Request body preview:', requestBodyString.substring(0, 200));
       
       // React Native SDK signature: startTransaction(request: string, appSchema: string | null)
-      // For Android: Some versions may not accept null, try empty string or omit parameter
-      // For iOS: appSchema is required
+      // For Android: The native bridge may not handle null/empty string properly
+      // Try different approaches: single parameter, undefined, or actual value
       let response;
       
+      // For Android, the native bridge may have issues with optional parameters
+      // Try different approaches to find what works
       if (Platform.OS === 'android') {
-        // For Android, try calling with empty string first
-        // If that fails, the native module might need null or no second parameter
-        console.log('📱 Calling PhonePe.startTransaction for Android with empty string...');
+        console.log('📱 Android detected - trying different parameter combinations...');
+        
+        // Approach 1: Try with just request body (no second parameter)
+        // This works if the native module has method overloading
         try {
-          response = await PhonePe.startTransaction(requestBodyString, '');
-        } catch (androidError) {
-          console.log('⚠️ Android call with empty string failed, trying with null...');
-          // Try with null if empty string doesn't work
-          response = await PhonePe.startTransaction(requestBodyString, null);
+          console.log('📱 Attempt 1: Single parameter (request body only)');
+          response = await PhonePe.startTransaction(requestBodyString);
+          console.log('✅ Single parameter approach succeeded');
+        } catch (error1) {
+          console.log('❌ Single parameter failed:', error1.message);
+          
+          // Approach 2: Try with explicit null (some bridges handle this)
+          try {
+            console.log('📱 Attempt 2: With explicit null');
+            response = await PhonePe.startTransaction(requestBodyString, null);
+            console.log('✅ Null parameter approach succeeded');
+          } catch (error2) {
+            console.log('❌ Null parameter failed:', error2.message);
+            
+            // Approach 3: Try with empty string
+            try {
+              console.log('📱 Attempt 3: With empty string');
+              response = await PhonePe.startTransaction(requestBodyString, '');
+              console.log('✅ Empty string approach succeeded');
+            } catch (error3) {
+              console.log('❌ Empty string failed:', error3.message);
+              
+              // Approach 4: Try with the actual appSchema (maybe Android needs it too)
+              try {
+                console.log('📱 Attempt 4: With appSchema (same as iOS)');
+                response = await PhonePe.startTransaction(requestBodyString, appSchema);
+                console.log('✅ AppSchema approach succeeded');
+              } catch (error4) {
+                console.log('❌ All approaches failed. Last error:', error4.message);
+                // Re-throw the last error
+                throw error4;
+              }
+            }
+          }
         }
       } else {
         // For iOS, appSchema is required
-        console.log('📱 Calling PhonePe.startTransaction for iOS with appSchema:', appSchema);
+        console.log('📱 iOS detected - calling with appSchema:', appSchema);
         response = await PhonePe.startTransaction(requestBodyString, appSchema);
       }
       
