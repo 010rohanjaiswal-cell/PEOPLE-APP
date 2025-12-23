@@ -178,15 +178,20 @@ export const startPhonePeTransaction = async (params) => {
       throw new Error('PhonePe transaction request: orderId, merchantId, and token are required and cannot be blank');
     }
 
-    // Convert to JSON string (required by SDK)
-    const requestBodyString = JSON.stringify(requestBody);
+    // Convert to JSON string first
+    const requestBodyJson = JSON.stringify(requestBody);
     
     // Validate JSON string
     try {
-      JSON.parse(requestBodyString);
+      JSON.parse(requestBodyJson);
     } catch (jsonError) {
       throw new Error(`Invalid JSON format for PhonePe transaction request: ${jsonError.message}`);
     }
+
+    // IMPORTANT: According to SDK TypeScript definition, the request body must be BASE64 ENCODED
+    // "Make sure the request body is base64encoded" - from SDK source code
+    // The sample app might be doing this automatically, but we need to do it explicitly
+    const requestBodyString = Buffer.from(requestBodyJson).toString('base64');
 
     console.log('🚀 Starting PhonePe React Native SDK transaction:', {
       orderId,
