@@ -148,14 +148,18 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
     
     // Generate checksum for React Native SDK startTransaction
-    // PhonePe checksum format for SDK orders - trying format without endpoint
-    // Based on 400 error, the format might be different for SDK orders
+    // PhonePe checksum format for B2B SDK orders - trying different formats
     const saltKey = process.env.PHONEPE_CLIENT_SECRET;
     const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
     
-    // Format: SHA256(base64(request body) + salt key) - Without endpoint
-    // This is a common format for SDK orders where the endpoint is not included
-    const checkSum = crypto.createHash('sha256').update(base64RequestBody + saltKey).digest('hex');
+    // Try Format 1: SHA256(salt + base64(body)) - Salt first, then base64 body
+    // This is a common variation where salt comes first
+    let checkSum = crypto.createHash('sha256').update(saltKey + base64RequestBody).digest('hex');
+    
+    // Alternative formats to try if Format 1 doesn't work:
+    // Format 2: SHA256(base64(body) + salt) - Base64 first, then salt (current)
+    // Format 3: SHA256(base64(body) + salt + endpoint) - With endpoint
+    // Format 4: SHA256(body + salt) - Without base64 encoding
     
     console.log('🔐 Generated checksum for SDK transaction:', {
       requestBody: sdkRequestBodyString,
@@ -164,10 +168,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       base64Length: base64RequestBody.length,
       checkSumLength: checkSum.length,
       checkSum: checkSum,
-      format: 'SHA256(base64(body) + salt) - WITHOUT endpoint',
+      format: 'SHA256(salt + base64(body)) - Salt first, no endpoint',
       saltKeyLength: saltKey?.length || 0,
       saltKeyPreview: saltKey ? saltKey.substring(0, 10) + '...' : 'missing',
-      note: 'Trying format without endpoint as SDK orders may use different checksum format',
+      note: 'Trying salt-first format as B2B SDK orders may use different checksum order',
     });
 
     // Return orderToken, orderId, and checkSum for React Native SDK
