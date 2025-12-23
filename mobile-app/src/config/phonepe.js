@@ -164,14 +164,20 @@ export const startPhonePeTransaction = async (params) => {
 
     // Construct request body as per PhonePe sample app
     // Ensure no blank values and correct data types
+    // Sample app format: {orderId, merchantId, token, paymentMode: {type: "PAY_PAGE"}}
     const requestBody = {
       orderId: String(orderId).trim(),
       merchantId: String(merchantId).trim(),
       token: String(orderToken).trim(),
       paymentMode: {
-        type: 'PAY_PAGE', // For Standard Checkout
+        type: 'PAY_PAGE', // For Standard Checkout - must be exactly "PAY_PAGE"
       },
     };
+    
+    // Validate exact format matches sample app
+    if (requestBody.paymentMode.type !== 'PAY_PAGE') {
+      throw new Error('paymentMode.type must be exactly "PAY_PAGE"');
+    }
 
     // Validate no blank values (400 error can occur if any field is blank)
     if (!requestBody.orderId || !requestBody.merchantId || !requestBody.token) {

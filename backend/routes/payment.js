@@ -171,10 +171,10 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       base64Length: base64RequestBody.length,
       checkSumLength: checkSum.length,
       checkSum: checkSum,
-      format: 'SHA256(salt + base64(body)) - Salt first, no endpoint',
+      format: 'SHA256(base64(body) + salt) - Standard PhonePe format',
       saltKeyLength: saltKey?.length || 0,
       saltKeyPreview: saltKey ? saltKey.substring(0, 10) + '...' : 'missing',
-      note: 'Trying salt-first format as B2B SDK orders may use different checksum order',
+      note: 'Standard PhonePe checksum format: base64(body) + salt',
     });
 
     // Return orderToken, orderId, and checkSum for React Native SDK
