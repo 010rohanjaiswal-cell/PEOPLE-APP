@@ -188,11 +188,11 @@ export const startPhonePeTransaction = async (params) => {
       throw new Error(`Invalid JSON format for PhonePe transaction request: ${jsonError.message}`);
     }
 
-    // IMPORTANT: According to SDK TypeScript definition, the request body must be BASE64 ENCODED
-    // "Make sure the request body is base64encoded" - from SDK source code
-    // React Native doesn't have Node's Buffer, so we use btoa (available in React Native)
-    // btoa converts a string to base64
-    const requestBodyString = btoa(requestBodyJson);
+    // Sample app passes requestBody as JSON string directly
+    // The SDK TypeScript definition mentions base64, but the sample app doesn't show base64 encoding
+    // Let's try passing JSON string directly first (matching sample app)
+    // If that doesn't work, we'll try base64 encoding
+    const requestBodyString = requestBodyJson; // Pass JSON string directly like sample app
 
     console.log('🚀 Starting PhonePe React Native SDK transaction:', {
       orderId,

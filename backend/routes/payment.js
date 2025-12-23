@@ -148,13 +148,16 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
     
     // Generate checksum for React Native SDK startTransaction
-    // PhonePe checksum format for B2B SDK orders - trying different formats
+    // Matching sample app approach - calculate checksum from the JSON string that will be sent to SDK
+    // The SDK might handle base64 encoding internally, so checksum should match the JSON string format
     const saltKey = process.env.PHONEPE_CLIENT_SECRET;
+    
+    // Try Format: SHA256(base64(JSON) + salt) - Standard PhonePe format
+    // Base64 encode the JSON string for checksum calculation
     const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
     
-    // Try Format 1: SHA256(salt + base64(body)) - Salt first, then base64 body
-    // This is a common variation where salt comes first
-    let checkSum = crypto.createHash('sha256').update(saltKey + base64RequestBody).digest('hex');
+    // Standard PhonePe checksum: SHA256(base64(body) + salt)
+    let checkSum = crypto.createHash('sha256').update(base64RequestBody + saltKey).digest('hex');
     
     // Alternative formats to try if Format 1 doesn't work:
     // Format 2: SHA256(base64(body) + salt) - Base64 first, then salt (current)
