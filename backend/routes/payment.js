@@ -107,12 +107,13 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     const client = getPhonePeClient();
 
     // Build SDK order request using PhonePe SDK
-    const redirectUrl = `${process.env.BACKEND_URL || 'https://freelancing-platform-backend-backup.onrender.com'}/api/payment/return?orderId=${merchantOrderId}`;
+    // NOTE: For pure native SDK flow, redirectUrl is optional and can sometimes
+    // cause CHECKOUT_ORDER_FAILED if it doesn't match PhonePe config exactly.
+    // We'll omit redirectUrl here and rely on appSchema + callbackUrl/webhook.
 
     const sdkOrderRequest = CreateSdkOrderRequest.StandardCheckoutBuilder()
       .merchantOrderId(merchantOrderId)
       .amount(totalDues * 100) // Amount in paise
-      .redirectUrl(redirectUrl)
       .expireAfter(1200) // 20 minutes in seconds
       .build();
 
@@ -120,7 +121,7 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
       merchantOrderId,
       amount: totalDues,
       amountInPaise: totalDues * 100,
-      redirectUrl,
+      note: 'redirectUrl omitted for native SDK flow to avoid CHECKOUT_ORDER_FAILED',
     });
 
     // Create SDK order using PhonePe SDK
@@ -354,12 +355,17 @@ router.post('/webhook', async (req, res) => {
   try {
     const webhookData = req.body;
     const authHeader = req.headers.authorization;
-    
-    console.log('📥 PhonePe Webhook Received:', {
+
+    // Log full webhook payload for debugging (safe on backend only)
+    console.log('📥 PhonePe Webhook Received (raw):', JSON.stringify(webhookData, null, 2));
+
+    console.log('📥 PhonePe Webhook Summary:', {
       type: webhookData.type,
       orderId: webhookData.data?.order?.merchantOrderId,
       orderStatus: webhookData.data?.order?.state,
       paymentStatus: webhookData.data?.payment?.state,
+      errorCode: webhookData.data?.errorCode || webhookData.errorCode,
+      errorMessage: webhookData.data?.errorMessage || webhookData.errorMessage,
     });
 
     // Get PhonePe SDK client for webhook validation
@@ -414,6 +420,12 @@ router.post('/webhook', async (req, res) => {
           paymentStatus,
         });
       }
+    } else if (webhookData.type === 'CHECKOUT_ORDER_FAILED') {
+      // Special handling: checkout failed before an order/payment object was created
+      console.error('❌ PhonePe Checkout Order Failed:', {
+        type: webhookData.type,
+        raw: webhookData,
+      });
     }
 
     // Always return success to PhonePe (200 OK)
