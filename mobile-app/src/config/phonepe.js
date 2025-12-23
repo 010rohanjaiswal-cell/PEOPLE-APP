@@ -190,8 +190,9 @@ export const startPhonePeTransaction = async (params) => {
 
     // IMPORTANT: According to SDK TypeScript definition, the request body must be BASE64 ENCODED
     // "Make sure the request body is base64encoded" - from SDK source code
-    // The sample app might be doing this automatically, but we need to do it explicitly
-    const requestBodyString = Buffer.from(requestBodyJson).toString('base64');
+    // React Native doesn't have Node's Buffer, so we use btoa (available in React Native)
+    // btoa converts a string to base64
+    const requestBodyString = btoa(requestBodyJson);
 
     console.log('🚀 Starting PhonePe React Native SDK transaction:', {
       orderId,
