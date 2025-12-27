@@ -11,6 +11,12 @@ const User = require('../models/User');
 
 // Helper function to format verification for admin panel
 const formatVerificationForAdmin = (verification) => {
+  // Safety check
+  if (!verification) {
+    console.warn('⚠️ formatVerificationForAdmin called with null/undefined verification');
+    return null;
+  }
+  
   return {
     _id: verification._id,
     id: verification._id.toString(),
@@ -76,19 +82,30 @@ router.get('/verifications', authenticate, requireRole('admin'), async (req, res
       .sort({ createdAt: -1 })
       .populate('user', 'phone fullName profilePhoto role email');
 
-    const formattedVerifications = verifications.map(formatVerificationForAdmin);
+    const formattedVerifications = verifications
+      .map(formatVerificationForAdmin)
+      .filter(v => v !== null); // Remove any null entries
 
     // Debug logging to help identify what's being sent
     if (formattedVerifications.length > 0) {
       console.log('📋 Admin API - Sample verification object:', JSON.stringify(formattedVerifications[0], null, 2));
     }
 
-    res.json({
+    // Ensure we always return an array, even if empty
+    const response = {
       success: true,
-      verifications: formattedVerifications,
-      data: formattedVerifications, // AdminService expects response.data.data, so this is the data field
+      verifications: Array.isArray(formattedVerifications) ? formattedVerifications : [],
+      data: Array.isArray(formattedVerifications) ? formattedVerifications : [], // AdminService expects response.data.data
       status: status || 'all',
+    };
+    
+    console.log('📤 Admin API - Sending verifications response:', {
+      count: response.verifications.length,
+      status: response.status,
+      isArray: Array.isArray(response.verifications),
     });
+    
+    res.json(response);
   } catch (error) {
     console.error('Error fetching freelancer verifications:', error);
     res.status(500).json({
@@ -112,12 +129,14 @@ router.get('/freelancer-verifications', authenticate, requireRole('admin'), asyn
       .sort({ createdAt: -1 })
       .populate('user', 'phone fullName profilePhoto role email');
 
-    const formattedVerifications = verifications.map(formatVerificationForAdmin);
+    const formattedVerifications = verifications
+      .map(formatVerificationForAdmin)
+      .filter(v => v !== null); // Remove any null entries
 
     res.json({
       success: true,
-      verifications: formattedVerifications, // Admin panel expects 'verifications' not 'data'
-      data: formattedVerifications, // Keep 'data' for backward compatibility
+      verifications: Array.isArray(formattedVerifications) ? formattedVerifications : [], // Admin panel expects 'verifications' not 'data'
+      data: Array.isArray(formattedVerifications) ? formattedVerifications : [], // Keep 'data' for backward compatibility
       status: status || 'all',
     });
   } catch (error) {
@@ -330,11 +349,32 @@ router.get('/search-users', authenticate, requireRole('admin'), async (req, res)
       phone: { $regex: phoneNumber, $options: 'i' },
     })
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .select('phone fullName profilePhoto role email verificationStatus createdAt');
+
+    // Format users for admin panel
+    const formattedUsers = users.map(user => ({
+      _id: user._id,
+      id: user._id.toString(),
+      phone: user.phone,
+      phoneNumber: user.phone, // Admin panel might expect phoneNumber
+      fullName: user.fullName || 'N/A',
+      profilePhoto: user.profilePhoto || null,
+      role: user.role,
+      email: user.email || null,
+      verificationStatus: user.verificationStatus || null,
+      createdAt: user.createdAt,
+    }));
+
+    console.log('📤 Admin API - Search users response:', {
+      query: phoneNumber,
+      count: formattedUsers.length,
+    });
 
     res.json({
       success: true,
-      data: users,
+      data: Array.isArray(formattedUsers) ? formattedUsers : [],
+      users: Array.isArray(formattedUsers) ? formattedUsers : [], // Alternative key
     });
   } catch (error) {
     console.error('Error searching users:', error);

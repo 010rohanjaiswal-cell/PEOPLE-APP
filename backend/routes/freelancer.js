@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
@@ -57,23 +58,109 @@ router.get('/verification/status', authenticate, async (req, res) => {
       });
     }
 
-    // For now, check if user has verification fields
-    // In production, you would check a separate Verification collection
-    // For now, we'll return a status based on user data
-    // If the user exists and is a freelancer, we'll check for verification status
+    // Get verification details from FreelancerVerification collection
+    // Use .lean() to get plain JavaScript object (faster and ensures all fields are accessible)
+    let verification = await FreelancerVerification.findOne({ user: user._id })
+      .select('fullName dob gender address status rejectionReason createdAt updatedAt')
+      .lean() // Convert to plain object
+      .sort({ createdAt: -1 }); // Get the most recent verification
     
-    // TODO: In production, check Verification collection for actual status
-    // Default to null so new freelancers see "Verification Required" until they submit
-    const verificationStatus = user.verificationStatus || null;
+    // If not found, try with string ID as fallback
+    if (!verification) {
+      verification = await FreelancerVerification.findOne({ user: user._id.toString() })
+        .select('fullName dob gender address status rejectionReason createdAt updatedAt')
+        .lean() // Convert to plain object
+        .sort({ createdAt: -1 });
+    }
+    
+    // Log detailed query info for debugging
+    if (!verification) {
+      const allVerifications = await FreelancerVerification.find({}).select('user fullName dob gender address status').limit(5).sort({ createdAt: -1 });
+      console.log('⚠️ Verification not found. Sample verifications in DB:', allVerifications.map(v => ({
+        id: v._id,
+        userId: v.user,
+        userIdType: typeof v.user,
+        fullName: v.fullName,
+        dob: v.dob,
+        gender: v.gender,
+        address: v.address,
+        status: v.status,
+      })));
+    } else {
+      // Also check if there are other verification records for this user
+      const allUserVerifications = await FreelancerVerification.find({
+        $or: [
+          { user: user._id },
+          { user: user._id.toString() }
+        ]
+      }).select('_id fullName dob gender address status createdAt').sort({ createdAt: -1 });
+      console.log('📋 All verification records for this user:', allUserVerifications.map(v => ({
+        id: v._id,
+        fullName: v.fullName,
+        dob: v.dob,
+        gender: v.gender,
+        address: v.address,
+        status: v.status,
+        createdAt: v.createdAt,
+      })));
+    }
+    
+    const verificationStatus = verification?.status || user.verificationStatus || null;
 
-    res.json({
+    console.log('📋 Freelancer verification data:', {
+      userId: user._id,
+      userIdString: user._id.toString(),
+      userIdFromReq: userId,
+      hasVerification: !!verification,
+      verificationData: verification ? {
+        fullName: verification.fullName,
+        dob: verification.dob,
+        gender: verification.gender,
+        address: verification.address,
+        status: verification.status,
+      } : null,
+    });
+    
+    // Log the full verification object to see what's actually in the database
+    if (verification) {
+      console.log('📋 Full verification object from DB:', JSON.stringify(verification.toObject ? verification.toObject() : verification, null, 2));
+    }
+
+    // Ensure we always return all fields, even if null
+    const verificationResponse = {
       success: true,
       status: verificationStatus,
       verification: {
         status: verificationStatus,
-        rejectionReason: user.verificationRejectionReason || null,
+        rejectionReason: verification?.rejectionReason || user.verificationRejectionReason || null,
+        fullName: verification?.fullName ?? null,
+        dob: verification?.dob ?? null,
+        gender: verification?.gender ?? null,
+        address: verification?.address ?? null,
       }
+    };
+    
+    // Log what we're actually sending
+    console.log('📤 Sending verification response:', JSON.stringify(verificationResponse, null, 2));
+    console.log('📤 Verification object fields check:', {
+      hasVerification: !!verification,
+      fullName: verification?.fullName,
+      dob: verification?.dob,
+      gender: verification?.gender,
+      address: verification?.address,
+      allKeys: verification ? Object.keys(verification.toObject ? verification.toObject() : verification) : [],
     });
+    
+    // Log the actual response being sent with explicit field values
+    console.log('📤 Response verification object contains:', {
+      fullName: verificationResponse.verification.fullName,
+      dob: verificationResponse.verification.dob,
+      gender: verificationResponse.verification.gender,
+      address: verificationResponse.verification.address,
+      status: verificationResponse.verification.status,
+    });
+    
+    res.json(verificationResponse);
 
   } catch (error) {
     console.error('Error getting verification status:', error);
@@ -123,6 +210,18 @@ router.post(
       gender,
       address,
     } = req.body || {};
+    
+    console.log('📥 Verification submission received:', {
+      fullName,
+      dob,
+      gender,
+      address,
+      hasProfilePhoto: !!req.files?.profilePhoto?.[0],
+      hasAadhaarFront: !!req.files?.aadhaarFront?.[0],
+      hasAadhaarBack: !!req.files?.aadhaarBack?.[0],
+      hasPanCard: !!req.files?.panCard?.[0],
+      bodyKeys: Object.keys(req.body || {}),
+    });
 
     const profilePhotoFile = req.files?.profilePhoto?.[0];
     const aadhaarFrontFile = req.files?.aadhaarFront?.[0];
@@ -174,6 +273,18 @@ router.post(
         setDefaultsOnInsert: true,
       }
     );
+    
+    console.log('💾 Verification saved to DB:', {
+      userId: user._id,
+      verificationId: verification._id,
+      savedData: {
+        fullName: verification.fullName,
+        dob: verification.dob,
+        gender: verification.gender,
+        address: verification.address,
+        status: verification.status,
+      }
+    });
 
     // Keep a simple status mirror on User for quick checks
     user.verificationStatus = 'pending';

@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
@@ -66,6 +67,34 @@ router.get('/profile', authenticate, async (req, res) => {
     // Get the appropriate profile photo (freelancer verification photo takes priority)
     const profilePhoto = await getUserProfilePhoto(userId);
 
+    // Get verification details if user is a freelancer
+    let verificationData = null;
+    if (user.role === 'freelancer') {
+      // Simple query - explicitly select fields we need, use .lean() for plain object
+      const verification = await FreelancerVerification.findOne({ user: user._id })
+        .select('fullName dob gender address status')
+        .lean() // Convert to plain object
+        .sort({ createdAt: -1 });
+      
+      // Fallback to string ID if not found
+      const verificationToUse = verification || await FreelancerVerification.findOne({ user: user._id.toString() })
+        .select('fullName dob gender address status')
+        .lean() // Convert to plain object
+        .sort({ createdAt: -1 });
+      
+      if (verificationToUse) {
+        verificationData = {
+          fullName: verificationToUse.fullName || null,
+          dob: verificationToUse.dob || null,
+          gender: verificationToUse.gender || null,
+          address: verificationToUse.address || null,
+        };
+        console.log('📋 User profile - Found verification data:', verificationData);
+      } else {
+        console.log('⚠️ User profile - No verification found for user:', userId);
+      }
+    }
+
     res.json({
       success: true,
       user: {
@@ -76,6 +105,7 @@ router.get('/profile', authenticate, async (req, res) => {
         profilePhoto: profilePhoto, // Use the helper function result
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,
+        verification: verificationData, // Include verification details for freelancers
       }
     });
   } catch (error) {
