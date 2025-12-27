@@ -6,9 +6,47 @@
 
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
+const FreelancerVerification = require('../models/FreelancerVerification');
+const User = require('../models/User');
+
+/**
+ * Helper function to get the appropriate profile photo for a user
+ * Priority: Freelancer verification profilePhoto > User profilePhoto > null
+ */
+async function getUserProfilePhoto(userId) {
+  try {
+    // First, check if user has a freelancer verification with profilePhoto
+    const verification = await FreelancerVerification.findOne({ 
+      user: userId,
+      profilePhoto: { $exists: true, $ne: null }
+    }).sort({ createdAt: -1 }); // Get the most recent verification
+    
+    if (verification && verification.profilePhoto) {
+      return verification.profilePhoto;
+    }
+    
+    // If no freelancer verification photo, check user's profilePhoto (from client profile setup)
+    const user = await User.findById(userId);
+    if (user && user.profilePhoto) {
+      return user.profilePhoto;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting user profile photo:', error);
+    // Fallback to user's profilePhoto if verification lookup fails
+    try {
+      const user = await User.findById(userId);
+      return user?.profilePhoto || null;
+    } catch (err) {
+      return null;
+    }
+  }
+}
 
 /**
  * Post a new job
@@ -88,13 +126,106 @@ router.get('/jobs/active', authenticate, async (req, res) => {
       client: user._id || user.id,
       status: { $in: ['open', 'assigned', 'work_done'] },
     })
-      .populate('assignedFreelancer', 'fullName profilePhoto phone')
+      .populate('assignedFreelancer', 'fullName profilePhoto phone email')
       .populate('offers.freelancer', 'fullName profilePhoto phone')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Fetch verification data and profile photo for assigned freelancers
+    const jobsWithVerification = await Promise.all(
+      jobs.map(async (job) => {
+        if (job.assignedFreelancer) {
+          const freelancerId = job.assignedFreelancer._id || job.assignedFreelancer.id;
+          
+          // Get profile photo using helper function
+          const profilePhoto = await getUserProfilePhoto(freelancerId);
+          if (profilePhoto) {
+            job.assignedFreelancer.profilePhoto = profilePhoto;
+          }
+          
+          // Get full user data to ensure we have email and fullName
+          const fullUser = await User.findById(freelancerId).select('fullName email').lean();
+          if (fullUser) {
+            if (fullUser.fullName && !job.assignedFreelancer.fullName) {
+              job.assignedFreelancer.fullName = fullUser.fullName;
+            }
+            if (fullUser.email && !job.assignedFreelancer.email) {
+              job.assignedFreelancer.email = fullUser.email;
+            }
+          }
+          
+          // Try multiple query formats to find verification
+          let verification = await FreelancerVerification.findOne({
+            user: freelancerId
+          })
+            .select('fullName dob gender address profilePhoto')
+            .lean()
+            .sort({ createdAt: -1 });
+          
+          // If not found, try with string ID
+          if (!verification && freelancerId) {
+            verification = await FreelancerVerification.findOne({
+              user: freelancerId.toString()
+            })
+              .select('fullName dob gender address profilePhoto')
+              .lean()
+              .sort({ createdAt: -1 });
+          }
+          
+          // If still not found, try with ObjectId
+          if (!verification && freelancerId) {
+            try {
+              const objectId = new mongoose.Types.ObjectId(freelancerId);
+              verification = await FreelancerVerification.findOne({
+                user: objectId
+              })
+                .select('fullName dob gender address profilePhoto')
+                .lean()
+                .sort({ createdAt: -1 });
+            } catch (e) {
+              // Invalid ObjectId format, skip
+            }
+          }
+          
+          // Also try querying with $or to handle different ID formats
+          if (!verification && freelancerId) {
+            try {
+              verification = await FreelancerVerification.findOne({
+                $or: [
+                  { user: freelancerId },
+                  { user: freelancerId.toString() },
+                  { user: new mongoose.Types.ObjectId(freelancerId) }
+                ]
+              })
+                .select('fullName dob gender address profilePhoto')
+                .lean()
+                .sort({ createdAt: -1 });
+            } catch (e) {
+              // Skip if error
+            }
+          }
+          
+          if (verification) {
+            job.assignedFreelancer.verification = verification;
+            console.log('✅ Found verification for freelancer:', freelancerId, {
+              fullName: verification.fullName,
+              dob: verification.dob,
+              gender: verification.gender,
+              address: verification.address
+            });
+          } else {
+            console.log('⚠️ No verification found for freelancer:', freelancerId, 'Type:', typeof freelancerId);
+            // Still create an empty verification object so the structure is consistent
+            job.assignedFreelancer.verification = null;
+          }
+        }
+        return job;
+      })
+    );
 
     res.json({
       success: true,
-      jobs,
+      jobs: jobsWithVerification,
     });
   } catch (error) {
     console.error('Error getting active client jobs:', error);
