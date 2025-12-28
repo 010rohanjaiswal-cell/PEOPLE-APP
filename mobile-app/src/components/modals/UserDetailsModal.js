@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Linking, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { Button } from '../common';
@@ -14,6 +14,50 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
 
   const name = user.verification?.fullName || user.fullName || 'N/A';
   const profilePhoto = user.profilePhoto || user.verification?.profilePhoto || null;
+  const phone = user.phone || null;
+
+  const handleCall = () => {
+    if (!phone) {
+      Alert.alert('Error', 'Phone number not available');
+      return;
+    }
+    // Remove spaces but keep + for tel: link
+    const phoneNumber = phone.replace(/\s/g, '');
+    const telUrl = `tel:${phoneNumber}`;
+    Linking.openURL(telUrl).catch((err) => {
+      console.error('Error opening phone dialer:', err);
+      Alert.alert('Error', 'Unable to open phone dialer');
+    });
+  };
+
+  const handleChat = () => {
+    if (!phone) {
+      Alert.alert('Error', 'Phone number not available');
+      return;
+    }
+    // Remove spaces and + for WhatsApp (needs country code without +)
+    const phoneNumber = phone.replace(/\s/g, '').replace(/\+/g, '');
+    // Try WhatsApp first, fallback to SMS
+    const whatsappUrl = `whatsapp://send?phone=${phoneNumber}`;
+    const smsUrl = `sms:${phone.replace(/\s/g, '')}`; // Keep + for SMS
+    
+    Linking.canOpenURL(whatsappUrl)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(whatsappUrl);
+        } else {
+          // Fallback to SMS
+          return Linking.openURL(smsUrl);
+        }
+      })
+      .catch((err) => {
+        console.error('Error opening chat:', err);
+        // Fallback to SMS
+        Linking.openURL(smsUrl).catch((smsErr) => {
+          Alert.alert('Error', 'Unable to open messaging app');
+        });
+      });
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -41,9 +85,29 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
           </View>
 
           <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
-              Close
-            </Button>
+            <View style={styles.actionButtons}>
+              {phone && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.callButton]}
+                    onPress={handleCall}
+                  >
+                    <MaterialIcons name="phone" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.chatButton]}
+                    onPress={handleChat}
+                  >
+                    <MaterialIcons name="chat" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Chat</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
+                Close
+              </Button>
+            </View>
           </View>
         </View>
       </View>
@@ -112,6 +176,31 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  actionButtons: {
+    gap: spacing.sm,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: 48,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  callButton: {
+    backgroundColor: colors.success.main,
+  },
+  chatButton: {
+    backgroundColor: colors.primary.main,
+  },
+  actionButtonText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   closeButtonFooter: {
     minHeight: 48,
