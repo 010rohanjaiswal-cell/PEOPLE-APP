@@ -47,8 +47,10 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
     }
   };
 
-  // Only show full details and contact buttons when viewing freelancer (client viewing freelancer)
+  // Show full details when viewing freelancer (client viewing freelancer)
   const isFreelancerView = roleLabel === 'Freelancer';
+  // Show Call/Chat buttons when viewing freelancer OR when viewing client (freelancer viewing client)
+  const showContactButtons = roleLabel === 'Freelancer' || roleLabel === 'Client';
 
   const name = user.verification?.fullName || user.fullName || 'N/A';
   const profilePhoto = user.profilePhoto || user.verification?.profilePhoto || null;
@@ -139,8 +141,8 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
 
           <View style={styles.footer}>
             <View style={styles.actionButtons}>
-              {/* Show Call/Chat buttons only when viewing freelancer */}
-              {isFreelancerView && phone && phone !== 'N/A' && (
+              {/* Show Call/Chat buttons when viewing freelancer OR when viewing client */}
+              {showContactButtons && phone && phone !== 'N/A' && (
                 <>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.callButton]}

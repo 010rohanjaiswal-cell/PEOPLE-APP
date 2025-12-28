@@ -20,6 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { chatAPI } from '../../api/chat';
+import { useSocket } from '../../hooks/useSocket';
 
 const ChatModal = ({ visible, recipient, onClose }) => {
   const { user } = useAuth();
@@ -28,6 +29,7 @@ const ChatModal = ({ visible, recipient, onClose }) => {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [recipientOnline, setRecipientOnline] = useState(false);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -51,6 +53,30 @@ const ChatModal = ({ visible, recipient, onClose }) => {
 
   const setupSocketListeners = () => {
     if (!socket) return;
+
+    const recipientId = recipient?.id || recipient?._id;
+
+    // Listen for recipient online/offline status
+    const handleUserOnline = (data) => {
+      if (data.userId === recipientId) {
+        setRecipientOnline(true);
+      }
+    };
+
+    const handleUserOffline = (data) => {
+      if (data.userId === recipientId) {
+        setRecipientOnline(false);
+      }
+    };
+
+    socket.on('user_online', handleUserOnline);
+    socket.on('user_offline', handleUserOffline);
+
+    // Check if recipient is online when opening chat
+    if (recipientId && (socket.connected || isConnected)) {
+      // Request online status for recipient
+      socket.emit('check_online_status', { userId: recipientId });
+    }
 
     const handleNewMessage = (messageData) => {
       setMessages((prev) => {
@@ -101,15 +127,25 @@ const ChatModal = ({ visible, recipient, onClose }) => {
       );
     };
 
+    const handleOnlineStatus = (data) => {
+      if (data.userId === recipientId) {
+        setRecipientOnline(data.isOnline);
+      }
+    };
+
     socket.on('new_message', handleNewMessage);
     socket.on('message_sent', handleMessageSent);
     socket.on('messages_read', handleMessagesRead);
+    socket.on('online_status', handleOnlineStatus);
 
     // Store handlers for cleanup
     socket._chatHandlers = {
       new_message: handleNewMessage,
       message_sent: handleMessageSent,
       messages_read: handleMessagesRead,
+      user_online: handleUserOnline,
+      user_offline: handleUserOffline,
+      online_status: handleOnlineStatus,
     };
   };
 
@@ -119,6 +155,9 @@ const ChatModal = ({ visible, recipient, onClose }) => {
     socket.off('new_message', socket._chatHandlers.new_message);
     socket.off('message_sent', socket._chatHandlers.message_sent);
     socket.off('messages_read', socket._chatHandlers.messages_read);
+    socket.off('user_online', socket._chatHandlers.user_online);
+    socket.off('user_offline', socket._chatHandlers.user_offline);
+    socket.off('online_status', socket._chatHandlers.online_status);
     
     delete socket._chatHandlers;
   };
@@ -286,7 +325,7 @@ const ChatModal = ({ visible, recipient, onClose }) => {
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
@@ -302,8 +341,8 @@ const ChatModal = ({ visible, recipient, onClose }) => {
             </TouchableOpacity>
             <View style={styles.headerInfo}>
               <Text style={styles.headerName}>{recipientName}</Text>
-              <Text style={[styles.headerStatus, isConnected ? styles.onlineStatus : styles.offlineStatus]}>
-                {isConnected ? 'Online' : 'Offline'}
+              <Text style={[styles.headerStatus, recipientOnline ? styles.onlineStatus : styles.offlineStatus]}>
+                {recipientOnline ? 'Online' : 'Offline'}
               </Text>
             </View>
             <TouchableOpacity style={styles.moreButton}>
@@ -372,13 +411,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modal: {
-    flex: 1,
+    height: '70%',
+    width: '90%',
+    maxWidth: 500,
     backgroundColor: colors.background,
-    marginTop: Platform.OS === 'ios' ? 40 : 0,
-    borderTopLeftRadius: spacing.lg,
-    borderTopRightRadius: spacing.lg,
+    borderRadius: spacing.lg,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
