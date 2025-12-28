@@ -3,18 +3,60 @@
  * Reusable bottom-sheet style modal to show basic user info
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Linking, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Linking, Alert, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { Button } from '../common';
+import ChatModal from './ChatModal';
 
 const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
+  const [chatModalVisible, setChatModalVisible] = useState(false);
+  
   if (!visible || !user) return null;
+
+  // Helper function to calculate age
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    try {
+      let birthDate;
+      if (typeof dob === 'string' && dob.includes('-')) {
+        const parts = dob.split('-');
+        if (parts.length === 3) {
+          birthDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        } else {
+          birthDate = new Date(dob);
+        }
+      } else {
+        birthDate = new Date(dob);
+      }
+      
+      if (isNaN(birthDate.getTime())) return null;
+      
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      if (age < 0 || age > 150) return null;
+      return age;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // Only show full details and contact buttons when viewing freelancer (client viewing freelancer)
+  const isFreelancerView = roleLabel === 'Freelancer';
 
   const name = user.verification?.fullName || user.fullName || 'N/A';
   const profilePhoto = user.profilePhoto || user.verification?.profilePhoto || null;
-  const phone = user.phone || null;
+  const phone = user.phone || 'N/A';
+  const email = user.email || null;
+  const age = calculateAge(user.verification?.dob || user.dob);
+  const gender = user.verification?.gender || user.gender || null;
+  const address = user.verification?.address || user.address || null;
 
   const handleCall = () => {
     if (!phone) {
@@ -31,32 +73,8 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   };
 
   const handleChat = () => {
-    if (!phone) {
-      Alert.alert('Error', 'Phone number not available');
-      return;
-    }
-    // Remove spaces and + for WhatsApp (needs country code without +)
-    const phoneNumber = phone.replace(/\s/g, '').replace(/\+/g, '');
-    // Try WhatsApp first, fallback to SMS
-    const whatsappUrl = `whatsapp://send?phone=${phoneNumber}`;
-    const smsUrl = `sms:${phone.replace(/\s/g, '')}`; // Keep + for SMS
-    
-    Linking.canOpenURL(whatsappUrl)
-      .then((supported) => {
-        if (supported) {
-          return Linking.openURL(whatsappUrl);
-        } else {
-          // Fallback to SMS
-          return Linking.openURL(smsUrl);
-        }
-      })
-      .catch((err) => {
-        console.error('Error opening chat:', err);
-        // Fallback to SMS
-        Linking.openURL(smsUrl).catch((smsErr) => {
-          Alert.alert('Error', 'Unable to open messaging app');
-        });
-      });
+    // Open chat modal instead of external apps
+    setChatModalVisible(true);
   };
 
   return (
@@ -70,7 +88,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.content}>
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             <View style={styles.profileHeader}>
               {profilePhoto ? (
                 <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
@@ -81,12 +99,48 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
               )}
 
               <Text style={styles.name}>{name}</Text>
+              {roleLabel ? <Text style={styles.role}>{roleLabel}</Text> : null}
             </View>
-          </View>
+
+            {/* Show full details only when viewing freelancer */}
+            {isFreelancerView && (
+              <View style={styles.infoSection}>
+                {age ? (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="cake" size={20} color={colors.text.secondary} />
+                    <Text style={styles.infoText}>{age} years old</Text>
+                  </View>
+                ) : null}
+                {gender ? (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="person" size={20} color={colors.text.secondary} />
+                    <Text style={styles.infoText}>{gender.charAt(0).toUpperCase() + gender.slice(1)}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.infoRow}>
+                  <MaterialIcons name="phone" size={20} color={colors.text.secondary} />
+                  <Text style={styles.infoText}>{phone}</Text>
+                </View>
+                {email ? (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="email" size={20} color={colors.text.secondary} />
+                    <Text style={styles.infoText}>{email}</Text>
+                  </View>
+                ) : null}
+                {address ? (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="location-on" size={20} color={colors.text.secondary} />
+                    <Text style={[styles.infoText, styles.addressText]}>{address}</Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+          </ScrollView>
 
           <View style={styles.footer}>
             <View style={styles.actionButtons}>
-              {phone && (
+              {/* Show Call/Chat buttons only when viewing freelancer */}
+              {isFreelancerView && phone && phone !== 'N/A' && (
                 <>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.callButton]}
@@ -111,6 +165,13 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
           </View>
         </View>
       </View>
+
+      {/* Chat Modal */}
+      <ChatModal
+        visible={chatModalVisible}
+        recipient={user}
+        onClose={() => setChatModalVisible(false)}
+      />
     </Modal>
   );
 };
@@ -171,6 +232,23 @@ const styles = StyleSheet.create({
   role: {
     ...typography.body,
     color: colors.text.secondary,
+  },
+  infoSection: {
+    marginTop: spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  infoText: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginLeft: spacing.sm,
+    flex: 1,
+  },
+  addressText: {
+    flexWrap: 'wrap',
   },
   footer: {
     padding: spacing.lg,

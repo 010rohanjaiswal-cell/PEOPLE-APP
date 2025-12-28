@@ -11,4 +11,5 @@ export { default as walletAPI } from './wallet';
 export { default as verificationAPI } from './verification';
 export { paymentAPI } from './payment';
 export { default as userAPI } from './user';
+export { chatAPI } from './chat';
 

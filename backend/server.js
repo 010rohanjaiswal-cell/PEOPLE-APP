@@ -16,6 +16,7 @@ const adminRoutes = require('./routes/admin');
 const clientRoutes = require('./routes/client');
 const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
+const chatRoutes = require('./routes/chat');
 
 // Initialize Express app
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -75,12 +77,16 @@ async function startServer() {
     // Connect to database
     await connectDB();
 
-    // Start listening
-    app.listen(PORT, () => {
+    // Start HTTP server
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 Health check: http://localhost:${PORT}/health`);
       console.log(`📍 API base: http://localhost:${PORT}/api`);
     });
+
+    // Set up Socket.io for real-time messaging
+    const { setupSocketIO } = require('./config/socketio');
+    setupSocketIO(server);
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
