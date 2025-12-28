@@ -368,7 +368,7 @@ router.get('/jobs/assigned', authenticate, async (req, res) => {
       freelancerCompleted: false,
       status: { $in: ['assigned', 'work_done', 'completed'] },
     })
-      .populate('client', 'fullName phone')
+      .populate('client', 'fullName phone profilePhoto')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -389,9 +389,24 @@ router.get('/jobs/assigned', authenticate, async (req, res) => {
       };
     });
 
-    const mappedJobs = jobs.map((job) => ({
-      ...job,
-      commission: commissionByJob[job._id.toString()] || null,
+    // Ensure client profile photos are included
+    const mappedJobs = await Promise.all(jobs.map(async (job) => {
+      // If client exists but doesn't have profilePhoto, fetch it from User model
+      if (job.client && !job.client.profilePhoto) {
+        try {
+          const clientUser = await User.findById(job.client._id || job.client).select('profilePhoto').lean();
+          if (clientUser && clientUser.profilePhoto) {
+            job.client.profilePhoto = clientUser.profilePhoto;
+          }
+        } catch (err) {
+          console.error('Error fetching client profile photo:', err);
+        }
+      }
+      
+      return {
+        ...job,
+        commission: commissionByJob[job._id.toString()] || null,
+      };
     }));
 
     res.json({
@@ -431,12 +446,28 @@ router.get('/orders', authenticate, async (req, res) => {
       freelancerCompleted: true,
       status: 'completed',
     })
-      .populate('client', 'fullName phone')
+      .populate('client', 'fullName phone profilePhoto')
       .sort({ updatedAt: -1 })
       .lean();
+    
+    // Ensure client profile photos are included
+    const jobsWithClientPhotos = await Promise.all(jobs.map(async (job) => {
+      // If client exists but doesn't have profilePhoto, fetch it from User model
+      if (job.client && !job.client.profilePhoto) {
+        try {
+          const clientUser = await User.findById(job.client._id || job.client).select('profilePhoto').lean();
+          if (clientUser && clientUser.profilePhoto) {
+            job.client.profilePhoto = clientUser.profilePhoto;
+          }
+        } catch (err) {
+          console.error('Error fetching client profile photo:', err);
+        }
+      }
+      return job;
+    }));
 
     // Attach commission summary for each job if exists
-    const jobIds = jobs.map((job) => job._id);
+    const jobIds = jobsWithClientPhotos.map((job) => job._id);
     const commissions = await CommissionTransaction.find({
       freelancer: freelancerId,
       job: { $in: jobIds },
@@ -452,7 +483,7 @@ router.get('/orders', authenticate, async (req, res) => {
       };
     });
 
-    const mappedJobs = jobs.map((job) => ({
+    const mappedJobs = jobsWithClientPhotos.map((job) => ({
       ...job,
       commission: commissionByJob[job._id.toString()] || null,
     }));

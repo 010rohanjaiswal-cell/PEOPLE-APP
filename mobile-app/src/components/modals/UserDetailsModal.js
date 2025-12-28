@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { Button } from '../common';
@@ -12,54 +12,7 @@ import { Button } from '../common';
 const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   if (!visible || !user) return null;
 
-  // Debug logging
-  console.log('UserDetailsModal - User data:', JSON.stringify({
-    hasUser: !!user,
-    fullName: user?.fullName,
-    phone: user?.phone,
-    email: user?.email,
-    hasVerification: !!user?.verification,
-    verificationKeys: user?.verification ? Object.keys(user.verification) : [],
-    verificationData: user?.verification
-  }, null, 2));
-
-  const calculateAge = (dob) => {
-    if (!dob) return null;
-    try {
-      let birthDate;
-      if (typeof dob === 'string' && dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) {
-          birthDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        } else {
-          birthDate = new Date(dob);
-        }
-      } else {
-        birthDate = new Date(dob);
-      }
-      
-      if (isNaN(birthDate.getTime())) return null;
-      
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      
-      if (age < 0 || age > 150) return null;
-      return age;
-    } catch (error) {
-      return null;
-    }
-  };
-
   const name = user.verification?.fullName || user.fullName || 'N/A';
-  const phone = user.phone || 'N/A';
-  const email = user.email || null;
-  const age = calculateAge(user.verification?.dob || user.dob);
-  const gender = user.verification?.gender || user.gender || null;
-  const address = user.verification?.address || user.address || null;
   const profilePhoto = user.profilePhoto || user.verification?.profilePhoto || null;
 
   return (
@@ -73,7 +26,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
             <View style={styles.profileHeader}>
               {profilePhoto ? (
                 <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
@@ -84,40 +37,8 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
               )}
 
               <Text style={styles.name}>{name}</Text>
-              {roleLabel ? <Text style={styles.role}>{roleLabel}</Text> : null}
             </View>
-
-            <View style={styles.infoSection}>
-              {age ? (
-                <View style={styles.infoRow}>
-                  <MaterialIcons name="cake" size={20} color={colors.text.secondary} />
-                  <Text style={styles.infoText}>{age} years old</Text>
-                </View>
-              ) : null}
-              {gender ? (
-                <View style={styles.infoRow}>
-                  <MaterialIcons name="person" size={20} color={colors.text.secondary} />
-                  <Text style={styles.infoText}>{gender.charAt(0).toUpperCase() + gender.slice(1)}</Text>
-                </View>
-              ) : null}
-              <View style={styles.infoRow}>
-                <MaterialIcons name="phone" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoText}>{phone}</Text>
-              </View>
-              {email ? (
-                <View style={styles.infoRow}>
-                  <MaterialIcons name="email" size={20} color={colors.text.secondary} />
-                  <Text style={styles.infoText}>{email}</Text>
-                </View>
-              ) : null}
-              {address ? (
-                <View style={styles.infoRow}>
-                  <MaterialIcons name="location-on" size={20} color={colors.text.secondary} />
-                  <Text style={[styles.infoText, styles.addressText]}>{address}</Text>
-                </View>
-              ) : null}
-            </View>
-          </ScrollView>
+          </View>
 
           <View style={styles.footer}>
             <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
@@ -186,23 +107,6 @@ const styles = StyleSheet.create({
   role: {
     ...typography.body,
     color: colors.text.secondary,
-  },
-  infoSection: {
-    marginTop: spacing.lg,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  infoText: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginLeft: spacing.sm,
-    flex: 1,
-  },
-  addressText: {
-    flexWrap: 'wrap',
   },
   footer: {
     padding: spacing.lg,

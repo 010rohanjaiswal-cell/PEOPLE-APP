@@ -41,6 +41,7 @@ const AvailableJobs = () => {
   const [pickupModalVisible, setPickupModalVisible] = useState(false);
   const [pickupJob, setPickupJob] = useState(null);
   const [pickingUp, setPickingUp] = useState(false);
+  const [pickupSuccessModalVisible, setPickupSuccessModalVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [hasActiveJob, setHasActiveJob] = useState(false);
 
@@ -166,7 +167,7 @@ const AvailableJobs = () => {
       if (response.success) {
         setPickupModalVisible(false);
         setPickupJob(null);
-        Alert.alert('Success', 'Job picked up successfully');
+        setPickupSuccessModalVisible(true);
         loadJobs();
         checkActiveJob(); // Update active job status
       } else {
@@ -597,6 +598,34 @@ const AvailableJobs = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Pickup Job Success Modal */}
+      <Modal
+        visible={pickupSuccessModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickupSuccessModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.successIconContainer}>
+              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
+            </View>
+            <Text style={styles.modalTitle}>Job Picked Up Successfully</Text>
+            <Text style={styles.modalSubtitle}>
+              You have successfully picked up the job!
+            </Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
+                onPress={() => setPickupSuccessModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -777,6 +806,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.lg,
   },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
   modalButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
@@ -800,6 +832,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   pickupButtonModal: {
+    backgroundColor: colors.success.main,
+  },
+  successIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  successModalButton: {
     backgroundColor: colors.success.main,
   },
   filterBar: {
