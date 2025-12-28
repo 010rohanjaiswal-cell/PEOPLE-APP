@@ -28,6 +28,7 @@ const Verification = ({ navigation }) => {
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showResubmitForm, setShowResubmitForm] = useState(false); // Control form visibility for rejected status
@@ -136,16 +137,16 @@ const Verification = ({ navigation }) => {
       </View>
       <Text style={styles.statusTitle}>Verification Pending</Text>
       <Text style={styles.statusMessage}>
-        Your verification is under review. Please wait for admin approval.
+        Your verification is under review. Please wait for approval.
       </Text>
-      <Button
-        variant="outline"
+      <TouchableOpacity
         onPress={checkVerificationStatus}
         style={styles.refreshButton}
+        activeOpacity={0.7}
       >
         <MaterialIcons name="refresh" size={20} color={colors.primary.main} />
         <Text style={styles.refreshButtonText}>Refresh Status</Text>
-      </Button>
+      </TouchableOpacity>
     </View>
   );
 
@@ -239,6 +240,8 @@ const Verification = ({ navigation }) => {
       setStatus(VERIFICATION_STATUS.PENDING);
       setIsSubmitted(true);
       setShowResubmitForm(false); // Hide form after successful submission
+      setSuccessMessage('Verification submitted successfully. We will update your status soon.');
+      setError(''); // Clear any previous errors
       
       // Refresh user profile to get updated profile photo from backend
       try {
@@ -251,10 +254,14 @@ const Verification = ({ navigation }) => {
         // Don't show error to user, profile photo will update on next login
       }
       
-      Alert.alert('Submitted', 'Verification submitted. We will update your status soon.');
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setSuccessMessage('');
+      }, 5000);
     } catch (err) {
       console.error('Verification submit error:', err);
       setError(err.response?.data?.message || 'Failed to submit verification');
+      setSuccessMessage(''); // Clear success message on error
     } finally {
       setSubmitting(false);
     }
@@ -413,6 +420,14 @@ const Verification = ({ navigation }) => {
               </View>
             )}
 
+            {/* Success Message Display */}
+            {successMessage && (
+              <View style={styles.successContainer}>
+                <MaterialIcons name="check-circle" size={20} color={colors.success.main} />
+                <Text style={styles.successText}>{successMessage}</Text>
+              </View>
+            )}
+
             {/* Approved */}
             {status === VERIFICATION_STATUS.APPROVED ? (
               renderApprovedStatus()
@@ -524,6 +539,8 @@ const styles = StyleSheet.create({
   statusContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    width: '100%',
   },
   iconContainer: {
     width: 96,
@@ -532,6 +549,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.lg,
+    alignSelf: 'center',
   },
   pendingIcon: {
     backgroundColor: colors.pending.light,
@@ -558,11 +576,21 @@ const styles = StyleSheet.create({
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.borderRadius.button,
+    minHeight: 48,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignSelf: 'center',
+    gap: spacing.md,
   },
   refreshButtonText: {
     ...typography.button,
-    color: colors.primary.main,
+    color: colors.text.primary,
+    marginLeft: spacing.sm,
   },
   dashboardButton: {
     flexDirection: 'row',
@@ -726,6 +754,22 @@ const styles = StyleSheet.create({
   errorText: {
     ...typography.body,
     color: colors.error.main,
+    flex: 1,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success.light,
+    borderWidth: 1,
+    borderColor: colors.success.main,
+    borderRadius: spacing.borderRadius.input,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  successText: {
+    ...typography.body,
+    color: colors.success.dark,
     flex: 1,
   },
 });

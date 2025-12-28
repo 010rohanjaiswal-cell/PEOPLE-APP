@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -114,7 +115,7 @@ const Login = ({ navigation }) => {
             <View style={styles.iconContainer}>
               <MaterialIcons name="phone" size={32} color="#FFFFFF" />
             </View>
-            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.title}>Welcome to People</Text>
             <Text style={styles.description}>
               Enter your mobile number to get started
             </Text>
@@ -199,23 +200,33 @@ const Login = ({ navigation }) => {
                 )}
               </View>
 
-              {/* Submit Button */}
-              <Button
+              {/* Submit Button with Error */}
+              <TouchableOpacity
                 onPress={handleSendOTP}
                 disabled={!validatePhone(phone) || !selectedRole || loading}
-                loading={loading}
-                style={styles.submitButton}
+                style={[styles.submitButton, (!validatePhone(phone) || !selectedRole || loading) && styles.submitButtonDisabled]}
+                activeOpacity={0.7}
               >
-                {!loading && <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />}
-                {loading ? 'Sending OTP...' : 'Send OTP'}
-              </Button>
-
-              {/* Error Display */}
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <View style={styles.buttonContent}>
+                    <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                    <Text style={styles.buttonText}>Send OTP</Text>
+                    {error ? (
+                      <>
+                        <View style={styles.buttonDivider} />
+                        <View style={styles.errorInline}>
+                          <MaterialIcons name="error-outline" size={16} color="#FFFFFF" />
+                          <Text style={styles.errorTextInline} numberOfLines={1}>
+                            {error}
+                          </Text>
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                )}
+              </TouchableOpacity>
             </CardContent>
           </Card>
         </View>
@@ -321,25 +332,52 @@ const styles = StyleSheet.create({
     color: colors.primary.main,
   },
   submitButton: {
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     marginTop: spacing.lg,
-    flexDirection: 'row',
+    backgroundColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  submitButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.7,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: typography.button.fontSize,
+    fontWeight: typography.button.fontWeight,
+  },
+  buttonDivider: {
+    width: 1,
+    height: '80%',
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: spacing.sm,
+  },
+  errorInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  errorTextInline: {
+    ...typography.small,
+    color: '#FFFFFF',
+    fontSize: 11,
+    flexShrink: 1,
+  },
   buttonIcon: {
     marginRight: spacing.xs,
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.borderRadius.input,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  errorText: {
-    fontSize: typography.body.fontSize,
-    color: colors.error.main,
   },
   testButton: {
     marginTop: spacing.lg,

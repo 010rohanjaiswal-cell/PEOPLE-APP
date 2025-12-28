@@ -4,13 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { userAPI } from '../../api';
+import { userAPI, verificationAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -21,21 +21,50 @@ import MyJobsScreen from './MyJobs';
 import WalletScreen from './Wallet';
 import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
+import SettingsScreen from './Settings';
 
 const FreelancerDashboard = () => {
   const { user, logout, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
+  const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
   const [logoutError, setLogoutError] = useState('');
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
+  const [verification, setVerification] = useState(null);
 
-  // Refresh user profile on mount to get updated profile photo
+  // Refresh user profile on mount to get updated profile photo and verification data
   useEffect(() => {
     const refreshUserProfile = async () => {
       try {
         const profileResponse = await userAPI.getProfile();
         if (profileResponse.success && profileResponse.user) {
           await updateUser(profileResponse.user);
+          
+          // Set verification data if available
+          if (profileResponse.user.verification) {
+            setVerification(profileResponse.user.verification);
+          }
+        }
+        
+        // Also try to fetch verification data directly
+        try {
+          const verificationResponse = await verificationAPI.getVerificationStatus();
+          if (verificationResponse.success) {
+            let verificationData = null;
+            if (verificationResponse.verification) {
+              verificationData = verificationResponse.verification;
+            } else if (verificationResponse.data?.verification) {
+              verificationData = verificationResponse.data.verification;
+            } else if (verificationResponse.data) {
+              verificationData = verificationResponse.data;
+            }
+            if (verificationData) {
+              setVerification(verificationData);
+            }
+          }
+        } catch (verificationError) {
+          // Silently fail - verification data is optional
         }
       } catch (error) {
         console.error('Error refreshing user profile:', error);
@@ -49,12 +78,24 @@ const FreelancerDashboard = () => {
   const tabs = [
     { key: 'AvailableJobs', label: 'Available', icon: 'work', component: AvailableJobsScreen },
     { key: 'MyJobs', label: 'My Jobs', icon: 'check-circle', component: MyJobsScreen },
-    { key: 'Wallet', label: 'Wallet', icon: 'account-balance-wallet', component: WalletScreen },
-    { key: 'Orders', label: 'Orders', icon: 'receipt', component: OrdersScreen },
-    { key: 'Profile', label: 'Profile', icon: 'person', component: ProfileScreen },
   ];
 
-  const ActiveScreen = tabs.find(tab => tab.key === activeTab)?.component || AvailableJobsScreen;
+  // Drawer menu items (screens accessible from drawer)
+  const drawerScreens = {
+    Wallet: WalletScreen,
+    Orders: OrdersScreen,
+    Profile: ProfileScreen,
+    Settings: SettingsScreen,
+  };
+
+  // Determine which screen to show
+  const getActiveScreen = () => {
+    if (activeDrawerScreen && drawerScreens[activeDrawerScreen]) {
+      return drawerScreens[activeDrawerScreen];
+    }
+    return tabs.find(tab => tab.key === activeTab)?.component || AvailableJobsScreen;
+  };
+  const ActiveScreen = getActiveScreen();
 
   const toggleDrawer = () => {
     if (drawerVisible) {
@@ -83,8 +124,19 @@ const FreelancerDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
-  const handleLogout = async () => {
+  const handleDrawerNavigation = (screenKey) => {
+    setActiveDrawerScreen(screenKey);
+    setActiveTab(null); // Clear tab selection when navigating to drawer screen
     closeDrawer();
+  };
+
+  const handleLogout = () => {
+    closeDrawer();
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutModalVisible(false);
     try {
       // TODO: Check for active jobs before logout (Phase 4)
       // For now, just logout
@@ -109,6 +161,9 @@ const FreelancerDashboard = () => {
           </TouchableOpacity>
           <Text style={styles.logo}>People</Text>
         </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <MaterialIcons name="notifications" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
       </View>
 
         {/* Error Message */}
@@ -118,41 +173,41 @@ const FreelancerDashboard = () => {
           </View>
         ) : null}
 
-        {/* Top Tab Bar */}
-        <View style={styles.tabBar}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.tabBarContent}
-            style={styles.tabBarScroll}
-          >
-            {tabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key)}
-                style={[
-                  styles.tabButton,
-                  activeTab === tab.key && styles.tabButtonActive,
-                ]}
-              >
-                <MaterialIcons
-                  name={tab.icon}
-                  size={18}
-                  color={activeTab === tab.key ? colors.primary.main : colors.text.secondary}
-                />
-                <Text
+        {/* Top Tab Bar - Only show when not viewing drawer screens */}
+        {!activeDrawerScreen && (
+          <View style={styles.tabBar}>
+            <View style={styles.tabBarContent}>
+              {tabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.key}
+                  onPress={() => {
+                    setActiveTab(tab.key);
+                    setActiveDrawerScreen(null); // Clear drawer screen when selecting tab
+                  }}
                   style={[
-                    styles.tabLabel,
-                    activeTab === tab.key && styles.tabLabelActive,
+                    styles.tabButton,
+                    activeTab === tab.key && styles.tabButtonActive,
                   ]}
-                  numberOfLines={1}
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+                  <MaterialIcons
+                    name={tab.icon}
+                    size={20}
+                    color={activeTab === tab.key ? '#FFFFFF' : colors.text.secondary}
+                  />
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      activeTab === tab.key && styles.tabLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
       {/* Tab Content */}
       <View style={styles.tabContent}>
@@ -196,12 +251,70 @@ const FreelancerDashboard = () => {
                     <MaterialIcons name="person" size={32} color={colors.text.secondary} />
                   </View>
                 )}
-                <Text style={styles.drawerUserName}>{user.fullName || 'Freelancer'}</Text>
-                <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
+                <View style={styles.drawerUserMeta}>
+                  <View style={styles.drawerUserTextBlock}>
+                    <Text style={styles.drawerUserName}>
+                      {verification?.fullName || user.verification?.fullName || user.fullName || 'Freelancer'}
+                    </Text>
+                    <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
+                  </View>
+                  <View style={styles.drawerRatingRow}>
+                    <MaterialIcons name="star" size={18} color={colors.warning.main} />
+                    <Text style={styles.drawerRatingText}>4.5</Text>
+                  </View>
+                </View>
               </View>
 
               {/* Drawer Menu Items */}
               <View style={styles.drawerMenuItems}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setActiveDrawerScreen(null);
+                    setActiveTab('AvailableJobs');
+                    closeDrawer();
+                  }} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="dashboard" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Dashboard</Text>
+                </TouchableOpacity>
+                
+                <View style={styles.drawerMenuDivider} />
+                
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Wallet')} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="account-balance-wallet" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Wallet</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Orders')} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="receipt" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Orders</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Profile')} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="person" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Profile</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Settings')} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="settings" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Settings</Text>
+                </TouchableOpacity>
+                
+                <View style={styles.drawerMenuDivider} />
+                
                 <TouchableOpacity 
                   onPress={handleLogout} 
                   style={styles.drawerMenuItem}
@@ -215,6 +328,37 @@ const FreelancerDashboard = () => {
             </SafeAreaView>
           </Animated.View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={logoutModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Logout</Text>
+            <Text style={styles.modalSubtitle}>
+              Are you sure you want to logout?
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setLogoutModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.logoutModalButton]}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.modalSubmitText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -245,6 +389,9 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginRight: spacing.sm,
   },
+  notificationButton: {
+    padding: spacing.xs,
+  },
   logo: {
     ...typography.h2,
     fontWeight: 'bold',
@@ -262,44 +409,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabBar: {
-    backgroundColor: colors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    maxHeight: 50,
-  },
-  tabBarScroll: {
-    flexGrow: 0,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   tabBarContent: {
-    paddingLeft: spacing.sm,
-    paddingRight: 0,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-  },
-  tabButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginHorizontal: spacing.xs,
+    justifyContent: 'center',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.xs,
+    gap: spacing.xs,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: spacing.sm,
     gap: spacing.xs,
-    minWidth: 70,
-    justifyContent: 'center',
+    minHeight: 44,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   tabButtonActive: {
-    backgroundColor: colors.primary.light,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary.main,
+    backgroundColor: colors.primary.main,
+    shadowColor: colors.primary.main,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
   },
   tabLabel: {
-    ...typography.small,
-    fontSize: 11,
+    ...typography.body,
+    fontSize: typography.body.fontSize,
     color: colors.text.secondary,
     fontWeight: '500',
   },
   tabLabelActive: {
-    color: colors.primary.main,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   tabContent: {
@@ -338,16 +489,17 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   drawerUserInfo: {
+    flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   drawerProfilePhoto: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: spacing.md,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginRight: spacing.md,
   },
   drawerProfilePhotoPlaceholder: {
     backgroundColor: colors.border,
@@ -359,6 +511,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
     marginBottom: spacing.xs,
+  },
+  drawerUserMeta: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  drawerUserTextBlock: {
+    flex: 1,
+  },
+  drawerRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  drawerRatingText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
   },
   drawerUserPhone: {
     ...typography.body,
@@ -377,6 +548,73 @@ const styles = StyleSheet.create({
   drawerMenuItemText: {
     ...typography.body,
     fontWeight: '500',
+    color: colors.text.primary,
+    flex: 1,
+  },
+  drawerMenuDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    maxWidth: 400,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  logoutModalButton: {
+    backgroundColor: colors.error.main,
   },
 });
 

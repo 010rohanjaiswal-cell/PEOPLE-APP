@@ -488,7 +488,7 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
 
     const freelancerId = user._id || user.id;
 
-    // Check unpaid dues - cannot pickup jobs if dues > 0
+    // Check unpaid dues - cannot pickup jobs if dues > 450rs
     const unpaidCommissions = await CommissionTransaction.find({
       freelancer: freelancerId,
       duesPaid: false,
@@ -499,10 +499,11 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       0
     );
 
-    if (totalDues > 0) {
+    const DUES_THRESHOLD = 450;
+    if (totalDues >= DUES_THRESHOLD) {
       return res.status(400).json({
         success: false,
-        error: 'You have unpaid commission dues. Pay dues in Wallet to pickup jobs.',
+        error: `You have unpaid dues of ₹${totalDues}. Please pay dues in Wallet to pickup jobs.`,
       });
     }
 
@@ -566,7 +567,7 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       });
     }
 
-    // Check unpaid dues - cannot make offers if dues > 0
+    // Check unpaid dues - cannot make offers if dues > 450rs
     const unpaidCommissions = await CommissionTransaction.find({
       freelancer: freelancerId,
       duesPaid: false,
@@ -577,10 +578,11 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       0
     );
 
-    if (totalDues > 0) {
+    const DUES_THRESHOLD = 450;
+    if (totalDues >= DUES_THRESHOLD) {
       return res.status(400).json({
         success: false,
-        error: 'You have unpaid commission dues. Pay dues in Wallet to make offers.',
+        error: `You have unpaid dues of ₹${totalDues}. Please pay dues in Wallet to make offers.`,
       });
     }
 
@@ -790,7 +792,12 @@ router.get('/wallet', authenticate, async (req, res) => {
       .filter((t) => !t.duesPaid)
       .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
 
-    const canWork = totalDues <= 0;
+    // Freelancers can work if dues are < 450rs
+    const DUES_THRESHOLD = 450;
+    const canWork = totalDues < DUES_THRESHOLD;
+    
+    // Debug log to verify calculation
+    console.log(`[Wallet API] totalDues: ${totalDues}, DUES_THRESHOLD: ${DUES_THRESHOLD}, canWork: ${canWork} (${totalDues} < ${DUES_THRESHOLD} = ${totalDues < DUES_THRESHOLD})`);
 
     // Map transactions to a frontend-friendly shape
     const mappedTransactions = transactions.map((t) => ({
@@ -876,7 +883,9 @@ router.post('/pay-dues', authenticate, async (req, res) => {
       .filter((t) => !t.duesPaid)
       .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
 
-    const canWork = totalDues <= 0;
+    // Freelancers can work if dues are < 450rs
+    const DUES_THRESHOLD = 450;
+    const canWork = totalDues < DUES_THRESHOLD;
 
     const mappedTransactions = transactions.map((t) => ({
       id: t._id.toString(),

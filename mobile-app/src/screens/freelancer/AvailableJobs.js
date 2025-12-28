@@ -14,6 +14,8 @@ import {
   Alert,
   Modal,
   TextInput,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -22,18 +24,25 @@ import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { walletAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const AvailableJobs = () => {
   const { user } = useAuth();
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [canWork, setCanWork] = useState(true);
+  const [canWork, setCanWork] = useState(false); // Default to false until wallet status is loaded
   const [offerModalVisible, setOfferModalVisible] = useState(false);
   const [offerJob, setOfferJob] = useState(null);
   const [offerAmount, setOfferAmount] = useState('');
   const [offerMessage, setOfferMessage] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
+  const [pickupModalVisible, setPickupModalVisible] = useState(false);
+  const [pickupJob, setPickupJob] = useState(null);
+  const [pickingUp, setPickingUp] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('none');
+  const [hasActiveJob, setHasActiveJob] = useState(false);
 
   const loadJobs = async () => {
     try {
@@ -59,17 +68,72 @@ const AvailableJobs = () => {
   const loadWalletStatus = async () => {
     try {
       const response = await walletAPI.getWallet();
+      console.log('Full wallet response:', JSON.stringify(response, null, 2));
+      
       if (response.success && response.wallet) {
-        setCanWork(response.wallet.canWork !== false);
+        // Backend returns canWork based on 450rs threshold (< 450rs)
+        const walletCanWork = response.wallet.canWork;
+        const totalDues = response.wallet.totalDues || 0;
+        
+        // Robust parsing: handle boolean, string, undefined, null
+        let parsedCanWork = false;
+        if (typeof walletCanWork === 'boolean') {
+          parsedCanWork = walletCanWork;
+        } else if (typeof walletCanWork === 'string') {
+          parsedCanWork = walletCanWork.toLowerCase() === 'true';
+        } else if (walletCanWork != null) {
+          parsedCanWork = Boolean(walletCanWork);
+        }
+        
+        console.log('Wallet Status - canWork:', parsedCanWork, 'totalDues:', totalDues, 'raw canWork:', walletCanWork, 'type:', typeof walletCanWork);
+        setCanWork(parsedCanWork);
+      } else {
+        // If no wallet data, default to false
+        console.log('No wallet data in response, defaulting canWork to false');
+        setCanWork(false);
       }
     } catch (err) {
       console.error('Error loading wallet for canWork:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      // Default to false on error to be safe
+      setCanWork(false);
+    }
+  };
+
+  const checkActiveJob = async () => {
+    try {
+      const response = await freelancerJobsAPI.getAssignedJobs();
+      if (response?.success && Array.isArray(response.jobs)) {
+        // Check if there's any active job (not fully completed)
+        const activeJobs = response.jobs.filter(
+          job => job.freelancerCompleted !== true && 
+          job.status !== 'cancelled'
+        );
+        setHasActiveJob(activeJobs.length > 0);
+      } else if (Array.isArray(response)) {
+        const activeJobs = response.filter(
+          job => job.freelancerCompleted !== true && 
+          job.status !== 'cancelled'
+        );
+        setHasActiveJob(activeJobs.length > 0);
+      } else {
+        setHasActiveJob(false);
+      }
+    } catch (err) {
+      console.error('Error checking active jobs:', err);
+      setHasActiveJob(false);
     }
   };
 
   useEffect(() => {
-    loadJobs();
-    loadWalletStatus();
+    // Run all API calls in parallel for faster loading
+    Promise.all([
+      loadJobs(),
+      loadWalletStatus(),
+      checkActiveJob(),
+    ]).catch(err => {
+      console.error('Error loading initial data:', err);
+    });
   }, []);
 
   const handlePickupJob = async (job) => {
@@ -81,29 +145,69 @@ const AvailableJobs = () => {
       return;
     }
 
-    Alert.alert('Pickup Job', 'Are you sure you want to pickup this job?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Pickup',
-        onPress: async () => {
-          try {
-            const response = await freelancerJobsAPI.pickupJob(job._id || job.id);
-            if (response.success) {
-              Alert.alert('Success', 'Job picked up successfully');
-              loadJobs();
-            } else {
-              Alert.alert('Error', response.error || 'Failed to pickup job');
-            }
-          } catch (err) {
-            console.error('Error picking up job:', err);
-            Alert.alert(
-              'Error',
-              err.response?.data?.error || err.message || 'Failed to pickup job'
-            );
-          }
-        },
-      },
-    ]);
+    if (hasActiveJob) {
+      Alert.alert(
+        'Cannot Pickup Job',
+        'You already have an active job. Please complete your current job before picking up a new one.'
+      );
+      return;
+    }
+
+    setPickupJob(job);
+    setPickupModalVisible(true);
+  };
+
+  const confirmPickupJob = async () => {
+    if (!pickupJob) return;
+
+    try {
+      setPickingUp(true);
+      const response = await freelancerJobsAPI.pickupJob(pickupJob._id || pickupJob.id);
+      if (response.success) {
+        setPickupModalVisible(false);
+        setPickupJob(null);
+        Alert.alert('Success', 'Job picked up successfully');
+        loadJobs();
+        checkActiveJob(); // Update active job status
+      } else {
+        Alert.alert('Error', response.error || 'Failed to pickup job');
+      }
+    } catch (err) {
+      console.error('Error picking up job:', err);
+      Alert.alert(
+        'Error',
+        err.response?.data?.error || err.message || 'Failed to pickup job'
+      );
+    } finally {
+      setPickingUp(false);
+    }
+  };
+
+  const applyFilter = (jobs) => {
+    if (selectedFilter === 'none') return jobs;
+
+    const sortedJobs = [...jobs];
+    
+    switch (selectedFilter) {
+      case 'price_high_low':
+        return sortedJobs.sort((a, b) => (b.budget || 0) - (a.budget || 0));
+      case 'price_low_high':
+        return sortedJobs.sort((a, b) => (a.budget || 0) - (b.budget || 0));
+      case 'newest':
+        return sortedJobs.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+      case 'oldest':
+        return sortedJobs.sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0);
+          const dateB = new Date(b.createdAt || 0);
+          return dateA - dateB;
+        });
+      default:
+        return sortedJobs;
+    }
   };
 
   const openOfferModal = (job) => {
@@ -114,6 +218,23 @@ const AvailableJobs = () => {
       );
       return;
     }
+
+    if (hasActiveJob) {
+      Alert.alert(
+        'Cannot Make Offer',
+        'You already have an active job. Please complete your current job before making offers on new jobs.'
+      );
+      return;
+    }
+
+    if (job.assignedFreelancer || job.status !== 'open') {
+      Alert.alert(
+        'Cannot Make Offer',
+        'This job is no longer available.'
+      );
+      return;
+    }
+
     setOfferJob(job);
     setOfferAmount('');
     setOfferMessage('');
@@ -181,7 +302,17 @@ const AvailableJobs = () => {
 
   const renderJobItem = ({ item }) => {
     const cooldownMinutes = getOfferCooldownMinutes(item);
-    const canMakeOffer = canWork && cooldownMinutes === 0;
+    // Check if job is already picked up (by any freelancer)
+    const isPickedUp = item.assignedFreelancer || item.status !== 'open';
+    // Can only pickup if: canWork is true, job is not picked up, and freelancer doesn't have active job
+    const canPickup = canWork && !isPickedUp && !hasActiveJob;
+    // Can make offer if: canWork is true, no cooldown, job not picked up, and no active job
+    const canMakeOffer = canWork && cooldownMinutes === 0 && !isPickedUp && !hasActiveJob;
+    
+    // Debug log for first job only to avoid spam
+    if (item._id === jobs[0]?._id || item.id === jobs[0]?.id) {
+      console.log('Rendering job - canWork:', canWork, 'canPickup:', canPickup, 'canMakeOffer:', canMakeOffer, 'isPickedUp:', isPickedUp, 'hasActiveJob:', hasActiveJob);
+    }
 
     return (
     <View style={styles.jobCard}>
@@ -189,42 +320,50 @@ const AvailableJobs = () => {
         <Text style={styles.jobTitle}>{item.title}</Text>
         <Text style={styles.jobBudget}>₹{item.budget}</Text>
       </View>
-      <Text style={styles.jobCategory}>{item.category}</Text>
-      <Text style={styles.jobAddress}>{item.address}</Text>
-      <View style={styles.jobMetaRow}>
-        <View style={styles.jobMeta}>
-          <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{item.pincode}</Text>
-        </View>
-        <View style={styles.jobMeta}>
-          <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
-        </View>
-      </View>
       {item.description ? (
         <Text style={styles.jobDescription} numberOfLines={2}>
           {item.description}
         </Text>
       ) : null}
+      <Text style={styles.jobAddress}>Address - {item.address}</Text>
+      <View style={styles.jobMetaRow}>
+        <View style={styles.jobMeta}>
+          <MaterialIcons name="person" size={16} color={colors.text.secondary} />
+          <Text style={styles.jobMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
+        </View>
+        <View style={styles.jobMeta}>
+          <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
+          <Text style={styles.jobMetaText}>{item.pincode}</Text>
+        </View>
+      </View>
 
       <View style={styles.actionsRow}>
         <TouchableOpacity
-          style={[styles.actionButton, !canWork && styles.actionButtonDisabled]}
+          style={[
+            styles.actionButton,
+            styles.pickupButton,
+            (!canPickup || isPickedUp) && styles.actionButtonDisabled,
+          ]}
           onPress={() => handlePickupJob(item)}
-          disabled={!canWork}
+          disabled={!canPickup || isPickedUp}
         >
           <MaterialIcons
             name="check-circle"
             size={18}
-            color={canWork ? colors.success.main : colors.text.muted}
+            color={canPickup && !isPickedUp ? colors.background : colors.text.muted}
           />
           <Text
             style={[
               styles.actionButtonText,
-              { color: canWork ? colors.success.main : colors.text.muted },
+              styles.pickupButtonText,
+              { color: canPickup ? colors.background : colors.text.muted },
             ]}
           >
-            {canWork ? 'Pickup Job' : 'Pay Commission First'}
+            {!canWork 
+              ? 'Pay Dues' 
+              : isPickedUp 
+              ? 'Already Taken'
+              : 'Pickup Job'}
           </Text>
         </TouchableOpacity>
 
@@ -232,24 +371,27 @@ const AvailableJobs = () => {
           style={[
             styles.actionButton,
             styles.makeOfferButton,
-            (!canWork || cooldownMinutes > 0) && styles.actionButtonDisabled,
+            (!canMakeOffer || isPickedUp) && styles.actionButtonDisabled,
           ]}
           onPress={() => openOfferModal(item)}
-          disabled={!canMakeOffer}
+          disabled={!canMakeOffer || isPickedUp}
         >
           <MaterialIcons
             name="local-offer"
             size={18}
-            color={canMakeOffer ? colors.primary.main : colors.text.muted}
+            color={canMakeOffer && !isPickedUp ? colors.background : colors.text.muted}
           />
           <Text
             style={[
               styles.actionButtonText,
-              { color: canMakeOffer ? colors.primary.main : colors.text.muted },
+              styles.makeOfferButtonText,
+              { color: canMakeOffer && !isPickedUp ? colors.background : colors.text.muted },
             ]}
           >
             {!canWork
-              ? 'Pay Commission First'
+              ? 'Pay Dues'
+              : isPickedUp
+              ? 'Already Taken'
               : cooldownMinutes > 0
               ? `${cooldownMinutes}m`
               : 'Make Offer'}
@@ -279,6 +421,8 @@ const AvailableJobs = () => {
     );
   }
 
+  const filteredJobs = applyFilter(jobs);
+
   return (
     <View style={styles.container}>
       {error ? (
@@ -286,12 +430,117 @@ const AvailableJobs = () => {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
+      
+      {/* Filter Bar */}
+      <View style={styles.filterBar}>
+        <View style={styles.filterOptions}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'none' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('none')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'none' && styles.filterOptionTextActive,
+              ]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'price_high_low' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('price_high_low')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'price_high_low' && styles.filterOptionTextActive,
+              ]}>
+                Price: High to Low
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'price_low_high' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('price_low_high')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'price_low_high' && styles.filterOptionTextActive,
+              ]}>
+                Price: Low to High
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'newest' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('newest')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'newest' && styles.filterOptionTextActive,
+              ]}>
+                Newest First
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+
       <FlatList
-        data={jobs}
+        data={filteredJobs}
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderJobItem}
         contentContainerStyle={styles.listContent}
       />
+
+      {/* Pickup Job Confirmation Modal */}
+      <Modal
+        visible={pickupModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickupModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Pickup Job</Text>
+            <Text style={styles.modalSubtitle}>
+              Are you sure you want to pickup this job?
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  setPickupModalVisible(false);
+                  setPickupJob(null);
+                }}
+                disabled={pickingUp}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.pickupButtonModal]}
+                onPress={confirmPickupJob}
+                disabled={pickingUp}
+              >
+                {pickingUp ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Pickup Job</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Make Offer Modal */}
       <Modal
@@ -356,7 +605,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -379,6 +628,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   jobCard: {
     backgroundColor: colors.cardBackground,
@@ -387,6 +637,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
+    width: SCREEN_WIDTH * 0.97,
+    alignSelf: 'center',
   },
   jobHeader: {
     flexDirection: 'row',
@@ -395,7 +647,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   jobTitle: {
-    ...typography.h3,
+    ...typography.body,
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.text.primary,
   },
   jobBudget: {
@@ -409,13 +663,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   jobAddress: {
-    ...typography.body,
+    ...typography.small,
     color: colors.text.primary,
     marginBottom: spacing.sm,
   },
   jobMetaRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: spacing.md,
     marginBottom: spacing.xs,
   },
   jobMeta: {
@@ -431,34 +686,48 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: spacing.xs,
-    fontStyle: 'italic',
+    marginBottom: spacing.xs,
   },
   actionsRow: {
     marginTop: spacing.md,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: spacing.sm,
+    width: '100%',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: spacing.sm,
     borderWidth: 1,
+    flex: 1,
+  },
+  pickupButton: {
+    backgroundColor: colors.success.main,
     borderColor: colors.success.main,
-    backgroundColor: 'transparent',
+  },
+  makeOfferButton: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   actionButtonDisabled: {
+    backgroundColor: 'transparent',
     borderColor: colors.text.muted,
   },
   actionButtonText: {
     ...typography.small,
     fontWeight: '600',
   },
-  makeOfferButton: {
-    borderColor: colors.primary.main,
+  pickupButtonText: {
+    color: colors.background,
+  },
+  makeOfferButtonText: {
+    color: colors.background,
   },
   modalOverlay: {
     flex: 1,
@@ -529,6 +798,62 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  pickupButtonModal: {
+    backgroundColor: colors.success.main,
+  },
+  filterBar: {
+    backgroundColor: colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  filterButtonActive: {
+    color: colors.primary.main,
+  },
+  filterButtonText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: colors.primary.main,
+  },
+  filterOptions: {
+    marginTop: 0,
+    paddingBottom: spacing.xs,
+  },
+  filterScrollContent: {
+    gap: spacing.sm,
+  },
+  filterOption: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginRight: spacing.sm,
+  },
+  filterOptionActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  filterOptionText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  filterOptionTextActive: {
+    color: colors.background,
   },
 });
 

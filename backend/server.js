@@ -28,6 +28,28 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
+
+// Capture raw body for webhook signature validation (e.g. PhonePe)
+// Must be registered BEFORE express.json()
+app.use((req, res, next) => {
+  try {
+    let data = '';
+
+    req.on('data', (chunk) => {
+      data += chunk;
+    });
+
+    req.on('end', () => {
+      // Save raw request body string for routes that need it
+      req.rawBody = data;
+      next();
+    });
+  } catch (err) {
+    // In case of any error, still move to next middleware
+    next();
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

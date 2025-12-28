@@ -167,15 +167,52 @@ const Wallet = () => {
                   console.log('✅ Payment successful - waiting for deep link callback');
                   // Don't set paying to false yet - wait for deep link
                 } else if (sdkResponse && sdkResponse.status === 'FAILURE') {
-                  // Payment failed
+                  // Payment failed or cancelled
                   console.error('❌ Payment failed:', sdkResponse.error);
+
+                  const errorStr = sdkResponse.error || '';
+                  const isUserCancel =
+                    typeof errorStr === 'string' &&
+                    (errorStr.includes('USER_CANCEL') ||
+                      errorStr.toLowerCase().includes('user_cancel') ||
+                      errorStr.toLowerCase().includes('cancel'));
+
                   subscription.remove();
                   setPaying(false);
-                  Alert.alert(
-                    'Payment Failed',
-                    sdkResponse.error || 'Payment transaction failed. Please try again.',
-                    [{ text: 'OK' }]
-                  );
+
+                  if (isUserCancel) {
+                    // User explicitly cancelled in PhonePe UI – treat as a normal cancel, not an error
+                    console.log('⚠️ Payment cancelled by user in PhonePe UI');
+                    // Optional: show a light info message instead of an error
+                    // Alert.alert('Payment Cancelled', 'You cancelled the payment.');
+                  } else {
+                    // Actual failure – try to fetch more details from backend / PhonePe
+                    let detailedReason = '';
+                    try {
+                      const statusResp = await paymentAPI.checkOrderStatus(merchantOrderId);
+                      if (statusResp?.success && statusResp.isFailed) {
+                        const detailedErrorCode =
+                          statusResp.detailedErrorCode || statusResp.errorCode;
+                        console.log('🔍 PhonePe order status after FAILURE:', statusResp);
+
+                        if (detailedErrorCode === 'ORDER_EXPIRED') {
+                          detailedReason =
+                            'Your payment order has expired. Please tap Pay Dues again and complete the payment within a few minutes.';
+                        } else if (detailedErrorCode) {
+                          detailedReason = `PhonePe error: ${detailedErrorCode}`;
+                        }
+                      }
+                    } catch (statusErr) {
+                      console.warn('⚠️ Failed to fetch PhonePe order status after FAILURE:', statusErr);
+                    }
+
+                    // Show best available error message
+                    Alert.alert(
+                      'Payment Failed',
+                      detailedReason || sdkResponse.error || 'Payment transaction failed. Please try again.',
+                      [{ text: 'OK' }]
+                    );
+                  }
                 } else if (sdkResponse && sdkResponse.status === 'INTERRUPTED') {
                   // Payment interrupted by user
                   console.log('⚠️ Payment interrupted by user');
@@ -290,7 +327,18 @@ const Wallet = () => {
             }
           } else if (statusResponse.isFailed) {
             // Payment failed
-            Alert.alert('Payment Failed', 'Payment was not successful. Please try again.');
+            const detailedErrorCode = statusResponse.detailedErrorCode || statusResponse.errorCode;
+
+            if (detailedErrorCode === 'ORDER_EXPIRED') {
+              // Special UX for expired orders
+              Alert.alert(
+                'Order Expired',
+                'Your payment order has expired. Please tap Pay Dues again and complete the payment within a few minutes.'
+              );
+            } else {
+              Alert.alert('Payment Failed', 'Payment was not successful. Please try again.');
+            }
+
             setPaying(false);
             return true; // Stop polling
           } else if (statusResponse.isPending && retries < maxRetries) {

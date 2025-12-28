@@ -19,11 +19,14 @@ import PostJobScreen from './PostJob';
 import MyJobsScreen from './MyJobs';
 import HistoryScreen from './History';
 import ProfileScreen from './Profile';
+import SettingsScreen from './Settings';
 
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('PostJob');
+  const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
   const [logoutError, setLogoutError] = useState('');
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
 
@@ -33,7 +36,22 @@ const ClientDashboard = () => {
     { key: 'MyJobs', label: 'My Jobs', icon: 'work', component: MyJobsScreen },
   ];
 
-  const ActiveScreen = tabs.find(tab => tab.key === activeTab)?.component || PostJobScreen;
+  // Drawer menu items (screens accessible from drawer)
+  const drawerScreens = {
+    History: HistoryScreen,
+    Profile: ProfileScreen,
+    Settings: SettingsScreen,
+  };
+
+  // Determine which screen to show
+  const getActiveScreen = () => {
+    if (activeDrawerScreen && drawerScreens[activeDrawerScreen]) {
+      return drawerScreens[activeDrawerScreen];
+    }
+    return tabs.find(tab => tab.key === activeTab)?.component || PostJobScreen;
+  };
+  const ActiveScreen = getActiveScreen();
+
 
   // Swipe gesture to switch between Post Job and My Jobs
   const panResponder = useRef(
@@ -77,8 +95,19 @@ const ClientDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
-  const handleLogout = async () => {
+  const handleDrawerNavigation = (screenKey) => {
+    setActiveDrawerScreen(screenKey);
+    setActiveTab(null); // Clear tab selection when navigating to drawer screen
     closeDrawer();
+  };
+
+  const handleLogout = () => {
+    closeDrawer();
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutModalVisible(false);
     try {
       // TODO: Check for active jobs before logout
       // For now, just logout
@@ -103,6 +132,9 @@ const ClientDashboard = () => {
           </TouchableOpacity>
           <Text style={styles.logo}>People</Text>
         </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <MaterialIcons name="notifications" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
       </View>
 
         {/* Error Message */}
@@ -113,7 +145,7 @@ const ClientDashboard = () => {
         ) : null}
 
         {/* Top Tab Bar - only show for PostJob/MyJobs */}
-        {tabs.some(tab => tab.key === activeTab) && (
+        {!activeDrawerScreen && tabs.some(tab => tab.key === activeTab) && (
           <View style={styles.tabBar}>
             <View style={styles.tabRow}>
               {tabs.map((tab) => (
@@ -127,8 +159,8 @@ const ClientDashboard = () => {
                 >
                   <MaterialIcons
                     name={tab.icon}
-                    size={18}
-                    color={activeTab === tab.key ? colors.primary.main : colors.text.secondary}
+                    size={20}
+                    color={activeTab === tab.key ? '#FFFFFF' : colors.text.secondary}
                   />
                   <Text
                     style={[
@@ -147,11 +179,7 @@ const ClientDashboard = () => {
 
       {/* Tab Content */}
       <View style={styles.tabContent} {...panResponder.panHandlers}>
-        {activeTab === 'History' ? (
-          <HistoryScreen />
-        ) : activeTab === 'Profile' ? (
-          <ProfileScreen />
-        ) : activeTab === 'PostJob' ? (
+        {activeTab === 'PostJob' ? (
           <PostJobScreen onJobPosted={() => setActiveTab('MyJobs')} />
         ) : (
           <ActiveScreen />
@@ -195,8 +223,12 @@ const ClientDashboard = () => {
                     <MaterialIcons name="person" size={32} color={colors.text.secondary} />
                   </View>
                 )}
-                <Text style={styles.drawerUserName}>{user.fullName || 'User'}</Text>
-                <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
+                <View style={styles.drawerUserMeta}>
+                  <View style={styles.drawerUserTextBlock}>
+                    <Text style={styles.drawerUserName}>{user.fullName || 'User'}</Text>
+                    <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
+                  </View>
+                </View>
               </View>
 
               {/* Drawer Menu Items */}
@@ -204,6 +236,7 @@ const ClientDashboard = () => {
                 <TouchableOpacity 
                   onPress={() => {
                     closeDrawer();
+                    setActiveDrawerScreen(null);
                     setActiveTab('PostJob');
                   }} 
                   style={styles.drawerMenuItem}
@@ -213,10 +246,7 @@ const ClientDashboard = () => {
                 </TouchableOpacity>
                 <View style={styles.drawerMenuDivider} />
                 <TouchableOpacity 
-                  onPress={() => {
-                    closeDrawer();
-                    setActiveTab('History');
-                  }} 
+                  onPress={() => handleDrawerNavigation('History')} 
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="history" size={24} color={colors.text.primary} />
@@ -224,14 +254,19 @@ const ClientDashboard = () => {
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  onPress={() => {
-                    closeDrawer();
-                    setActiveTab('Profile');
-                  }} 
+                  onPress={() => handleDrawerNavigation('Profile')} 
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="person" size={24} color={colors.text.primary} />
                   <Text style={styles.drawerMenuItemText}>Profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Settings')} 
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="settings" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>Settings</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />
@@ -249,6 +284,37 @@ const ClientDashboard = () => {
             </SafeAreaView>
           </Animated.View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={logoutModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogoutModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Logout</Text>
+            <Text style={styles.modalSubtitle}>
+              Are you sure you want to logout?
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setLogoutModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.logoutModalButton]}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.modalSubmitText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -275,6 +341,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  notificationButton: {
+    padding: spacing.xs,
+  },
   menuButton: {
     padding: spacing.xs,
     marginRight: spacing.sm,
@@ -296,10 +365,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabBar: {
-    backgroundColor: colors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    maxHeight: 50,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   tabBarScroll: {
     flexGrow: 0,
@@ -313,32 +381,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.xs,
+    gap: spacing.xs,
   },
   tabButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginHorizontal: spacing.xs,
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: spacing.sm,
     gap: spacing.xs,
-    minWidth: 64,
-    justifyContent: 'center',
+    minHeight: 40,
   },
   tabButtonActive: {
-    backgroundColor: colors.primary.light,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary.main,
+    backgroundColor: colors.primary.main,
+    shadowColor: colors.primary.main,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tabLabel: {
-    ...typography.small,
-    fontSize: 11,
+    ...typography.body,
+    fontSize: 15,
     color: colors.text.secondary,
     fontWeight: '500',
   },
   tabLabelActive: {
-    color: colors.primary.main,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   tabContent: {
@@ -377,16 +451,17 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   drawerUserInfo: {
+    flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   drawerProfilePhoto: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: spacing.md,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginRight: spacing.md,
   },
   drawerProfilePhotoPlaceholder: {
     backgroundColor: colors.border,
@@ -398,6 +473,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
     marginBottom: spacing.xs,
+  },
+  drawerUserMeta: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  drawerUserTextBlock: {
+    flex: 1,
   },
   drawerUserPhone: {
     ...typography.body,
@@ -423,6 +507,66 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    maxWidth: 400,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  logoutModalButton: {
+    backgroundColor: colors.error.main,
   },
 });
 

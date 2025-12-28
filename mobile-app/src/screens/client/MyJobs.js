@@ -229,7 +229,31 @@ const MyJobs = () => {
         activeOpacity={hasDetails ? 0.7 : 1}
       >
         <View style={styles.jobHeader}>
-          <Text style={styles.jobTitle}>{item.title}</Text>
+          <View style={styles.jobTitleRow}>
+            <Text style={styles.jobTitle}>{item.title}</Text>
+            {showEditDelete && (
+              <View style={styles.editDeleteButtons}>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleEditJob(item);
+                  }}
+                >
+                  <MaterialIcons name="edit" size={20} color={colors.primary.main} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleDeleteJob(item);
+                  }}
+                >
+                  <MaterialIcons name="delete" size={20} color={colors.error.main} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
           <View style={styles.jobHeaderRight}>
             <Text style={styles.jobBudget}>₹{item.budget}</Text>
             <View
@@ -317,34 +341,6 @@ const MyJobs = () => {
                 Payment Completed
               </Text>
             </View>
-          )}
-
-          {/* Edit/Delete buttons (only for open jobs with no accepted offers) */}
-          {showEditDelete && (
-            <>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.editButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleEditJob(item);
-                }}
-              >
-                <MaterialIcons name="edit" size={18} color={colors.primary.main} />
-                <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                  Edit
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDeleteJob(item);
-                }}
-              >
-                <MaterialIcons name="delete" size={18} color={colors.error.main} />
-                <Text style={[styles.actionButtonText, { color: colors.error.main }]}>Delete</Text>
-              </TouchableOpacity>
-            </>
           )}
         </View>
       </TouchableOpacity>
@@ -542,12 +538,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  jobTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   jobTitle: {
     ...typography.body,
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
     flex: 1,
+    marginRight: 4,
+  },
+  editDeleteButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconButton: {
+    padding: 4,
+    borderRadius: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   jobBudget: {
     ...typography.body,

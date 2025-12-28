@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -194,23 +196,33 @@ const OTP = ({ navigation, route }) => {
                 />
               </View>
 
-              {/* Submit Button */}
-              <Button
+              {/* Submit Button with Error */}
+              <TouchableOpacity
                 onPress={handleVerifyOTP}
                 disabled={!validateOTP(otp) || loading}
-                loading={loading}
-                style={styles.submitButton}
+                style={[styles.submitButton, (!validateOTP(otp) || loading) && styles.submitButtonDisabled]}
+                activeOpacity={0.7}
               >
-                {!loading && <MaterialIcons name="check-circle" size={20} color="#FFFFFF" style={styles.buttonIcon} />}
-                {loading ? 'Verifying...' : 'Verify OTP'}
-              </Button>
-
-              {/* Error Display */}
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <View style={styles.buttonContent}>
+                    <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+                    <Text style={styles.buttonText}>Verify OTP</Text>
+                    {error ? (
+                      <>
+                        <View style={styles.buttonDivider} />
+                        <View style={styles.errorInline}>
+                          <MaterialIcons name="error-outline" size={16} color="#FFFFFF" />
+                          <Text style={styles.errorTextInline} numberOfLines={1}>
+                            {error}
+                          </Text>
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                )}
+              </TouchableOpacity>
 
               {/* Resend OTP */}
               <View style={styles.resendContainer}>
@@ -229,14 +241,16 @@ const OTP = ({ navigation, route }) => {
               </View>
 
               {/* Back Button */}
-              <Button
-                variant="ghost"
+              <TouchableOpacity
                 onPress={handleBack}
                 style={styles.backButton}
+                activeOpacity={0.7}
               >
-                <MaterialIcons name="arrow-back" size={16} color={colors.primary} style={styles.backIcon} />
-                Back to Login
-              </Button>
+                <View style={styles.backButtonContent}>
+                  <MaterialIcons name="arrow-back" size={16} color={colors.primary.main} />
+                  <Text style={styles.backButtonText}>Back to Login</Text>
+                </View>
+              </TouchableOpacity>
             </CardContent>
           </Card>
         </View>
@@ -268,15 +282,16 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primary.main,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   title: {
     ...typography.h1,
-    color: colors.foreground,
+    color: colors.text.primary,
     marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   description: {
     ...typography.body,
@@ -306,23 +321,51 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
+    backgroundColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.7,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: typography.button.fontSize,
+    fontWeight: typography.button.fontWeight,
+  },
+  buttonDivider: {
+    width: 1,
+    height: '80%',
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: spacing.sm,
+  },
+  errorInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 1,
+  },
+  errorTextInline: {
+    ...typography.small,
+    color: '#FFFFFF',
+    fontSize: 11,
+    flexShrink: 1,
   },
   buttonIcon: {
     marginRight: spacing.sm,
-  },
-  errorContainer: {
-    backgroundColor: colors.destructive + '20',
-    borderWidth: 1,
-    borderColor: colors.destructive,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.destructive,
-    textAlign: 'center',
   },
   resendContainer: {
     alignItems: 'center',
@@ -343,7 +386,28 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   backButton: {
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
+    backgroundColor: 'transparent',
+    borderRadius: spacing.borderRadius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+  },
+  backButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  backButtonText: {
+    color: colors.primary.main,
+    fontSize: typography.button.fontSize,
+    fontWeight: typography.button.fontWeight,
   },
   backIcon: {
     marginRight: spacing.xs,

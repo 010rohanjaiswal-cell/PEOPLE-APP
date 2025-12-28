@@ -120,7 +120,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose}>
+            <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
               Close
             </Button>
           </View>
@@ -208,6 +208,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  closeButtonFooter: {
+    minHeight: 48,
+    paddingVertical: spacing.md,
   },
 });
 

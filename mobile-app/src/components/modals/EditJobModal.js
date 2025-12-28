@@ -255,13 +255,15 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modal: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: spacing.lg,
-    borderTopRightRadius: spacing.lg,
+    borderRadius: spacing.lg,
     maxHeight: '90%',
+    width: '90%',
+    maxWidth: 500,
   },
   header: {
     flexDirection: 'row',
@@ -342,9 +344,13 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
+    minHeight: 52,
+    paddingVertical: spacing.md,
   },
   submitButton: {
     flex: 1,
+    minHeight: 52,
+    paddingVertical: spacing.md,
   },
 });
 
