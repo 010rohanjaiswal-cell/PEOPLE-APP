@@ -18,6 +18,8 @@ router.get('/', authenticate, async (req, res) => {
     const userId = req.user._id || req.user.id;
     const { page = 1, limit = 20, unreadOnly = false } = req.query;
 
+    console.log(`📬 Fetching notifications for user: ${userId}`);
+
     const query = { user: userId };
     if (unreadOnly === 'true') {
       query.read = false;
@@ -34,6 +36,8 @@ router.get('/', authenticate, async (req, res) => {
     const total = await Notification.countDocuments(query);
     const unreadCount = await Notification.countDocuments({ user: userId, read: false });
 
+    console.log(`✅ Found ${notifications.length} notifications, ${unreadCount} unread for user ${userId}`);
+
     res.json({
       success: true,
       notifications,
@@ -46,7 +50,7 @@ router.get('/', authenticate, async (req, res) => {
       unreadCount,
     });
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    console.error('❌ Error fetching notifications:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch notifications',
@@ -63,12 +67,14 @@ router.get('/unread-count', authenticate, async (req, res) => {
     const userId = req.user._id || req.user.id;
     const count = await Notification.countDocuments({ user: userId, read: false });
 
+    console.log(`📊 Unread count for user ${userId}: ${count}`);
+
     res.json({
       success: true,
       count,
     });
   } catch (error) {
-    console.error('Error fetching unread count:', error);
+    console.error('❌ Error fetching unread count:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch unread count',

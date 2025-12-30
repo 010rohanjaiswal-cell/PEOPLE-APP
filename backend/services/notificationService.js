@@ -35,7 +35,7 @@ async function createNotification({ userId, type, title, message, data = {} }) {
     // Emit notification via Socket.io
     const io = getIO();
     if (io) {
-      io.to(`notifications_${userId.toString()}`).emit('new_notification', {
+      const notificationData = {
         notification: {
           _id: notification._id,
           type: notification.type,
@@ -45,7 +45,18 @@ async function createNotification({ userId, type, title, message, data = {} }) {
           read: notification.read,
           createdAt: notification.createdAt,
         },
-      });
+      };
+      
+      const userIdStr = userId.toString();
+      console.log(`📤 Emitting notification to user ${userIdStr} via Socket.io`);
+      
+      // Emit to both notification room and user room for reliability
+      io.to(`notifications_${userIdStr}`).emit('new_notification', notificationData);
+      io.to(`user_${userIdStr}`).emit('new_notification', notificationData);
+      
+      console.log(`✅ Notification emitted to rooms: notifications_${userIdStr}, user_${userIdStr}`);
+    } else {
+      console.warn('⚠️ Socket.io not available, notification will only be saved to database');
     }
 
     return notification;

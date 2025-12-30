@@ -28,17 +28,26 @@ export const NotificationProvider = ({ children }) => {
 
   // Load notifications
   const loadNotifications = useCallback(async (showLoading = true) => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !user) {
+      console.log('⚠️ Cannot load notifications: not authenticated or no user');
+      return;
+    }
 
     try {
       if (showLoading && !refreshing) setLoading(true);
+      console.log('📬 Loading notifications for user:', user._id || user.id);
       const response = await notificationsAPI.getNotifications({ limit: 50 });
+      console.log('📬 Notifications response:', response);
       if (response.success) {
         setNotifications(response.notifications || []);
         setUnreadCount(response.unreadCount || 0);
+        console.log('✅ Loaded notifications:', response.notifications?.length || 0, 'Unread:', response.unreadCount || 0);
+      } else {
+        console.error('❌ Failed to load notifications:', response.error);
       }
     } catch (error) {
-      console.error('Error loading notifications:', error);
+      console.error('❌ Error loading notifications:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -53,9 +62,11 @@ export const NotificationProvider = ({ children }) => {
       const response = await notificationsAPI.getUnreadCount();
       if (response.success) {
         setUnreadCount(response.count || 0);
+        console.log('📊 Unread count updated:', response.count || 0);
       }
     } catch (error) {
-      console.error('Error loading unread count:', error);
+      console.error('❌ Error loading unread count:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
     }
   }, [isAuthenticated, user]);
 
@@ -130,11 +141,26 @@ export const NotificationProvider = ({ children }) => {
 
   // Set up Socket.io listener for new notifications
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket) {
+      console.log('⚠️ Socket not available for notifications');
+      return;
+    }
+    
+    if (!isConnected) {
+      console.log('⚠️ Socket not connected for notifications');
+      return;
+    }
 
+    console.log('✅ Setting up notification listener on socket');
+    
     const handleNewNotification = (data) => {
-      console.log('New notification received:', data);
+      console.log('🔔 New notification received via Socket.io:', data);
       const newNotification = data.notification;
+      
+      if (!newNotification) {
+        console.error('❌ Invalid notification data received:', data);
+        return;
+      }
       
       // Add notification to the beginning of the list
       setNotifications(prev => [newNotification, ...prev]);
@@ -142,12 +168,15 @@ export const NotificationProvider = ({ children }) => {
       // Increment unread count if notification is unread
       if (!newNotification.read) {
         setUnreadCount(prev => prev + 1);
+        console.log('📬 Unread count incremented');
       }
     };
 
     socket.on('new_notification', handleNewNotification);
+    console.log('✅ Notification listener registered');
 
     return () => {
+      console.log('🧹 Cleaning up notification listener');
       socket.off('new_notification', handleNewNotification);
     };
   }, [socket, isConnected]);
