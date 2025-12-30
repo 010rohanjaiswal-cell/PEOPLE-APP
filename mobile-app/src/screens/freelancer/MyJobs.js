@@ -16,6 +16,7 @@ import {
   ScrollView,
   Dimensions,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -41,10 +42,11 @@ const MyJobs = () => {
   const [completeJobErrorMessage, setCompleteJobErrorMessage] = useState('');
   const [completingJob, setCompletingJob] = useState(false);
   const [jobToComplete, setJobToComplete] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadJobs = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       setError('');
       const response = await freelancerJobsAPI.getAssignedJobs();
       if (response?.success && Array.isArray(response.jobs)) {
@@ -60,7 +62,13 @@ const MyJobs = () => {
       setJobs([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadJobs();
   };
 
   useEffect(() => {
@@ -245,22 +253,10 @@ const MyJobs = () => {
     );
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary.main} />
-      </View>
-    );
-  }
-
-  if (jobs.length === 0) {
-    return (
-      <View style={styles.container}>
-        <EmptyState
-          icon={<MaterialIcons name="check-circle" size={64} color={colors.text.muted} />}
-          title="My Assigned Jobs"
-          description="Jobs you pickup or are assigned will appear here."
-        />
       </View>
     );
   }
@@ -277,7 +273,27 @@ const MyJobs = () => {
         data={jobs}
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderJobItem}
-        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          jobs.length === 0 && !loading ? (
+            <EmptyState
+              icon={<MaterialIcons name="check-circle" size={64} color={colors.text.muted} />}
+              title="My Assigned Jobs"
+              description="Jobs you pickup or are assigned will appear here."
+            />
+          ) : null
+        }
+        contentContainerStyle={[
+          styles.listContent,
+          jobs.length === 0 && { flexGrow: 1 }
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary.main]}
+            tintColor={colors.primary.main}
+          />
+        }
       />
 
       <UserDetailsModal

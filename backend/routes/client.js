@@ -12,6 +12,14 @@ const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
+const {
+  notifyOfferAccepted,
+  notifyOfferRejected,
+  notifyJobAssigned,
+  notifyWorkDone,
+  notifyPaymentReceived,
+  notifyPaymentSent,
+} = require('../services/notificationService');
 
 /**
  * Helper function to get the appropriate profile photo for a user
@@ -522,6 +530,25 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
 
     await job.save();
 
+    // Notify freelancer about offer acceptance
+    try {
+      const client = await User.findById(user._id || user.id).select('fullName').lean();
+      await notifyOfferAccepted(
+        offer.freelancer._id?.toString() || offer.freelancer.toString(),
+        client?.fullName || 'The client',
+        job.title
+      );
+      // Also notify about job assignment
+      await notifyJobAssigned(
+        offer.freelancer._id?.toString() || offer.freelancer.toString(),
+        client?.fullName || 'The client',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending offer acceptance notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Offer accepted successfully',
@@ -588,6 +615,20 @@ router.post('/jobs/:id/reject-offer', authenticate, async (req, res) => {
 
     offer.status = 'rejected';
     await job.save();
+
+    // Notify freelancer about offer rejection
+    try {
+      const client = await User.findById(user._id || user.id).select('fullName').lean();
+      const freelancerId = offer.freelancer._id?.toString() || offer.freelancer.toString();
+      await notifyOfferRejected(
+        freelancerId,
+        client?.fullName || 'The client',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending offer rejection notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json({
       success: true,
@@ -665,6 +706,28 @@ router.post('/jobs/:id/pay', authenticate, async (req, res) => {
     });
 
     await job.save();
+
+    // Notify freelancer about payment received
+    try {
+      const client = await User.findById(user._id || user.id).select('fullName').lean();
+      const freelancerId = job.assignedFreelancer._id?.toString() || job.assignedFreelancer.toString();
+      await notifyPaymentReceived(
+        freelancerId,
+        client?.fullName || 'The client',
+        amountReceived,
+        job.title
+      );
+      // Notify client about payment sent
+      await notifyPaymentSent(
+        user._id?.toString() || user.id,
+        job.assignedFreelancer?.fullName || 'The freelancer',
+        jobAmount,
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending payment notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json({
       success: true,

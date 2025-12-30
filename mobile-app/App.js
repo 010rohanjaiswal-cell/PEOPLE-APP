@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UserProvider } from './src/context/UserContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
 
@@ -40,8 +41,10 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <UserProvider>
-          <StatusBar style="dark" translucent={false} />
-          <AppContent />
+          <NotificationProvider>
+            <StatusBar style="dark" translucent={false} />
+            <AppContent />
+          </NotificationProvider>
         </UserProvider>
       </AuthProvider>
     </SafeAreaProvider>

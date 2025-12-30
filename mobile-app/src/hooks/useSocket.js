@@ -48,6 +48,23 @@ export const useSocket = () => {
         socket.on('connect', () => {
           console.log('✅ Socket.io connected');
           setIsConnected(true);
+          
+          // Join notification room if user is authenticated
+          const joinNotificationRoom = async () => {
+            try {
+              const userData = await AsyncStorage.getItem('userData');
+              if (userData) {
+                const user = JSON.parse(userData);
+                const userId = user._id || user.id;
+                if (userId) {
+                  socket.emit('join_notification_room', { userId: userId.toString() });
+                }
+              }
+            } catch (error) {
+              console.error('Error joining notification room:', error);
+            }
+          };
+          joinNotificationRoom();
         });
 
         socket.on('disconnect', () => {

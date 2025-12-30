@@ -10,6 +10,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import NotificationBell from '../../components/common/NotificationBell';
+import NotificationModal from '../../components/modals/NotificationModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -29,6 +31,7 @@ const ClientDashboard = () => {
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
   // Top tabs - only Post Job and My Jobs
   const tabs = [
@@ -132,9 +135,10 @@ const ClientDashboard = () => {
           </TouchableOpacity>
           <Text style={styles.logo}>People</Text>
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <MaterialIcons name="notifications" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
+        <NotificationBell
+          onPress={() => setNotificationModalVisible(true)}
+          style={styles.notificationButton}
+        />
       </View>
 
       {/* Breadcrumb Navigation - Only show on drawer screens */}
@@ -325,6 +329,12 @@ const ClientDashboard = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        visible={notificationModalVisible}
+        onClose={() => setNotificationModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };

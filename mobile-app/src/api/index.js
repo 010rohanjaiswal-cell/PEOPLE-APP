@@ -12,4 +12,5 @@ export { default as verificationAPI } from './verification';
 export { paymentAPI } from './payment';
 export { default as userAPI } from './user';
 export { chatAPI } from './chat';
+export { notificationsAPI } from './notifications';
 

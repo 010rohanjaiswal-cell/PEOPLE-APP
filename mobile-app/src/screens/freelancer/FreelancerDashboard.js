@@ -10,6 +10,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import NotificationBell from '../../components/common/NotificationBell';
+import NotificationModal from '../../components/modals/NotificationModal';
 import { userAPI, verificationAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -32,6 +34,7 @@ const FreelancerDashboard = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [verification, setVerification] = useState(null);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
   // Refresh user profile on mount to get updated profile photo and verification data
   useEffect(() => {
@@ -161,9 +164,10 @@ const FreelancerDashboard = () => {
           </TouchableOpacity>
           <Text style={styles.logo}>People</Text>
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <MaterialIcons name="notifications" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
+        <NotificationBell
+          onPress={() => setNotificationModalVisible(true)}
+          style={styles.notificationButton}
+        />
       </View>
 
       {/* Breadcrumb Navigation - Only show on drawer screens */}
@@ -369,6 +373,12 @@ const FreelancerDashboard = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        visible={notificationModalVisible}
+        onClose={() => setNotificationModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };

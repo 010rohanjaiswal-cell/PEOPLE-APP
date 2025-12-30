@@ -17,6 +17,7 @@ const clientRoutes = require('./routes/client');
 const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
 const chatRoutes = require('./routes/chat');
+const notificationRoutes = require('./routes/notifications');
 
 // Initialize Express app
 const app = express();
@@ -53,6 +54,7 @@ app.use('/api/client', clientRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {

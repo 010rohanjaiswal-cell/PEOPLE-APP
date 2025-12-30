@@ -10,6 +10,7 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -20,10 +21,11 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadOrders = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       setError('');
       const response = await freelancerJobsAPI.getOrders();
       if (response?.success && Array.isArray(response.orders)) {
@@ -39,7 +41,13 @@ const Orders = () => {
       setOrders([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadOrders();
   };
 
   useEffect(() => {
@@ -122,6 +130,14 @@ const Orders = () => {
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderOrderItem}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary.main]}
+            tintColor={colors.primary.main}
+          />
+        }
       />
     </View>
   );

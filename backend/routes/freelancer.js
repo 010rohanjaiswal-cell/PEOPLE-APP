@@ -561,6 +561,19 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
     job.status = 'assigned';
     await job.save();
 
+    // Notify client about job pickup
+    try {
+      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      await notifyJobAssigned(
+        freelancerId,
+        freelancer?.fullName || 'A freelancer',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending job pickup notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Job picked up successfully',
@@ -672,6 +685,20 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
 
     await job.save();
 
+    // Notify client about new offer
+    try {
+      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      await notifyOfferReceived(
+        job.client.toString(),
+        freelancer?.fullName || 'A freelancer',
+        job.title,
+        Number(amount)
+      );
+    } catch (notifError) {
+      console.error('Error sending offer notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Offer submitted successfully',
@@ -725,6 +752,19 @@ router.post('/jobs/:id/complete', authenticate, async (req, res) => {
 
     job.status = 'work_done';
     await job.save();
+
+    // Notify client about work done
+    try {
+      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      await notifyWorkDone(
+        job.client.toString(),
+        freelancer?.fullName || 'The freelancer',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending work done notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json({
       success: true,

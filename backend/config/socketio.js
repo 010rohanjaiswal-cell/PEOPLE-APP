@@ -48,8 +48,9 @@ const setupSocketIO = (server) => {
   io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.userId}`);
 
-    // Join user's personal room for receiving messages
+    // Join user's personal room for receiving messages and notifications
     socket.join(`user_${socket.userId}`);
+    socket.join(`notifications_${socket.userId}`);
 
     // Handle sending messages
     socket.on('send_message', async (data) => {

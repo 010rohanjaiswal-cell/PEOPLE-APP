@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
@@ -14,10 +14,11 @@ const History = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadHistory = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       setError('');
       const response = await clientJobsAPI.getJobHistory();
       if (response?.success && Array.isArray(response.jobs)) {
@@ -33,7 +34,13 @@ const History = () => {
       setJobs([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadHistory();
   };
 
   useEffect(() => {
@@ -82,22 +89,10 @@ const History = () => {
     );
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary.main} />
-      </View>
-    );
-  }
-
-  if (!jobs.length) {
-    return (
-      <View style={styles.container}>
-        <EmptyState
-          icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
-          title="No completed jobs yet"
-          description="Jobs that are fully completed and paid will appear here."
-        />
       </View>
     );
   }
@@ -114,7 +109,27 @@ const History = () => {
         data={jobs}
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderJobItem}
-        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          !loading ? (
+            <EmptyState
+              icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
+              title="No completed jobs yet"
+              description="Jobs that are fully completed and paid will appear here."
+            />
+          ) : null
+        }
+        contentContainerStyle={[
+          styles.listContent,
+          jobs.length === 0 && { flexGrow: 1 }
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary.main]}
+            tintColor={colors.primary.main}
+          />
+        }
       />
     </View>
   );

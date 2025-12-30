@@ -16,6 +16,7 @@ import {
   TextInput,
   Dimensions,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -42,12 +43,16 @@ const AvailableJobs = () => {
   const [pickupJob, setPickupJob] = useState(null);
   const [pickingUp, setPickingUp] = useState(false);
   const [pickupSuccessModalVisible, setPickupSuccessModalVisible] = useState(false);
+  const [offerSuccessModalVisible, setOfferSuccessModalVisible] = useState(false);
+  const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
+  const [offerErrorMessage, setOfferErrorMessage] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [hasActiveJob, setHasActiveJob] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadJobs = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       setError('');
       const response = await freelancerJobsAPI.getAvailableJobs();
       if (response?.success && Array.isArray(response.jobs)) {
@@ -63,7 +68,14 @@ const AvailableJobs = () => {
       setJobs([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadJobs();
+    loadWalletStatus();
   };
 
   const loadWalletStatus = async () => {
@@ -246,7 +258,8 @@ const AvailableJobs = () => {
     if (!offerJob) return;
     const amountNumber = Number(offerAmount);
     if (!amountNumber || amountNumber <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid offer amount.');
+      setOfferErrorMessage('Please enter a valid offer amount.');
+      setOfferErrorModalVisible(true);
       return;
     }
 
@@ -257,21 +270,21 @@ const AvailableJobs = () => {
         message: offerMessage || null,
       });
       if (response.success) {
-        Alert.alert('Success', 'Offer submitted successfully.');
+        setSubmittingOffer(false);
         setOfferModalVisible(false);
+        setOfferSuccessModalVisible(true);
         // Reload jobs so we get updated offers array for cooldown calculation
         loadJobs();
       } else {
-        Alert.alert('Error', response.error || 'Failed to submit offer');
+        setSubmittingOffer(false);
+        setOfferErrorMessage(response.error || 'Failed to submit offer');
+        setOfferErrorModalVisible(true);
       }
     } catch (err) {
       console.error('Error submitting offer:', err);
-      Alert.alert(
-        'Error',
-        err.response?.data?.error || err.message || 'Failed to submit offer'
-      );
-    } finally {
       setSubmittingOffer(false);
+      setOfferErrorMessage(err.response?.data?.error || err.message || 'Failed to submit offer');
+      setOfferErrorModalVisible(true);
     }
   };
 
@@ -504,6 +517,14 @@ const AvailableJobs = () => {
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderJobItem}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary.main]}
+            tintColor={colors.primary.main}
+          />
+        }
       />
 
       {/* Pickup Job Confirmation Modal */}
@@ -622,6 +643,62 @@ const AvailableJobs = () => {
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                 onPress={() => setPickupSuccessModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Make Offer Success Modal */}
+      <Modal
+        visible={offerSuccessModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfferSuccessModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.successIconContainer}>
+              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
+            </View>
+            <Text style={styles.modalTitle}>Offer Submitted</Text>
+            <Text style={styles.modalSubtitle}>
+              Offer submitted successfully!
+            </Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
+                onPress={() => setOfferSuccessModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Make Offer Error Modal */}
+      <Modal
+        visible={offerErrorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfferErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.errorIconContainer}>
+              <MaterialIcons name="error" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={styles.modalSubtitle}>
+              {offerErrorMessage}
+            </Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton]}
+                onPress={() => setOfferErrorModalVisible(false)}
               >
                 <Text style={styles.modalSubmitText}>OK</Text>
               </TouchableOpacity>
@@ -785,11 +862,13 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.text.primary,
     marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   modalSubtitle: {
     ...typography.body,
     color: colors.text.secondary,
     marginBottom: spacing.lg,
+    textAlign: 'center',
   },
   modalLabel: {
     ...typography.body,
@@ -844,6 +923,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success.main,
   },
   successIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  errorIconContainer: {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
