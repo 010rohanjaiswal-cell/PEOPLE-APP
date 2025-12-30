@@ -323,9 +323,12 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     }
 
     // Only show jobs that are open and not yet assigned
+    // Also exclude jobs posted by the same user (prevent client from seeing their own jobs as freelancer)
+    const freelancerId = user._id || user.id;
     const jobs = await Job.find({
       status: 'open',
       assignedFreelancer: null,
+      client: { $ne: freelancerId }, // Exclude jobs posted by the same user
     })
       .sort({ createdAt: -1 })
       .limit(100)

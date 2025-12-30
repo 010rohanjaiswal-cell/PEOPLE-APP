@@ -29,7 +29,6 @@ const ChatModal = ({ visible, recipient, onClose }) => {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [recipientOnline, setRecipientOnline] = useState(false);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -56,70 +55,95 @@ const ChatModal = ({ visible, recipient, onClose }) => {
 
     const recipientId = recipient?.id || recipient?._id;
 
-    // Listen for recipient online/offline status
-    const handleUserOnline = (data) => {
-      if (data.userId === recipientId) {
-        setRecipientOnline(true);
-      }
-    };
-
-    const handleUserOffline = (data) => {
-      if (data.userId === recipientId) {
-        setRecipientOnline(false);
-      }
-    };
-
-    socket.on('user_online', handleUserOnline);
-    socket.on('user_offline', handleUserOffline);
-
-    // Check if recipient is online when opening chat
-    if (recipientId && (socket.connected || isConnected)) {
-      // Request online status for recipient
-      socket.emit('check_online_status', { userId: recipientId });
-    }
-
     const handleNewMessage = (messageData) => {
-      setMessages((prev) => {
-        // Check if message already exists
-        const exists = prev.some((msg) => msg._id === messageData._id);
-        if (exists) {
-          // Update existing message
-          return prev.map((msg) =>
-            msg._id === messageData._id ? messageData : msg
-          );
+      console.log('Received new message:', messageData);
+      // Check if message is for this chat
+      const messageRecipientId = messageData.recipient?._id || messageData.recipient?.id || messageData.recipient;
+      const messageSenderId = messageData.sender?._id || messageData.sender?.id || messageData.sender;
+      const currentUserId = user?.id || user?._id;
+      
+      // Only process if message is from recipient to current user, or from current user to recipient
+      if (
+        (messageSenderId === recipientId && messageRecipientId === currentUserId) ||
+        (messageSenderId === currentUserId && messageRecipientId === recipientId)
+      ) {
+        setMessages((prev) => {
+          // Check if message already exists
+          const exists = prev.some((msg) => msg._id === messageData._id);
+          if (exists) {
+            // Update existing message (for status updates like delivered/read)
+            return prev.map((msg) =>
+              msg._id === messageData._id ? messageData : msg
+            );
+          }
+          // Add new message
+          return [...prev, messageData];
+        });
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        // Mark as read if message is from current recipient
+        if (messageSenderId === recipientId) {
+          markAsRead(recipientId);
         }
-        // Add new message
-        return [...prev, messageData];
-      });
+      }
+    };
+
+    const handleMessageSent = (messageData) => {
+      console.log('Message sent confirmation:', messageData);
+      setSending(false);
+      const currentUserId = user?.id || user?._id;
+      const messageSenderId = messageData.sender?._id || messageData.sender?.id || messageData.sender;
+      
+      // Check if this is a message we sent
+      if (messageSenderId === currentUserId) {
+        setMessages((prev) => {
+          // First try to find and replace temp message
+          const tempIndex = prev.findIndex((msg) => 
+            msg._id?.startsWith('temp_') && 
+            msg.message === messageData.message &&
+            (msg.sender === currentUserId || msg.sender === messageData.sender?._id || msg.sender === messageData.sender?.id)
+          );
+          
+          if (tempIndex !== -1) {
+            // Replace temp message
+            const newMessages = [...prev];
+            newMessages[tempIndex] = messageData;
+            return newMessages;
+          }
+          
+          // If no temp message found, check if message already exists
+          const exists = prev.some((msg) => msg._id === messageData._id);
+          if (exists) {
+            // Update existing message
+            return prev.map((msg) =>
+              msg._id === messageData._id ? messageData : msg
+            );
+          }
+          
+          // Add new message if it doesn't exist
+          return [...prev, messageData];
+        });
+      }
       
       // Scroll to bottom
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
-
-      // Mark as read if message is from current recipient
-      const recipientId = recipient?.id || recipient?._id;
-      if (messageData.sender?._id === recipientId || messageData.sender?.id === recipientId) {
-        markAsRead(recipientId);
-      }
-    };
-
-    const handleMessageSent = (messageData) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === messageData._id || (msg._id?.startsWith('temp_') && msg.message === messageData.message)
-            ? messageData
-            : msg
-        )
-      );
     };
 
     const handleMessagesRead = (data) => {
-      // Update message status to read
+      console.log('Messages read notification:', data);
+      // Update message status to read for messages sent by current user
+      const currentUserId = user?.id || user?._id;
       setMessages((prev) =>
         prev.map((msg) => {
           const senderId = msg.sender?._id || msg.sender?.id || msg.sender;
-          if (senderId === (user?.id || user?._id) && msg.status !== 'read') {
+          // If this message was sent by current user and recipient has read it
+          if (senderId === currentUserId && data.recipientId === recipientId && msg.status !== 'read') {
             return { ...msg, status: 'read' };
           }
           return msg;
@@ -127,25 +151,15 @@ const ChatModal = ({ visible, recipient, onClose }) => {
       );
     };
 
-    const handleOnlineStatus = (data) => {
-      if (data.userId === recipientId) {
-        setRecipientOnline(data.isOnline);
-      }
-    };
-
     socket.on('new_message', handleNewMessage);
     socket.on('message_sent', handleMessageSent);
     socket.on('messages_read', handleMessagesRead);
-    socket.on('online_status', handleOnlineStatus);
 
     // Store handlers for cleanup
     socket._chatHandlers = {
       new_message: handleNewMessage,
       message_sent: handleMessageSent,
       messages_read: handleMessagesRead,
-      user_online: handleUserOnline,
-      user_offline: handleUserOffline,
-      online_status: handleOnlineStatus,
     };
   };
 
@@ -155,9 +169,6 @@ const ChatModal = ({ visible, recipient, onClose }) => {
     socket.off('new_message', socket._chatHandlers.new_message);
     socket.off('message_sent', socket._chatHandlers.message_sent);
     socket.off('messages_read', socket._chatHandlers.messages_read);
-    socket.off('user_online', socket._chatHandlers.user_online);
-    socket.off('user_offline', socket._chatHandlers.user_offline);
-    socket.off('online_status', socket._chatHandlers.online_status);
     
     delete socket._chatHandlers;
   };
@@ -216,13 +227,19 @@ const ChatModal = ({ visible, recipient, onClose }) => {
 
     try {
       // Try Socket.io first if connected, fallback to REST API
-      if (socket && isConnected) {
+      if (socket && (socket.connected || isConnected)) {
+        const recipientId = recipient.id || recipient._id;
+        console.log('Sending message via socket:', { recipientId, message: messageContent });
         socket.emit('send_message', {
-          recipientId: recipient.id || recipient._id,
+          recipientId: recipientId,
           message: messageContent,
         });
         // Socket will emit 'message_sent' event with the actual message
         // The temp message will be replaced in handleMessageSent
+        // Also set sending to false after a short delay if no confirmation
+        setTimeout(() => {
+          setSending(false);
+        }, 5000);
       } else {
         // Fallback to REST API
         const response = await chatAPI.sendMessage(recipient.id || recipient._id, messageContent);
@@ -235,9 +252,11 @@ const ChatModal = ({ visible, recipient, onClose }) => {
                 : msg
             )
           );
+          setSending(false);
         } else {
           // Remove temp message on error
           setMessages((prev) => prev.filter((msg) => msg._id !== tempMessage._id));
+          setSending(false);
         }
       }
       
@@ -249,7 +268,6 @@ const ChatModal = ({ visible, recipient, onClose }) => {
       console.error('Error sending message:', error);
       // Remove temp message on error
       setMessages((prev) => prev.filter((msg) => msg._id !== tempMessage._id));
-    } finally {
       setSending(false);
     }
   };
@@ -263,7 +281,7 @@ const ChatModal = ({ visible, recipient, onClose }) => {
       case 'delivered':
         return <MaterialIcons name="done-all" size={16} color={colors.text.muted} />;
       case 'read':
-        return <MaterialIcons name="done-all" size={16} color={colors.primary.main} />;
+        return <MaterialIcons name="done-all" size={16} color="#4CAF50" />; // Green color for read
       default:
         return <MaterialIcons name="done" size={16} color={colors.text.muted} />;
     }
@@ -330,76 +348,73 @@ const ChatModal = ({ visible, recipient, onClose }) => {
     >
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior="padding"
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.modal}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.backButton}>
-              <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-            <View style={styles.headerInfo}>
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity onPress={onClose} style={styles.backButton}>
+                <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
               <Text style={styles.headerName}>{recipientName}</Text>
-              <Text style={[styles.headerStatus, recipientOnline ? styles.onlineStatus : styles.offlineStatus]}>
-                {recipientOnline ? 'Online' : 'Offline'}
-              </Text>
+              <View style={styles.headerSpacer} />
             </View>
-            <TouchableOpacity style={styles.moreButton}>
-              <MaterialIcons name="more-vert" size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-          </View>
 
-          {/* Messages List */}
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary.main} />
-            </View>
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={(item) => item._id || item.id || `msg_${item.createdAt}`}
-              renderItem={renderMessage}
-              contentContainerStyle={styles.messagesList}
-              onContentSizeChange={() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <MaterialIcons name="chat-bubble-outline" size={48} color={colors.text.muted} />
-                  <Text style={styles.emptyText}>No messages yet</Text>
-                  <Text style={styles.emptySubtext}>Start the conversation!</Text>
+            {/* Messages List */}
+            <View style={styles.messagesContainer}>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary.main} />
                 </View>
-              }
-            />
-          )}
-
-          {/* Input Area */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type a message..."
-              placeholderTextColor={colors.text.muted}
-              value={messageText}
-              onChangeText={setMessageText}
-              multiline
-              maxLength={1000}
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                (!messageText.trim() || sending) && styles.sendButtonDisabled,
-              ]}
-              onPress={handleSendMessage}
-              disabled={!messageText.trim() || sending}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <MaterialIcons name="send" size={20} color="#FFFFFF" />
+                <FlatList
+                  ref={flatListRef}
+                  data={messages}
+                  keyExtractor={(item) => item._id || item.id || `msg_${item.createdAt}`}
+                  renderItem={renderMessage}
+                  contentContainerStyle={styles.messagesList}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  onContentSizeChange={() => {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                  }}
+                  ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>No messages yet</Text>
+                    </View>
+                  }
+                />
               )}
-            </TouchableOpacity>
+            </View>
+
+            {/* Input Area */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Type a message..."
+                placeholderTextColor={colors.text.muted}
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!messageText.trim() || sending) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSendMessage}
+                disabled={!messageText.trim() || sending}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <MaterialIcons name="send" size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -411,13 +426,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  overlay: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modal: {
-    height: '70%',
     width: '90%',
-    maxWidth: 500,
+    height: '70%',
     backgroundColor: colors.background,
     borderRadius: spacing.lg,
     overflow: 'hidden',
@@ -434,25 +451,16 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginRight: spacing.sm,
   },
-  headerInfo: {
-    flex: 1,
-  },
   headerName: {
+    flex: 1,
     ...typography.h3,
     color: colors.text.primary,
   },
-  headerStatus: {
-    ...typography.small,
-    marginTop: 2,
+  headerSpacer: {
+    width: 40,
   },
-  onlineStatus: {
-    color: colors.success.main,
-  },
-  offlineStatus: {
-    color: colors.text.muted,
-  },
-  moreButton: {
-    padding: spacing.xs,
+  messagesContainer: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -479,11 +487,9 @@ const styles = StyleSheet.create({
   },
   myMessageBubble: {
     backgroundColor: colors.primary.main,
-    borderBottomRightRadius: spacing.xs,
   },
   otherMessageBubble: {
     backgroundColor: colors.cardBackground,
-    borderBottomLeftRadius: spacing.xs,
   },
   messageText: {
     ...typography.body,
@@ -521,14 +527,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxl,
   },
   emptyText: {
-    ...typography.h3,
-    color: colors.text.secondary,
-    marginTop: spacing.md,
-  },
-  emptySubtext: {
     ...typography.body,
     color: colors.text.muted,
-    marginTop: spacing.xs,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -566,4 +566,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChatModal;
-

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refund Policy - People Enterprises</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .refund-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 120px 20px 80px;
+        }
+        
+        .refund-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .refund-header h1 {
+            color: var(--primary-blue);
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .refund-header p {
+            color: var(--gray-600);
+            font-size: 1.1rem;
+        }
+        
+        .refund-content {
+            background-color: var(--white);
+            padding: 3rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+        }
+        
+        .refund-section {
+            margin-bottom: 2.5rem;
+        }
+        
+        .refund-section h2 {
+            color: var(--primary-blue);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid var(--light-blue);
+            padding-bottom: 0.5rem;
+        }
+        
+        .refund-section h3 {
+            color: var(--primary-green);
+            font-size: 1.25rem;
+            margin: 1.5rem 0 1rem;
+        }
+        
+        .refund-section p {
+            color: var(--gray-700);
+            line-height: 1.7;
+            margin-bottom: 1rem;
+        }
+        
+        .refund-section ul {
+            margin: 1rem 0;
+            padding-left: 2rem;
+        }
+        
+        .refund-section li {
+            color: var(--gray-700);
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+        
+        .important-notice {
+            background-color: var(--light-blue);
+            border-left: 4px solid var(--primary-blue);
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning-box {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .success-box {
+            background-color: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .refund-process {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .process-step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: var(--white);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-green);
+        }
+        
+        .step-number {
+            background-color: var(--primary-green);
+            color: var(--white);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+        
+        .step-content h4 {
+            color: var(--primary-blue);
+            margin-bottom: 0.5rem;
+        }
+        
+        .step-content p {
+            margin: 0;
+            color: var(--gray-600);
+        }
+        
+        .back-to-home {
+            text-align: center;
+            margin-top: 3rem;
+        }
+        
+        .back-to-home .btn {
+            background-color: var(--primary-blue);
+            color: var(--white);
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .back-to-home .btn:hover {
+            background-color: var(--secondary-blue);
+            transform: translateY(-2px);
+        }
+        
+        .contact-info {
+            background-color: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .contact-info h3 {
+            color: #0369a1;
+            margin-bottom: 1rem;
+        }
+        
+        .contact-info ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .contact-info li {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            color: #0369a1;
+        }
+        
+        .contact-info i {
+            margin-right: 0.5rem;
+            width: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .refund-container {
+                padding: 100px 15px 60px;
+            }
+            
+            .refund-content {
+                padding: 2rem 1.5rem;
+            }
+            
+            .refund-header h1 {
+                font-size: 2rem;
+            }
+            
+            .process-step {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .step-number {
+                margin: 0 auto 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="1000013213 (1).png" alt="People Enterprises Logo" style="height: 40px; width: auto; margin-right: 10px;">
+                <h2>People Enterprises</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="index.html" class="nav-link">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#how-it-works" class="nav-link">How It Works</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#features" class="nav-link">Features</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#about" class="nav-link">About</a>
+                </li>
+                <li class="nav-item">
+                    <a href="terms.html" class="nav-link">Terms</a>
+                </li>
+                <li class="nav-item">
+                    <a href="privacy.html" class="nav-link">Privacy</a>
+                </li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Refund Policy Content -->
+    <div class="refund-container">
+        <div class="refund-header">
+            <h1>Refund Policy</h1>
+            <p>Last updated: August 2025</p>
+        </div>
+
+        <div class="refund-content">
+            <div class="important-notice">
+                <h3><i class="fas fa-info-circle"></i> Important Notice</h3>
+                <p><strong>This refund policy applies to all transactions conducted through the People Enterprises platform. By using our services, you acknowledge that you have read, understood, and agree to be bound by this refund policy.</strong></p>
+            </div>
+
+            <div class="refund-section">
+                <h2>1. General Refund Policy</h2>
+                <p>At People, we strive to ensure customer satisfaction and fair resolution of disputes. Our refund policy is designed to protect both clients and freelancers while maintaining the integrity of our platform.</p>
+                
+                <h3>1.1 Refund Eligibility</h3>
+                <p>Refunds may be considered under the following circumstances:</p>
+                <ul>
+                    <li>Service not delivered as agreed upon</li>
+                    <li>Significant deviation from project specifications</li>
+                    <li>Freelancer fails to complete the work within agreed timeframe</li>
+                    <li>Technical issues preventing service delivery</li>
+                    <li>Fraudulent activity or misrepresentation</li>
+                    <li>Platform technical errors affecting transactions</li>
+                </ul>
+            </div>
+
+            <div class="refund-section">
+                <h2>2. Refund Process</h2>
+                <p>All refund requests must follow our established process to ensure fair resolution:</p>
+                
+                <div class="refund-process">
+                    <div class="process-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>Submit Refund Request</h4>
+                            <p>Contact our support team within 7 days of service completion or issue discovery. Provide detailed information about the problem and supporting evidence.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Initial Review</h4>
+                            <p>Our support team will review your request within 24-48 hours and may request additional information or documentation.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Investigation</h4>
+                            <p>We will investigate the matter by reviewing project details, communications, and deliverables. This process may take 3-5 business days.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Resolution</h4>
+                            <p>Based on our investigation, we will provide a resolution which may include full refund, partial refund, or alternative solutions.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="process-step">
+                        <div class="step-number">5</div>
+                        <div class="step-content">
+                            <h4>Processing</h4>
+                            <p>If approved, refunds will be processed within 5-10 business days to your original payment method.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="refund-section">
+                <h2>3. Refund Types and Conditions</h2>
+                
+                <h3>3.1 Full Refunds</h3>
+                <p>Full refunds may be granted in the following situations:</p>
+                <ul>
+                    <li>Service not delivered at all</li>
+                    <li>Complete failure to meet project requirements</li>
+                    <li>Freelancer abandons project without completion</li>
+                    <li>Technical issues preventing service delivery</li>
+                    <li>Fraudulent activity or identity theft</li>
+                </ul>
+
+                <h3>3.2 Partial Refunds</h3>
+                <p>Partial refunds may be considered when:</p>
+                <ul>
+                    <li>Service partially completed but not meeting full requirements</li>
+                    <li>Minor deviations from project specifications</li>
+                    <li>Delays in delivery affecting project timeline</li>
+                    <li>Quality issues that can be partially resolved</li>
+                </ul>
+
+                <h3>3.3 No Refund Situations</h3>
+                <div class="warning-box">
+                    <h3><i class="fas fa-exclamation-triangle"></i> No Refund Policy</h3>
+                    <p><strong>Refunds will NOT be granted in the following circumstances:</strong></p>
+                    <ul>
+                        <li>Change of mind after service completion</li>
+                        <li>Failure to provide clear project requirements</li>
+                        <li>Unrealistic expectations not communicated upfront</li>
+                        <li>Services delivered as agreed but client dissatisfaction</li>
+                        <li>Delays caused by client's failure to provide necessary information</li>
+                        <li>Services used or consumed by the client</li>
+                        <li>Refund request submitted after 30 days of service completion</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="refund-section">
+                <h2>4. Platform Fees and Charges</h2>
+                
+                <h3>4.1 Service Fees</h3>
+                <p>Our platform charges service fees for facilitating transactions. These fees are generally non-refundable unless the refund is due to platform error or technical issues.</p>
+                
+                <h3>4.2 Payment Processing Fees</h3>
+                <p>Third-party payment processing fees may not be refundable. In case of approved refunds, we will refund the service amount, but payment processing fees may be deducted.</p>
+                
+                <h3>4.3 Escrow Protection</h3>
+                <p>For eligible projects, we offer escrow protection where payments are held securely until service completion. This provides additional protection for both parties.</p>
+            </div>
+
+            <div class="refund-section">
+                <h2>5. Dispute Resolution</h2>
+                
+                <h3>5.1 Internal Dispute Resolution</h3>
+                <p>Before requesting a refund, we encourage users to:</p>
+                <ul>
+                    <li>Communicate directly with the other party</li>
+                    <li>Attempt to resolve issues amicably</li>
+                    <li>Use our messaging system for all communications</li>
+                    <li>Document all interactions and agreements</li>
+                </ul>
+
+                <h3>5.2 Mediation Process</h3>
+                <p>If direct communication fails, our support team can facilitate mediation between parties to reach a mutually acceptable resolution.</p>
+
+                <h3>5.3 Arbitration</h3>
+                <p>For complex disputes, we may recommend binding arbitration as a final resolution method, with costs shared between parties.</p>
+            </div>
+
+            <div class="refund-section">
+                <h2>6. Special Circumstances</h2>
+                
+                <h3>6.1 Force Majeure</h3>
+                <p>Refunds may be considered for circumstances beyond anyone's control, including natural disasters, government actions, or other force majeure events.</p>
+                
+                <h3>6.2 Platform Maintenance</h3>
+                <p>If our platform experiences extended downtime affecting service delivery, we will work with affected users to find appropriate solutions.</p>
+                
+                <h3>6.3 Account Suspension</h3>
+                <p>If an account is suspended due to policy violations, refunds for pending work will be evaluated on a case-by-case basis.</p>
+            </div>
+
+            <div class="refund-section">
+                <h2>7. Refund Timeline</h2>
+                
+                <div class="success-box">
+                    <h3><i class="fas fa-clock"></i> Refund Processing Times</h3>
+                    <ul>
+                        <li><strong>Request Review:</strong> 24-48 hours</li>
+                        <li><strong>Investigation:</strong> 3-5 business days</li>
+                        <li><strong>Decision Communication:</strong> Within 1 business day of investigation completion</li>
+                        <li><strong>Refund Processing:</strong> 5-10 business days after approval</li>
+                        <li><strong>Bank Processing:</strong> Additional 2-5 business days (varies by bank)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="refund-section">
+                <h2>8. Documentation Required</h2>
+                <p>To process refund requests efficiently, please provide:</p>
+                <ul>
+                    <li>Project details and specifications</li>
+                    <li>Communication history with the freelancer</li>
+                    <li>Evidence of the issue (screenshots, files, etc.)</li>
+                    <li>Payment confirmation and transaction details</li>
+                    <li>Timeline of events leading to the refund request</li>
+                </ul>
+            </div>
+
+            <div class="refund-section">
+                <h2>9. Contact Information</h2>
+                <p>For refund requests and related inquiries, please contact us through the following channels:</p>
+                
+                <div class="contact-info">
+                    <h3><i class="fas fa-headset"></i> Refund Support</h3>
+                    <ul>
+                        <li><i class="fas fa-envelope"></i> Email: refunds@people.com</li>
+                        <li><i class="fas fa-phone"></i> Phone: +91 7021098460</li>
+                        <li><i class="fas fa-clock"></i> Support Hours: Monday-Friday, 9 AM - 6 PM IST</li>
+                        <li><i class="fas fa-map-marker-alt"></i> Address: People, Mumbai, Maharashtra, India</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="refund-section">
+                <h2>10. Policy Updates</h2>
+                <p>We reserve the right to update this refund policy at any time. Changes will be effective immediately upon posting on our platform. Users will be notified of significant changes via email or platform notifications.</p>
+                
+                <p>Your continued use of our platform after policy changes constitutes acceptance of the updated terms.</p>
+            </div>
+
+            <div class="important-notice">
+                <h3><i class="fas fa-shield-alt"></i> Final Notice</h3>
+                <p><strong>This refund policy is designed to ensure fair treatment for all users while maintaining the integrity of our platform. We are committed to resolving disputes fairly and efficiently. If you have any questions about this policy or need assistance with a refund request, please don't hesitate to contact our support team.</strong></p>
+            </div>
+        </div>
+
+        <div class="back-to-home">
+            <a href="index.html" class="btn">
+                <i class="fas fa-home"></i> Back to Home
+            </a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3><i class="fas fa-users"></i> People Enterprises</h3>
+                    <p>Connecting skilled professionals with clients who need their expertise.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="index.html#how-it-works">How It Works</a></li>
+                        <li><a href="index.html#features">Features</a></li>
+                        <li><a href="index.html#about">About</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="terms.html">Terms & Conditions</a></li>
+                        <li><a href="privacy.html">Privacy Policy</a></li>
+                        <li><a href="refund.html">Refund Policy</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Contact</h4>
+                    <ul>
+                        <li><i class="fas fa-envelope"></i> rohanjaiswar2467@gmail.com</li>
+                        <li><i class="fas fa-phone"></i> +91 7021098460</li>
+                        <li><i class="fas fa-map-marker-alt"></i> Mumbai, Maharashtra, India</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 People Enterprises. All rights reserved.</p>
+                <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;">This website (people.com.de) is owned and operated by People Enterprises (Proprietor: Rohan Jaiswar).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

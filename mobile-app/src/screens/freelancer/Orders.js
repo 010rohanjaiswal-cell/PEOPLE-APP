@@ -47,7 +47,6 @@ const Orders = () => {
   }, []);
 
   const renderOrderItem = ({ item }) => {
-    const commission = item.commission || null;
     const client = item.client || {};
 
     return (
@@ -82,32 +81,11 @@ const Orders = () => {
           Completed on {new Date(item.updatedAt || item.createdAt).toLocaleString()}
         </Text>
 
-        {client.fullName || client.phone ? (
+        {client.fullName ? (
           <Text style={styles.clientInfo}>
-            Client: {client.fullName || 'N/A'} {client.phone ? `(${client.phone})` : ''}
+            Client: {client.fullName || 'N/A'}
           </Text>
         ) : null}
-
-        {commission && (
-          <View style={styles.commissionCard}>
-            <View style={styles.commissionRow}>
-              <Text style={styles.commissionLabel}>Job Amount</Text>
-              <Text style={styles.commissionValue}>₹{commission.jobAmount}</Text>
-            </View>
-            <View style={styles.commissionRow}>
-              <Text style={styles.commissionLabel}>Platform Commission (10%)</Text>
-              <Text style={[styles.commissionValue, styles.commissionNegative]}>
-                -₹{commission.platformCommission}
-              </Text>
-            </View>
-            <View style={styles.commissionRow}>
-              <Text style={styles.commissionLabel}>Amount Received</Text>
-              <Text style={[styles.commissionValue, styles.commissionPositive]}>
-                ₹{commission.amountReceived}
-              </Text>
-            </View>
-          </View>
-        )}
       </View>
     );
   };
@@ -246,32 +224,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: spacing.xs,
-  },
-  commissionCard: {
-    marginTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  commissionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  commissionLabel: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  commissionValue: {
-    ...typography.small,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  commissionNegative: {
-    color: colors.error.main,
-  },
-  commissionPositive: {
-    color: colors.success.main,
   },
 });
 

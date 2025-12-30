@@ -114,7 +114,9 @@ const MyJobs = () => {
   const toggleJobExpansion = (jobId) => {
     setExpandedJobs(prev => ({
       ...prev,
-      [jobId]: !prev[jobId]
+      // If currently false (collapsed), set to true (expand)
+      // Otherwise (undefined/true means expanded), set to false (collapse)
+      [jobId]: prev[jobId] === false ? true : false
     }));
   };
 
@@ -218,7 +220,8 @@ const MyJobs = () => {
     const statusStyle = getStatusBadgeStyle(item.status);
     const offersCount = getOffersCount(item);
     const showEditDelete = canEditOrDelete(item);
-    const isExpanded = expandedJobs[item._id || item.id] || false;
+    // Default to expanded (true) unless explicitly set to false
+    const isExpanded = expandedJobs[item._id || item.id] !== false;
     const hasDetails = item.description || item.address || item.gender || item.pincode || 
       ((item.status === 'assigned' || item.status === 'work_done' || item.status === 'completed') && item.assignedFreelancer);
 
@@ -273,7 +276,10 @@ const MyJobs = () => {
                 {item.description}
               </Text>
             ) : null}
-            <Text style={styles.jobAddress}>Address - {item.address}</Text>
+            <View style={styles.jobAddressRow}>
+              <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
+              <Text style={styles.jobAddress}>{item.address}</Text>
+            </View>
             <View style={styles.jobMetaRow}>
               <View style={styles.jobMetaLeft}>
                 <View style={styles.jobMeta}>
@@ -576,10 +582,16 @@ const styles = StyleSheet.create({
     ...typography.small,
     fontWeight: '600',
   },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
   jobAddress: {
     ...typography.small,
     color: colors.text.primary,
-    marginBottom: spacing.sm,
+    flex: 1,
   },
   jobMetaRow: {
     flexDirection: 'row',

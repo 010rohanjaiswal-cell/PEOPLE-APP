@@ -178,7 +178,10 @@ const MyJobs = () => {
             {item.description}
           </Text>
         ) : null}
-        <Text style={styles.jobAddress}>Address - {item.address}</Text>
+        <View style={styles.jobAddressRow}>
+          <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
+          <Text style={styles.jobAddress}>{item.address}</Text>
+        </View>
         <View style={styles.jobMetaRow}>
           <View style={styles.jobMetaLeft}>
             <View style={styles.jobMeta}>
@@ -519,10 +522,16 @@ const styles = StyleSheet.create({
     ...typography.small,
     fontWeight: '600',
   },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
   jobAddress: {
     ...typography.small,
     color: colors.text.primary,
-    marginBottom: spacing.sm,
+    flex: 1,
   },
   jobMetaRow: {
     flexDirection: 'row',

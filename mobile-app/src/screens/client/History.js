@@ -61,7 +61,7 @@ const History = () => {
         <View style={styles.jobMetaRow}>
           <View style={styles.jobMeta}>
             <MaterialIcons name="currency-rupee" size={16} color={colors.text.secondary} />
-            <Text style={styles.jobMetaText}>₹{item.budget}</Text>
+            <Text style={styles.jobMetaText}>{item.budget}</Text>
           </View>
           {item.completedAt && (
             <View style={styles.jobMeta}>

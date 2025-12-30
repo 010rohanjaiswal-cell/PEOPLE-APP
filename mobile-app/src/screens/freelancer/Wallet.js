@@ -34,8 +34,6 @@ const Wallet = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [ledgerExpandedIds, setLedgerExpandedIds] = useState({});
   const [paying, setPaying] = useState(false);
 
   const loadWallet = async () => {
@@ -64,19 +62,6 @@ const Wallet = () => {
   const handleRefresh = () => {
     setRefreshing(true);
     loadWallet();
-  };
-
-  const toggleHistory = () => {
-    LayoutAnimation.easeInEaseOut();
-    setHistoryExpanded((prev) => !prev);
-  };
-
-  const toggleLedgerItem = (id) => {
-    LayoutAnimation.easeInEaseOut();
-    setLedgerExpandedIds((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
   };
 
   const handlePayDues = async () => {
@@ -491,87 +476,6 @@ const Wallet = () => {
     );
   };
 
-  const renderTransactionHistory = () => {
-    const transactions = wallet?.transactions || [];
-    const count = transactions.length;
-
-    return (
-      <View style={styles.card}>
-        <TouchableOpacity onPress={toggleHistory} style={styles.historyHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="history" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>
-              Transaction History {count > 0 ? `(${count})` : ''}
-            </Text>
-          </View>
-          <MaterialIcons
-            name={historyExpanded ? 'expand-less' : 'expand-more'}
-            size={24}
-            color={colors.text.secondary}
-          />
-        </TouchableOpacity>
-
-        {historyExpanded && (
-          <View style={styles.historyList}>
-            {count === 0 ? (
-              <View style={styles.emptyInner}>
-                <MaterialIcons name="receipt-long" size={40} color={colors.text.muted} />
-                <Text style={styles.emptyInnerText}>No transactions yet</Text>
-              </View>
-            ) : (
-              transactions.map((tx) => {
-                const isPaid = tx.duesPaid;
-                return (
-                  <View
-                    key={tx.id}
-                    style={[
-                      styles.historyItem,
-                      isPaid ? styles.historyItemPaid : styles.historyItemPending,
-                    ]}
-                  >
-                    <View style={styles.historyTopRow}>
-                      <Text style={styles.historyJobTitle} numberOfLines={1}>
-                        {tx.jobTitle}
-                      </Text>
-                      <View
-                        style={[
-                          styles.historyStatusBadge,
-                          isPaid ? styles.statusPaidBadge : styles.statusPendingBadge,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.historyStatusText,
-                            isPaid ? styles.statusPaidText : styles.statusPendingText,
-                          ]}
-                        >
-                          {isPaid ? '✓ Paid' : 'Pending'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.historyDate}>
-                      {new Date(tx.createdAt).toLocaleString()}
-                    </Text>
-                    {tx.duesPaymentOrderId ? (
-                      <View style={styles.orderIdChip}>
-                        <Text style={styles.orderIdLabel}>Order ID</Text>
-                        <Text style={styles.orderIdValue}>{tx.duesPaymentOrderId}</Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.historyAmountsRow}>
-                      <Text style={styles.historyAmountReceived}>
-                        ₹{tx.amountReceived} received
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
 
   const renderCommissionLedger = () => {
     const transactions = wallet?.transactions || [];
@@ -595,18 +499,15 @@ const Wallet = () => {
           </View>
         ) : (
           transactions.map((tx) => {
-            const expanded = !!ledgerExpandedIds[tx.id];
             const isPaid = tx.duesPaid;
             const duesAmount = tx.platformCommission || 0;
             return (
-              <TouchableOpacity
+              <View
                 key={tx.id}
                 style={[
                   styles.ledgerItem,
                   isPaid ? styles.ledgerItemPaid : styles.ledgerItemUnpaid,
                 ]}
-                onPress={() => toggleLedgerItem(tx.id)}
-                activeOpacity={0.8}
               >
                 <View style={styles.ledgerTopRow}>
                   <View style={styles.ledgerTitleContainer}>
@@ -618,47 +519,30 @@ const Wallet = () => {
                     </Text>
                   </View>
                   <View style={styles.ledgerRightTop}>
-                    <Text style={styles.ledgerAmountReceived}>₹{tx.amountReceived}</Text>
+                    <Text style={styles.ledgerDuesLabel}>Dues</Text>
                     <Text style={styles.ledgerDuesAmount}>
-                      {isPaid ? 'Dues Paid' : `Dues: ₹${duesAmount}`}
+                      {isPaid ? 'Paid' : `₹${duesAmount}`}
                     </Text>
-                    <View
-                      style={[
-                        styles.ledgerStatusBadge,
-                        isPaid ? styles.statusPaidBadge : styles.statusPendingBadge,
-                      ]}
-                    >
-                      <Text
+                    {isPaid && (
+                      <View
                         style={[
-                          styles.ledgerStatusText,
-                          isPaid ? styles.statusPaidText : styles.statusPendingText,
+                          styles.ledgerStatusBadge,
+                          styles.statusPaidBadge,
                         ]}
                       >
-                        {isPaid ? '✓ Paid' : 'Pending'}
-                      </Text>
-                    </View>
+                        <Text
+                          style={[
+                            styles.ledgerStatusText,
+                            styles.statusPaidText,
+                          ]}
+                        >
+                          ✓ Paid
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                  <MaterialIcons
-                    name={expanded ? 'expand-less' : 'expand-more'}
-                    size={24}
-                    color={colors.text.secondary}
-                  />
                 </View>
-                {expanded && (
-                  <View style={styles.ledgerExpanded}>
-                    {tx.clientName ? (
-                      <Text style={styles.ledgerDetailText}>Client: {tx.clientName}</Text>
-                    ) : null}
-                    <Text style={styles.ledgerDetailText}>Job Amount: ₹{tx.jobAmount}</Text>
-                    <Text style={styles.ledgerDetailText}>
-                      Platform Commission (10%): -₹{tx.platformCommission}
-                    </Text>
-                    <Text style={styles.ledgerDetailText}>
-                      Amount Received: ₹{tx.amountReceived}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              </View>
             );
           })
         )}
@@ -689,7 +573,6 @@ const Wallet = () => {
       ) : null}
 
       {renderTotalDuesCard()}
-      {renderTransactionHistory()}
       {renderCommissionLedger()}
     </ScrollView>
     </>
@@ -791,93 +674,10 @@ const styles = StyleSheet.create({
     color: colors.success.main,
     marginTop: spacing.xs,
   },
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  historyList: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  historyItem: {
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    borderWidth: 1,
-  },
-  historyItemPaid: {
-    backgroundColor: colors.success.light,
-    borderColor: colors.success.main,
-  },
-  historyItemPending: {
-    backgroundColor: colors.error.light,
-    borderColor: colors.error.main,
-  },
-  historyTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  historyJobTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  historyStatusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-  },
   statusPaidBadge: {
     backgroundColor: colors.success.light,
   },
-  statusPendingBadge: {
-    backgroundColor: colors.error.light,
-  },
-  historyStatusText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
   statusPaidText: {
-    color: colors.success.dark,
-  },
-  statusPendingText: {
-    color: colors.error.dark,
-  },
-  historyDate: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  orderIdChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.sm,
-    backgroundColor: colors.cardBackground,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  orderIdLabel: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginRight: spacing.xs,
-  },
-  orderIdValue: {
-    ...typography.small,
-    color: colors.text.primary,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  historyAmountsRow: {
-    marginTop: spacing.sm,
-  },
-  historyAmountReceived: {
-    ...typography.body,
-    fontWeight: '600',
     color: colors.success.dark,
   },
   emptyInner: {
@@ -902,12 +702,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   ledgerItemPaid: {
-    backgroundColor: colors.success.light,
-    borderColor: colors.success.main,
+    backgroundColor: colors.cardBackground,
+    borderColor: colors.border,
   },
   ledgerItemUnpaid: {
-    backgroundColor: colors.error.light,
-    borderColor: colors.error.main,
+    backgroundColor: colors.cardBackground,
+    borderColor: colors.border,
   },
   ledgerTopRow: {
     flexDirection: 'row',
@@ -932,15 +732,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginRight: spacing.sm,
   },
-  ledgerAmountReceived: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.success.dark,
+  ledgerDuesLabel: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
   },
   ledgerDuesAmount: {
-    ...typography.small,
-    color: colors.error.dark,
-    marginTop: spacing.xs,
+    ...typography.body,
+    fontWeight: '700',
+    color: '#000000',
   },
   ledgerStatusBadge: {
     marginTop: spacing.xs,
@@ -951,17 +751,6 @@ const styles = StyleSheet.create({
   ledgerStatusText: {
     ...typography.small,
     fontWeight: '600',
-  },
-  ledgerExpanded: {
-    marginTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
-  },
-  ledgerDetailText: {
-    ...typography.small,
-    color: colors.text.secondary,
   },
 });
 

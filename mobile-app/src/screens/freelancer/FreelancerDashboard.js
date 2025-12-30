@@ -166,6 +166,15 @@ const FreelancerDashboard = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Breadcrumb Navigation - Only show on drawer screens */}
+      {activeDrawerScreen && (
+        <View style={styles.breadcrumb}>
+          <Text style={styles.breadcrumbText}>Dashboard</Text>
+          <MaterialIcons name="chevron-right" size={16} color={colors.text.secondary} />
+          <Text style={styles.breadcrumbText}>{activeDrawerScreen}</Text>
+        </View>
+      )}
+
         {/* Error Message */}
         {logoutError ? (
           <View style={styles.errorContainer}>
@@ -397,6 +406,19 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.primary.main,
   },
+  breadcrumb: {
+    backgroundColor: colors.cardBackground,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  breadcrumbText: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
   errorContainer: {
     backgroundColor: colors.error.light,
     padding: spacing.md,
@@ -410,7 +432,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     backgroundColor: colors.background,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
   },
   tabBarContent: {

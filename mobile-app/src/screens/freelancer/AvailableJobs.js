@@ -326,7 +326,10 @@ const AvailableJobs = () => {
           {item.description}
         </Text>
       ) : null}
-      <Text style={styles.jobAddress}>Address - {item.address}</Text>
+      <View style={styles.jobAddressRow}>
+        <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
+        <Text style={styles.jobAddress}>{item.address}</Text>
+      </View>
       <View style={styles.jobMetaRow}>
         <View style={styles.jobMeta}>
           <MaterialIcons name="person" size={16} color={colors.text.secondary} />
@@ -691,10 +694,16 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: spacing.xs,
   },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
   jobAddress: {
     ...typography.small,
     color: colors.text.primary,
-    marginBottom: spacing.sm,
+    flex: 1,
   },
   jobMetaRow: {
     flexDirection: 'row',
@@ -846,7 +855,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
+    paddingTop: 0,
     paddingBottom: spacing.xs,
   },
   filterButton: {

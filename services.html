@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Services - People Enterprises</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .services-section {
+            padding: 120px 0 80px;
+            background: linear-gradient(135deg, var(--light-blue) 0%, var(--light-green) 100%);
+        }
+
+        .services-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .services-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .services-header h1 {
+            font-size: 2.5rem;
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+        }
+
+        .services-header p {
+            font-size: 1.1rem;
+            color: var(--gray-600);
+        }
+
+        .category-filter {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            border: 2px solid var(--gray-300);
+            background: var(--white);
+            color: var(--gray-700);
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .filter-btn:hover,
+        .filter-btn.active {
+            background: var(--primary-blue);
+            color: var(--white);
+            border-color: var(--primary-blue);
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .service-card {
+            background-color: var(--white);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .service-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .service-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+            color: var(--white);
+        }
+
+        .service-card h3 {
+            color: var(--gray-900);
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .service-card p {
+            color: var(--gray-600);
+            margin-bottom: 1.5rem;
+            flex-grow: 1;
+            line-height: 1.6;
+        }
+
+        .service-price {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--primary-green);
+            margin-bottom: 1rem;
+        }
+
+        .service-features {
+            list-style: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .service-features li {
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .service-features li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--primary-green);
+            font-weight: bold;
+        }
+
+        .add-to-cart-btn {
+            width: 100%;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--primary-green));
+            color: var(--white);
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .add-to-cart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .cart-badge {
+            position: relative;
+        }
+
+        .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--primary-green);
+            color: var(--white);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .services-header h1 {
+                font-size: 2rem;
+            }
+
+            .services-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="1000013213 (1).png" alt="People Enterprises Logo" style="height: 40px; width: auto; margin-right: 10px;">
+                <h2>People Enterprises</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="index.html" class="nav-link">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a href="services.html" class="nav-link">Services</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#how-it-works" class="nav-link">How It Works</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#features" class="nav-link">Features</a>
+                </li>
+                <li class="nav-item">
+                    <a href="index.html#about" class="nav-link">About</a>
+                </li>
+                <li class="nav-item">
+                    <a href="contact.html" class="nav-link">Contact</a>
+                </li>
+                <li class="nav-item cart-badge">
+                    <a href="cart.html" class="nav-link">
+                        <i class="fas fa-shopping-cart"></i> Cart
+                        <span class="cart-count" id="cartCount">0</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="terms.html" class="nav-link">Terms</a>
+                </li>
+                <li class="nav-item">
+                    <a href="privacy.html" class="nav-link">Privacy</a>
+                </li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Services Section -->
+    <section class="services-section">
+        <div class="services-container">
+            <div class="services-header">
+                <h1>Our Services</h1>
+                <p>Browse and select from our wide range of professional services</p>
+            </div>
+
+            <div class="category-filter">
+                <button class="filter-btn active" onclick="filterServices('all')">All Services</button>
+                <button class="filter-btn" onclick="filterServices('design')">Design</button>
+                <button class="filter-btn" onclick="filterServices('development')">Development</button>
+                <button class="filter-btn" onclick="filterServices('marketing')">Marketing</button>
+                <button class="filter-btn" onclick="filterServices('writing')">Writing</button>
+                <button class="filter-btn" onclick="filterServices('consulting')">Consulting</button>
+            </div>
+
+            <div class="services-grid" id="servicesGrid">
+                <!-- Service cards will be populated by JavaScript -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3><i class="fas fa-users"></i> People Enterprises</h3>
+                    <p>Connecting skilled professionals with clients who need their expertise.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="services.html">Services</a></li>
+                        <li><a href="index.html#how-it-works">How It Works</a></li>
+                        <li><a href="index.html#features">Features</a></li>
+                        <li><a href="index.html#about">About</a></li>
+                        <li><a href="contact.html">Contact Us</a></li>
+                        <li><a href="business.html">Business Info</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="terms.html">Terms & Conditions</a></li>
+                        <li><a href="privacy.html">Privacy Policy</a></li>
+                        <li><a href="refund.html">Refund Policy</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Contact</h4>
+                    <ul>
+                        <li><i class="fas fa-envelope"></i> rohanjaiswar2467@gmail.com</li>
+                        <li><i class="fas fa-phone"></i> +91 7021098460</li>
+                        <li><i class="fas fa-map-marker-alt"></i> Mumbai, Maharashtra, India</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 People Enterprises. All rights reserved.</p>
+                <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;">This website (people.com.de) is owned and operated by People Enterprises (Proprietor: Rohan Jaiswar).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+        // Services data
+        const services = [
+            {
+                id: 1,
+                name: "Web Design",
+                category: "design",
+                description: "Professional website design with modern UI/UX",
+                price: 2500,
+                icon: "fa-palette",
+                color: "client-icon",
+                features: ["Responsive Design", "Modern UI/UX", "Mobile Friendly", "3 Revisions"]
+            },
+            {
+                id: 2,
+                name: "Web Development",
+                category: "development",
+                description: "Full-stack web development services",
+                price: 5000,
+                icon: "fa-code",
+                color: "freelancer-icon",
+                features: ["Frontend & Backend", "Database Integration", "API Development", "Testing"]
+            },
+            {
+                id: 3,
+                name: "Logo Design",
+                category: "design",
+                description: "Custom logo design for your brand",
+                price: 1500,
+                icon: "fa-paint-brush",
+                color: "client-icon",
+                features: ["3 Concepts", "Vector Format", "Multiple Formats", "Brand Guidelines"]
+            },
+            {
+                id: 4,
+                name: "SEO Services",
+                category: "marketing",
+                description: "Search engine optimization to boost your rankings",
+                price: 3000,
+                icon: "fa-search",
+                color: "freelancer-icon",
+                features: ["Keyword Research", "On-Page SEO", "Link Building", "Monthly Reports"]
+            },
+            {
+                id: 5,
+                name: "Content Writing",
+                category: "writing",
+                description: "High-quality content for your website and blog",
+                price: 2000,
+                icon: "fa-pen",
+                color: "client-icon",
+                features: ["SEO Optimized", "Original Content", "Fast Delivery", "Unlimited Revisions"]
+            },
+            {
+                id: 6,
+                name: "Social Media Marketing",
+                category: "marketing",
+                description: "Manage and grow your social media presence",
+                price: 4000,
+                icon: "fa-share-alt",
+                color: "freelancer-icon",
+                features: ["Content Creation", "Post Scheduling", "Analytics", "Engagement Growth"]
+            },
+            {
+                id: 7,
+                name: "Business Consulting",
+                category: "consulting",
+                description: "Expert business strategy and consulting",
+                price: 6000,
+                icon: "fa-briefcase",
+                color: "client-icon",
+                features: ["Strategy Planning", "Market Analysis", "Growth Plans", "Monthly Sessions"]
+            },
+            {
+                id: 8,
+                name: "Mobile App Development",
+                category: "development",
+                description: "Native and cross-platform mobile applications",
+                price: 8000,
+                icon: "fa-mobile-alt",
+                color: "freelancer-icon",
+                features: ["iOS & Android", "UI/UX Design", "App Store Setup", "Maintenance"]
+            },
+            {
+                id: 9,
+                name: "Graphic Design",
+                category: "design",
+                description: "Professional graphics for print and digital",
+                price: 1800,
+                icon: "fa-image",
+                color: "client-icon",
+                features: ["Print Ready", "Multiple Formats", "Brand Consistency", "Fast Turnaround"]
+            }
+        ];
+
+        // Cart management
+        function getCart() {
+            const cart = localStorage.getItem('cart');
+            return cart ? JSON.parse(cart) : [];
+        }
+
+        function saveCart(cart) {
+            localStorage.setItem('cart', JSON.stringify(cart));
+            updateCartCount();
+        }
+
+        function addToCart(service) {
+            const cart = getCart();
+            const existingItem = cart.find(item => item.id === service.id);
+            
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({ ...service, quantity: 1 });
+            }
+            
+            saveCart(cart);
+            showNotification(`${service.name} added to cart!`);
+        }
+
+        function updateCartCount() {
+            const cart = getCart();
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            const cartCountEl = document.getElementById('cartCount');
+            if (cartCountEl) {
+                cartCountEl.textContent = totalItems;
+                cartCountEl.style.display = totalItems > 0 ? 'flex' : 'none';
+            }
+        }
+
+        function showNotification(message) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                background: var(--primary-green);
+                color: white;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                box-shadow: var(--shadow-lg);
+                z-index: 10000;
+                animation: slideIn 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        function filterServices(category) {
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Filter services
+            const filtered = category === 'all' 
+                ? services 
+                : services.filter(s => s.category === category);
+            
+            renderServices(filtered);
+        }
+
+        function renderServices(servicesToRender) {
+            const grid = document.getElementById('servicesGrid');
+            grid.innerHTML = servicesToRender.map(service => `
+                <div class="service-card">
+                    <div class="service-icon ${service.color}">
+                        <i class="fas ${service.icon}"></i>
+                    </div>
+                    <h3>${service.name}</h3>
+                    <p>${service.description}</p>
+                    <ul class="service-features">
+                        ${service.features.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                    <div class="service-price">₹${service.price.toLocaleString()}</div>
+                    <button class="add-to-cart-btn" onclick="addToCart(${JSON.stringify(service).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-shopping-cart"></i> Add to Cart
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            renderServices(services);
+            updateCartCount();
+        });
+    </script>
+    <style>
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+</body>
+</html>

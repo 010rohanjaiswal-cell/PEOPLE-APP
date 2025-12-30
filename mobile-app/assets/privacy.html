@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - People Enterprises</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #ffffff;
+            padding-top: 80px;
+        }
+        
+        .navbar {
+            background-color: #ffffff;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+        
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 70px;
+        }
+        
+        .nav-logo {
+            display: flex;
+            align-items: center;
+        }
+        
+        .nav-logo h2 {
+            color: #2563eb;
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .nav-menu {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+        
+        .nav-link {
+            text-decoration: none;
+            color: #374151;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            color: #2563eb;
+        }
+        
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            cursor: pointer;
+        }
+        
+        .bar {
+            width: 25px;
+            height: 3px;
+            background-color: #374151;
+            margin: 3px 0;
+            transition: 0.3s;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .privacy-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .privacy-header h1 {
+            color: #2563eb;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .privacy-header p {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+        
+        .privacy-section {
+            margin-bottom: 2.5rem;
+            padding: 2rem;
+            background-color: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        
+        .privacy-section h2 {
+            color: #1f2937;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .privacy-section h3 {
+            color: #374151;
+            font-size: 1.2rem;
+            margin: 1.5rem 0 1rem 0;
+        }
+        
+        .privacy-section p {
+            margin-bottom: 1rem;
+            color: #4b5563;
+        }
+        
+        .privacy-section ul {
+            margin: 1rem 0;
+            padding-left: 2rem;
+        }
+        
+        .privacy-section li {
+            margin-bottom: 0.5rem;
+            color: #4b5563;
+        }
+        
+        .consent-notice {
+            background-color: #dbeafe;
+            border: 1px solid #2563eb;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .consent-notice h3 {
+            color: #1e40af;
+            margin-bottom: 1rem;
+        }
+        
+        .consent-notice p {
+            color: #1e40af;
+            font-weight: 500;
+        }
+        
+        .back-to-home {
+            text-align: center;
+            margin: 3rem 0;
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: #2563eb;
+            color: #ffffff;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        
+        .footer {
+            background-color: #1f2937;
+            color: #ffffff;
+            padding: 3rem 0 1rem;
+            margin-top: 4rem;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+        
+        .footer-section h3,
+        .footer-section h4 {
+            margin-bottom: 1rem;
+            color: #f9fafb;
+        }
+        
+        .footer-section ul {
+            list-style: none;
+        }
+        
+        .footer-section ul li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-section ul li a {
+            color: #d1d5db;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .footer-section ul li a:hover {
+            color: #ffffff;
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #374151;
+            color: #9ca3af;
+        }
+        
+        @media (max-width: 768px) {
+            .hamburger {
+                display: flex;
+            }
+            
+            .nav-menu {
+                position: fixed;
+                left: -100%;
+                top: 70px;
+                flex-direction: column;
+                background-color: #ffffff;
+                width: 100%;
+                text-align: center;
+                transition: 0.3s;
+                box-shadow: 0 10px 27px rgba(0, 0, 0, 0.05);
+                padding: 2rem 0;
+            }
+            
+            .nav-menu.active {
+                left: 0;
+            }
+            
+            .hamburger.active .bar:nth-child(2) {
+                opacity: 0;
+            }
+            
+            .hamburger.active .bar:nth-child(1) {
+                transform: translateY(8px) rotate(45deg);
+            }
+            
+            .hamburger.active .bar:nth-child(3) {
+                transform: translateY(-8px) rotate(-45deg);
+            }
+            
+            .privacy-header h1 {
+                font-size: 2rem;
+            }
+            
+            .container {
+                padding: 20px 15px;
+            }
+            
+            .privacy-section {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="1000013213 (1).png" alt="People Enterprises Logo" style="height: 40px; width: auto; margin-right: 10px;">
+                <h2>People Enterprises</h2>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/" class="nav-link">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/#how-it-works" class="nav-link">How It Works</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/#features" class="nav-link">Features</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/#about" class="nav-link">About</a>
+                </li>
+                <li class="nav-item">
+                    <a href="terms.html" class="nav-link">Terms</a>
+                </li>
+                <li class="nav-item">
+                    <a href="privacy.html" class="nav-link">Privacy</a>
+                </li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <div class="privacy-header">
+            <h1>Privacy Policy</h1>
+            <p>Last updated: August 2025</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>1. Introduction</h2>
+            <p>Welcome to People Enterprises. We are committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our platform that connects clients with freelancers.</p>
+            <p>By using our platform, you consent to the data practices described in this policy.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>2. Information We Collect</h2>
+            
+            <h3>Client Information</h3>
+            <p>When you register as a client on our platform, we collect the following personal information:</p>
+            <ul>
+                <li><strong>Name:</strong> Your full legal name</li>
+                <li><strong>Date of Birth:</strong> For age verification and legal compliance</li>
+                <li><strong>Gender:</strong> For demographic purposes and service matching</li>
+                <li><strong>Address:</strong> Your residential or business address</li>
+                <li><strong>Profile Photo:</strong> For identification and verification purposes</li>
+                <li><strong>Contact Information:</strong> Email address and phone number</li>
+                <li><strong>Payment Information:</strong> For processing transactions (handled securely by our payment partners)</li>
+            </ul>
+
+            <h3>Freelancer Information</h3>
+            <p>When you register as a freelancer on our platform, we collect the following information:</p>
+            <ul>
+                <li><strong>Personal Information:</strong> Name, date of birth, gender, address, and profile photo</li>
+                <li><strong>Government Documents:</strong> We require consent to access and verify:</li>
+                <ul>
+                    <li>Aadhar card for identity verification</li>
+                    <li>PAN card for tax purposes</li>
+                    <li>Other government-issued identification documents</li>
+                    <li>Professional certifications and licenses</li>
+                </ul>
+                <li><strong>Skills and Experience:</strong> Professional background, qualifications, and expertise</li>
+                <li><strong>Banking Information:</strong> For payment processing and earnings distribution</li>
+            </ul>
+        </div>
+
+        <div class="privacy-section">
+            <h2>3. How We Use Your Information</h2>
+            <p>We use the collected information for the following purposes:</p>
+            <ul>
+                <li><strong>Platform Operation:</strong> To provide and maintain our services</li>
+                <li><strong>Identity Verification:</strong> To verify the identity of all users</li>
+                <li><strong>Service Matching:</strong> To connect clients with appropriate freelancers</li>
+                <li><strong>Payment Processing:</strong> To facilitate secure transactions</li>
+                <li><strong>Communication:</strong> To send important updates and notifications</li>
+                <li><strong>Legal Compliance:</strong> To meet regulatory and legal requirements</li>
+                <li><strong>Security:</strong> To protect against fraud and unauthorized access</li>
+                <li><strong>Improvement:</strong> To enhance our platform and services</li>
+            </ul>
+        </div>
+
+        <div class="privacy-section">
+            <h2>4. Information Sharing and Disclosure</h2>
+            <p>We may share your information in the following circumstances:</p>
+            <ul>
+                <li><strong>Service Providers:</strong> With trusted third-party service providers who assist in platform operations</li>
+                <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
+                <li><strong>Safety and Security:</strong> To prevent fraud and ensure platform security</li>
+                <li><strong>Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets</li>
+                <li><strong>User Consent:</strong> With your explicit consent for specific purposes</li>
+            </ul>
+            <p><strong>We do not sell, rent, or trade your personal information to third parties for marketing purposes.</strong></p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>5. Data Security</h2>
+            <p>We implement appropriate technical and organizational measures to protect your personal information:</p>
+            <ul>
+                <li>Encryption of sensitive data in transit and at rest</li>
+                <li>Regular security assessments and updates</li>
+                <li>Access controls and authentication measures</li>
+                <li>Secure data storage and backup procedures</li>
+                <li>Employee training on data protection</li>
+            </ul>
+        </div>
+
+        <div class="privacy-section">
+            <h2>6. Data Retention</h2>
+            <p>We retain your personal information for as long as necessary to:</p>
+            <ul>
+                <li>Provide our services</li>
+                <li>Comply with legal obligations</li>
+                <li>Resolve disputes</li>
+                <li>Enforce our agreements</li>
+            </ul>
+            <p>You may request deletion of your account and associated data, subject to legal requirements.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>7. Your Rights</h2>
+            <p>You have the following rights regarding your personal information:</p>
+            <ul>
+                <li><strong>Access:</strong> Request a copy of your personal data</li>
+                <li><strong>Correction:</strong> Update or correct inaccurate information</li>
+                <li><strong>Deletion:</strong> Request deletion of your personal data</li>
+                <li><strong>Portability:</strong> Request transfer of your data to another service</li>
+                <li><strong>Objection:</strong> Object to certain processing activities</li>
+                <li><strong>Withdrawal:</strong> Withdraw consent where applicable</li>
+            </ul>
+        </div>
+
+        <div class="privacy-section">
+            <h2>8. Cookies and Tracking Technologies</h2>
+            <p>We use cookies and similar technologies to:</p>
+            <ul>
+                <li>Remember your preferences and settings</li>
+                <li>Analyze platform usage and performance</li>
+                <li>Provide personalized content and features</li>
+                <li>Ensure platform security</li>
+            </ul>
+            <p>You can control cookie settings through your browser preferences.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>9. Third-Party Services</h2>
+            <p>Our platform may integrate with third-party services for:</p>
+            <ul>
+                <li>Payment processing</li>
+                <li>Identity verification</li>
+                <li>Analytics and monitoring</li>
+                <li>Communication services</li>
+            </ul>
+            <p>These services have their own privacy policies, and we encourage you to review them.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>10. International Data Transfers</h2>
+            <p>Your information may be transferred to and processed in countries other than your own. We ensure appropriate safeguards are in place to protect your data during such transfers.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>11. Changes to This Privacy Policy</h2>
+            <p>We may update this Privacy Policy from time to time. We will notify you of any material changes by:</p>
+            <ul>
+                <li>Posting the updated policy on our platform</li>
+                <li>Sending email notifications to registered users</li>
+                <li>Displaying prominent notices on our platform</li>
+            </ul>
+            <p>Your continued use of our platform after changes become effective constitutes acceptance of the updated policy.</p>
+        </div>
+
+        <div class="privacy-section">
+            <h2>12. Contact Information</h2>
+            <p>If you have questions about this Privacy Policy or our data practices, please contact us:</p>
+            <ul>
+                <li><strong>Data Protection Officer:</strong> rohanjaiswar2467@gmail.com</li>
+                <li><strong>General Privacy Inquiries:</strong> rohanjaiswar2467@gmail.com</li>
+                <li><strong>Phone:</strong> +91 7021098460</li>
+                <li><strong>Address:</strong> People, Mumbai, Maharashtra, India</li>
+            </ul>
+        </div>
+
+        <div class="consent-notice">
+            <h3>Consent Confirmation</h3>
+            <p><strong>By using our platform, you confirm that you have read and understood this Privacy Policy and consent to the collection, use, and sharing of your personal information as described herein. You also consent to the verification of your government documents, including Aadhar card, as required for platform participation.</strong></p>
+        </div>
+
+        <div class="back-to-home">
+            <a href="/" class="btn">Back to Home</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3>People Enterprises</h3>
+                <p>Connecting skilled professionals with clients who need their expertise.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Quick Links</h4>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/#how-it-works">How It Works</a></li>
+                    <li><a href="/#features">Features</a></li>
+                    <li><a href="/#about">About</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Legal</h4>
+                <ul>
+                    <li><a href="terms.html">Terms & Conditions</a></li>
+                    <li><a href="privacy.html">Privacy Policy</a></li>
+                    <li><a href="refund.html">Refund Policy</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Contact</h4>
+                <ul>
+                    <li>rohanjaiswar2467@gmail.com</li>
+                    <li>+91 7021098460</li>
+                    <li>Mumbai, Maharashtra, India</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2024 People Enterprises. All rights reserved.</p>
+            <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.9;">This website (people.com.de) is owned and operated by People Enterprises (Proprietor: Rohan Jaiswar).</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const hamburger = document.querySelector('.hamburger');
+            const navMenu = document.querySelector('.nav-menu');
+            
+            if (hamburger && navMenu) {
+                hamburger.addEventListener('click', function() {
+                    hamburger.classList.toggle('active');
+                    navMenu.classList.toggle('active');
+                });
+                
+                document.querySelectorAll('.nav-link').forEach(function(link) {
+                    link.addEventListener('click', function() {
+                        hamburger.classList.remove('active');
+                        navMenu.classList.remove('active');
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>

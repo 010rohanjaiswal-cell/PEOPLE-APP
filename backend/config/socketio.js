@@ -10,8 +10,6 @@ const User = require('../models/User');
 const Message = require('../models/Message');
 
 let io = null;
-// Track online users: Map<userId, Set<socketId>>
-const onlineUsers = new Map();
 
 const setupSocketIO = (server) => {
   io = new Server(server, {
@@ -49,15 +47,6 @@ const setupSocketIO = (server) => {
 
   io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.userId}`);
-
-    // Track user as online
-    if (!onlineUsers.has(socket.userId)) {
-      onlineUsers.set(socket.userId, new Set());
-    }
-    onlineUsers.get(socket.userId).add(socket.id);
-    
-    // Emit user online status to all other users
-    socket.broadcast.emit('user_online', { userId: socket.userId });
 
     // Join user's personal room for receiving messages
     socket.join(`user_${socket.userId}`);
@@ -104,6 +93,9 @@ const setupSocketIO = (server) => {
         // Emit to sender (confirmation)
         socket.emit('message_sent', messageData);
 
+        // Emit to sender (confirmation) first
+        socket.emit('message_sent', messageData);
+
         // Emit to recipient (new message)
         io.to(`user_${recipientId}`).emit('new_message', messageData);
 
@@ -112,6 +104,7 @@ const setupSocketIO = (server) => {
         if (recipientSocket.length > 0) {
           await Message.findByIdAndUpdate(newMessage._id, { status: 'delivered' });
           messageData.status = 'delivered';
+          // Update both sender and recipient with delivered status
           socket.emit('message_sent', messageData);
           io.to(`user_${recipientId}`).emit('new_message', messageData);
         }
@@ -170,30 +163,9 @@ const setupSocketIO = (server) => {
       }
     });
 
-    // Handle online status check
-    socket.on('check_online_status', (data) => {
-      const { userId } = data;
-      if (userId) {
-        const isOnline = onlineUsers.has(userId) && onlineUsers.get(userId).size > 0;
-        socket.emit('online_status', { userId, isOnline });
-      }
-    });
-
     // Handle disconnect
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.userId}`);
-      
-      // Remove socket from online users
-      if (onlineUsers.has(socket.userId)) {
-        onlineUsers.get(socket.userId).delete(socket.id);
-        
-        // If user has no more active sockets, mark as offline
-        if (onlineUsers.get(socket.userId).size === 0) {
-          onlineUsers.delete(socket.userId);
-          // Emit user offline status to all other users
-          socket.broadcast.emit('user_offline', { userId: socket.userId });
-        }
-      }
     });
   });
 
