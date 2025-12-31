@@ -197,6 +197,38 @@ async function notifyWorkDone(clientId, freelancerName, jobTitle) {
   });
 }
 
+/**
+ * Create notification for job picked up (client notification)
+ */
+async function notifyJobPickedUp(clientId, freelancerName, jobTitle) {
+  return createNotification({
+    userId: clientId,
+    type: 'job_picked_up',
+    title: 'Job Picked Up',
+    message: `${freelancerName} picked up your job "${jobTitle}"`,
+    data: {
+      jobTitle,
+      freelancerName,
+    },
+  });
+}
+
+/**
+ * Create notification for chat message
+ */
+async function notifyChatMessage(recipientId, senderName, messagePreview) {
+  return createNotification({
+    userId: recipientId,
+    type: 'chat_message',
+    title: 'New Message',
+    message: `${senderName}: ${messagePreview.length > 50 ? messagePreview.substring(0, 50) + '...' : messagePreview}`,
+    data: {
+      senderName,
+      messagePreview,
+    },
+  });
+}
+
 module.exports = {
   createNotification,
   notifyOfferReceived,
@@ -207,5 +239,7 @@ module.exports = {
   notifyPaymentReceived,
   notifyPaymentSent,
   notifyWorkDone,
+  notifyJobPickedUp,
+  notifyChatMessage,
 };
 

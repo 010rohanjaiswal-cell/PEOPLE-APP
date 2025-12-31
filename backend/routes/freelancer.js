@@ -18,6 +18,7 @@ const {
   notifyOfferReceived,
   notifyJobAssigned,
   notifyWorkDone,
+  notifyJobPickedUp,
 } = require('../services/notificationService');
 
 // Use memory storage; we'll stream buffers to Cloudinary
@@ -566,6 +567,19 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
     job.status = 'assigned';
     await job.save();
 
+    // Notify client about job pickup
+    try {
+      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      await notifyJobPickedUp(
+        job.client.toString(),
+        freelancer?.fullName || 'A freelancer',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending job pickup notification to client:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     // Notify freelancer about job assignment
     try {
       const client = await User.findById(job.client).select('fullName').lean();
@@ -575,7 +589,7 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
         job.title
       );
     } catch (notifError) {
-      console.error('Error sending job pickup notification:', notifError);
+      console.error('Error sending job assignment notification to freelancer:', notifError);
       // Don't fail the request if notification fails
     }
 

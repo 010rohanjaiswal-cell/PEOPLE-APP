@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
+const { notifyChatMessage } = require('../services/notificationService');
 
 let io = null;
 
@@ -99,6 +100,20 @@ const setupSocketIO = (server) => {
 
         // Emit to recipient (new message)
         io.to(`user_${recipientId}`).emit('new_message', messageData);
+
+        // Create notification for recipient
+        try {
+          const senderName = newMessage.sender?.fullName || 'Someone';
+          const messageText = newMessage.message || '';
+          await notifyChatMessage(
+            recipientId,
+            senderName,
+            messageText
+          );
+        } catch (notifError) {
+          console.error('Error creating chat message notification:', notifError);
+          // Don't fail message sending if notification fails
+        }
 
         // Update status to delivered if recipient is online
         const recipientSocket = await io.in(`user_${recipientId}`).fetchSockets();

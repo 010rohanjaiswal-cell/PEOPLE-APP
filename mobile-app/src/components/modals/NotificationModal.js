@@ -3,7 +3,7 @@
  * Displays list of notifications with actions
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,13 @@ const NotificationModal = ({ visible, onClose }) => {
     refreshNotifications,
   } = useNotifications();
 
+  // Auto-mark all notifications as read when modal opens
+  useEffect(() => {
+    if (visible && unreadCount > 0) {
+      markAllAsRead();
+    }
+  }, [visible, unreadCount, markAllAsRead]);
+
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'offer_received':
@@ -39,6 +46,7 @@ const NotificationModal = ({ visible, onClose }) => {
         return 'check-circle';
       case 'offer_rejected':
         return 'cancel';
+      case 'job_picked_up':
       case 'job_assigned':
         return 'work';
       case 'job_completed':
@@ -49,6 +57,8 @@ const NotificationModal = ({ visible, onClose }) => {
         return 'send';
       case 'work_done':
         return 'check';
+      case 'chat_message':
+        return 'message';
       case 'profile_verified':
         return 'verified';
       default:
@@ -59,6 +69,7 @@ const NotificationModal = ({ visible, onClose }) => {
   const getNotificationColor = (type) => {
     switch (type) {
       case 'offer_received':
+      case 'job_picked_up':
       case 'job_assigned':
         return colors.primary.main;
       case 'offer_accepted':
@@ -69,6 +80,8 @@ const NotificationModal = ({ visible, onClose }) => {
         return colors.success.main;
       case 'offer_rejected':
         return colors.error.main;
+      case 'chat_message':
+        return colors.info?.main || colors.primary.main;
       default:
         return colors.text.secondary;
     }
@@ -105,19 +118,9 @@ const NotificationModal = ({ visible, onClose }) => {
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.title}>Notifications</Text>
-            <View style={styles.headerActions}>
-              {unreadCount > 0 && (
-                <TouchableOpacity
-                  onPress={markAllAsRead}
-                  style={styles.markAllButton}
-                >
-                  <Text style={styles.markAllText}>Mark all read</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <MaterialIcons name="close" size={24} color={colors.text.primary} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <MaterialIcons name="close" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.contentWrapper}>
@@ -147,7 +150,21 @@ const NotificationModal = ({ visible, onClose }) => {
                   />
                 }
               >
-                {notifications.map((notification) => (
+                {notifications
+                  .filter((notification) => {
+                    // Only show specific notification types
+                    const allowedTypes = [
+                      'offer_received',
+                      'offer_accepted',
+                      'offer_rejected',
+                      'job_picked_up',
+                      'work_done',
+                      'payment_received',
+                      'chat_message',
+                    ];
+                    return allowedTypes.includes(notification.type);
+                  })
+                  .map((notification) => (
                   <TouchableOpacity
                     key={notification._id}
                     style={[
@@ -233,20 +250,6 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h2,
     color: colors.text.primary,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  markAllButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  markAllText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '600',
   },
   closeButton: {
     padding: spacing.xs,
