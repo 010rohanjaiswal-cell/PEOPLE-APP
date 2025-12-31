@@ -399,12 +399,15 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: 4,
+    height: 28,
     borderRadius: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.cardBackground,
     marginRight: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterButtonActive: {
     backgroundColor: colors.primary.main,
