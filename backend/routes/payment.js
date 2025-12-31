@@ -111,13 +111,12 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
     // cause CHECKOUT_ORDER_FAILED if it doesn't match PhonePe config exactly.
     // We'll omit redirectUrl here and rely on appSchema + callbackUrl/webhook.
 
-    // NOTE: expireAfter is in seconds. Currently set to 4 hours (14400 seconds)
-    // to ensure the order does not expire too quickly while the user is paying.
-    // PhonePe may still apply their own caps/limits server-side.
+    // NOTE: expireAfter is in seconds. PhonePe maximum is 3600 seconds (1 hour).
+    // Set to 1 hour to give users enough time to complete payment.
     const sdkOrderRequest = CreateSdkOrderRequest.StandardCheckoutBuilder()
       .merchantOrderId(merchantOrderId)
       .amount(totalDues * 100) // Amount in paise
-      .expireAfter(14400) // 4 hours in seconds
+      .expireAfter(3600) // 1 hour in seconds (PhonePe maximum)
       .build();
 
     console.log('📤 Creating PhonePe SDK order using Node.js SDK:', {
