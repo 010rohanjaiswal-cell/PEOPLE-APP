@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
@@ -15,6 +15,8 @@ const History = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const loadHistory = async () => {
     try {
@@ -46,6 +48,19 @@ const History = () => {
   useEffect(() => {
     loadHistory();
   }, []);
+
+  // Paginate jobs
+  const totalPages = Math.ceil(jobs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedJobs = jobs.slice(startIndex, endIndex);
+
+  // Reset to page 1 if current page is out of bounds
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [jobs.length, currentPage, totalPages]);
 
   const renderJobItem = ({ item }) => {
     return (
@@ -105,32 +120,66 @@ const History = () => {
         </View>
       ) : null}
 
-      <FlatList
-        data={jobs}
-        keyExtractor={(item) => item._id || item.id}
-        renderItem={renderJobItem}
-        ListEmptyComponent={
-          !loading ? (
-            <EmptyState
-              icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
-              title="No completed jobs yet"
-              description="Jobs that are fully completed and paid will appear here."
-            />
-          ) : null
-        }
-        contentContainerStyle={[
-          styles.listContent,
-          jobs.length === 0 && { flexGrow: 1 }
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary.main]}
-            tintColor={colors.primary.main}
+      {jobs.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <EmptyState
+            icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
+            title="No completed jobs yet"
+            description="Jobs that are fully completed and paid will appear here."
           />
-        }
-      />
+        </View>
+      ) : (
+        <>
+          <FlatList
+            data={paginatedJobs}
+            keyExtractor={(item) => item._id || item.id}
+            renderItem={renderJobItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[colors.primary.main]}
+                tintColor={colors.primary.main}
+              />
+            }
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary.main} />
+                </View>
+              ) : null
+            }
+          />
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <View style={styles.paginationContainer}>
+              <View style={styles.paginationButtons}>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <TouchableOpacity
+                    key={pageNum}
+                    style={[
+                      styles.paginationButton,
+                      currentPage === pageNum && styles.paginationButtonActive,
+                    ]}
+                    onPress={() => setCurrentPage(pageNum)}
+                  >
+                    <Text
+                      style={[
+                        styles.paginationButtonText,
+                        currentPage === pageNum && styles.paginationButtonTextActive,
+                      ]}
+                    >
+                      {pageNum}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 };
@@ -161,7 +210,12 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   jobCard: {
     backgroundColor: colors.cardBackground,
@@ -229,6 +283,45 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing.xs,
     fontStyle: 'italic',
+  },
+  paginationContainer: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  paginationButton: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  paginationButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  paginationButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  paginationButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
 
