@@ -197,32 +197,33 @@ const Orders = () => {
       ) : null}
 
       {/* Filter Bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        contentContainerStyle={styles.filterBarContent}
-      >
-        {filterOptions.map((option) => (
-          <TouchableOpacity
-            key={option.key}
-            style={[
-              styles.filterButton,
-              selectedFilter === option.key && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedFilter(option.key)}
-          >
-            <Text
+      <View style={styles.filterBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterBarContent}
+        >
+          {filterOptions.map((option) => (
+            <TouchableOpacity
+              key={option.key}
               style={[
-                styles.filterButtonText,
-                selectedFilter === option.key && styles.filterButtonTextActive,
+                styles.filterButton,
+                selectedFilter === option.key && styles.filterButtonActive,
               ]}
+              onPress={() => setSelectedFilter(option.key)}
             >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedFilter === option.key && styles.filterButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {filteredOrders.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -318,6 +319,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   listContent: {
+    paddingTop: 0,
     paddingBottom: spacing.lg,
   },
   orderCard: {
@@ -391,11 +393,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   filterBar: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
+    paddingBottom: 0,
   },
   filterBarContent: {
     paddingHorizontal: spacing.sm,
     gap: spacing.xs,
+    paddingBottom: 0,
   },
   filterButton: {
     paddingHorizontal: spacing.sm,
