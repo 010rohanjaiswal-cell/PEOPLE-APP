@@ -398,9 +398,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   filterButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.xs,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.cardBackground,
@@ -411,13 +411,15 @@ const styles = StyleSheet.create({
     borderColor: colors.primary.main,
   },
   filterButtonText: {
-    ...typography.body,
+    ...typography.small,
     color: colors.text.primary,
     fontWeight: '500',
+    fontSize: 12,
   },
   filterButtonTextActive: {
     color: '#FFFFFF',
     fontWeight: '600',
+    fontSize: 12,
   },
   emptyContainer: {
     flex: 1,
