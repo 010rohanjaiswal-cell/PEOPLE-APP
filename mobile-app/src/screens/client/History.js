@@ -107,14 +107,14 @@ const History = () => {
 
   if (loading && !refreshing) {
     return (
-      <SafeAreaView style={styles.loadingContainer} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.loadingContainer} edges={['bottom']}>
         <ActivityIndicator size="large" color={colors.primary.main} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
