@@ -425,7 +425,7 @@ const MyJobs = () => {
             <Text style={styles.modalSubtitle}>
               Job completed and removed from active list.
             </Text>
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                 onPress={handleCompleteJobSuccessClose}
@@ -675,6 +675,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: spacing.sm,
     marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
   },
   modalButton: {
     paddingHorizontal: spacing.lg,
