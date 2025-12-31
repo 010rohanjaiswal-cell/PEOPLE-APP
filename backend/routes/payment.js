@@ -595,4 +595,285 @@ router.post('/process-dues/:merchantOrderId', authenticate, async (req, res) => 
   }
 });
 
+/**
+ * Diagnostic endpoint to investigate payment issues
+ * GET /api/payment/diagnose/:merchantOrderId
+ * Requires authentication as freelancer
+ * 
+ * Checks payment status and provides diagnostic information
+ */
+router.get('/diagnose/:merchantOrderId', authenticate, async (req, res) => {
+  try {
+    const { merchantOrderId } = req.params;
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can access this endpoint',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    console.log('🔍 Diagnosing payment:', {
+      merchantOrderId,
+      freelancerId,
+    });
+
+    // Extract freelancer ID from merchantOrderId to verify it belongs to this user
+    const match = merchantOrderId.match(/^DUES_([^_]+)_/);
+    if (!match) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid merchantOrderId format',
+      });
+    }
+
+    const orderFreelancerId = match[1];
+    if (orderFreelancerId !== freelancerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'This order does not belong to you',
+      });
+    }
+
+    // Check PhonePe order status
+    let phonePeStatus = null;
+    try {
+      const client = getPhonePeClient();
+      const statusResponse = await client.getOrderStatus(merchantOrderId);
+      phonePeStatus = {
+        orderId: statusResponse.order_id,
+        state: statusResponse.state,
+        amount: statusResponse.amount,
+        errorCode: statusResponse.error_code || statusResponse.errorCode || null,
+        detailedErrorCode: statusResponse.detailed_error_code || statusResponse.detailedErrorCode || null,
+        isSuccess: statusResponse.state === 'COMPLETED',
+        isFailed: statusResponse.state === 'FAILED',
+        isPending: statusResponse.state === 'PENDING',
+      };
+    } catch (statusError) {
+      console.error('Error checking PhonePe status:', statusError);
+      phonePeStatus = {
+        error: statusError.message || 'Failed to check PhonePe status',
+      };
+    }
+
+    // Check database state
+    const unpaidTransactions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaid: false,
+    }).lean();
+
+    const transactionsWithOrderId = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaymentOrderId: merchantOrderId,
+    }).lean();
+
+    const totalUnpaidDues = unpaidTransactions.reduce(
+      (sum, t) => sum + (t.platformCommission || 0),
+      0
+    );
+
+    const diagnosticInfo = {
+      merchantOrderId,
+      freelancerId,
+      phonePeStatus,
+      databaseState: {
+        unpaidTransactionsCount: unpaidTransactions.length,
+        totalUnpaidDues,
+        transactionsWithThisOrderId: transactionsWithOrderId.length,
+        transactionsWithOrderId: transactionsWithOrderId.map(t => ({
+          id: t._id.toString(),
+          duesPaid: t.duesPaid,
+          duesPaidAt: t.duesPaidAt,
+          platformCommission: t.platformCommission,
+        })),
+      },
+      recommendation: null,
+    };
+
+    // Provide recommendations
+    if (phonePeStatus && phonePeStatus.isSuccess) {
+      if (unpaidTransactions.length > 0) {
+        diagnosticInfo.recommendation = 
+          'Payment was successful in PhonePe but dues were not marked as paid. ' +
+          'You can manually process this payment by calling POST /api/payment/process-dues/' + merchantOrderId;
+      } else {
+        diagnosticInfo.recommendation = 'Payment was successful and dues are already marked as paid.';
+      }
+    } else if (phonePeStatus && phonePeStatus.isFailed) {
+      diagnosticInfo.recommendation = 
+        'Payment failed in PhonePe. Dues should remain unpaid. ' +
+        'You can retry the payment.';
+    } else if (phonePeStatus && phonePeStatus.isPending) {
+      diagnosticInfo.recommendation = 
+        'Payment is still pending in PhonePe. Please wait for it to complete.';
+    } else if (phonePeStatus && phonePeStatus.error) {
+      diagnosticInfo.recommendation = 
+        'Could not check PhonePe status. The order may not exist or there was an API error.';
+    }
+
+    res.json({
+      success: true,
+      diagnostic: diagnosticInfo,
+    });
+  } catch (error) {
+    console.error('Error diagnosing payment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to diagnose payment',
+    });
+  }
+});
+
+/**
+ * Manual process dues endpoint (for fixing missed payments)
+ * POST /api/payment/manual-process-dues/:merchantOrderId
+ * Requires authentication as freelancer
+ * 
+ * Manually processes dues if PhonePe payment was successful but dues weren't marked as paid
+ */
+router.post('/manual-process-dues/:merchantOrderId', authenticate, async (req, res) => {
+  try {
+    const { merchantOrderId } = req.params;
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can process dues payments',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    // Verify order belongs to this user
+    const match = merchantOrderId.match(/^DUES_([^_]+)_/);
+    if (!match) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid merchantOrderId format',
+      });
+    }
+
+    const orderFreelancerId = match[1];
+    if (orderFreelancerId !== freelancerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'This order does not belong to you',
+      });
+    }
+
+    // Check PhonePe status first
+    let phonePeStatus = null;
+    try {
+      const client = getPhonePeClient();
+      const statusResponse = await client.getOrderStatus(merchantOrderId);
+      phonePeStatus = {
+        state: statusResponse.state,
+        isSuccess: statusResponse.state === 'COMPLETED',
+      };
+    } catch (statusError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Could not verify payment status with PhonePe: ' + (statusError.message || 'Unknown error'),
+      });
+    }
+
+    if (!phonePeStatus.isSuccess) {
+      return res.status(400).json({
+        success: false,
+        error: `Payment status is ${phonePeStatus.state}, not COMPLETED. Cannot process dues.`,
+      });
+    }
+
+    // Check if dues are already paid
+    const unpaidTransactions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaid: false,
+    }).lean();
+
+    if (unpaidTransactions.length === 0) {
+      return res.json({
+        success: true,
+        message: 'All dues are already marked as paid',
+        wallet: await getWalletData(freelancerId),
+      });
+    }
+
+    // Process dues (same logic as process-dues endpoint)
+    await CommissionTransaction.updateMany(
+      {
+        freelancer: freelancerId,
+        duesPaid: false,
+      },
+      {
+        $set: {
+          duesPaid: true,
+          duesPaidAt: new Date(),
+          duesPaymentOrderId: merchantOrderId,
+        },
+      }
+    );
+
+    console.log(`✅ Manually processed dues payment:`, {
+      merchantOrderId,
+      freelancerId,
+      transactionsUpdated: unpaidTransactions.length,
+    });
+
+    res.json({
+      success: true,
+      message: 'Dues payment processed successfully',
+      wallet: await getWalletData(freelancerId),
+    });
+  } catch (error) {
+    console.error('Error manually processing dues payment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to process dues payment',
+    });
+  }
+});
+
+// Helper function to get wallet data
+async function getWalletData(freelancerId) {
+  const transactions = await CommissionTransaction.find({
+    freelancer: freelancerId,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const totalDues = transactions
+    .filter((t) => !t.duesPaid)
+    .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
+
+  const DUES_THRESHOLD = 450;
+  const canWork = totalDues < DUES_THRESHOLD;
+
+  const mappedTransactions = transactions.map((t) => ({
+    id: t._id.toString(),
+    jobId: t.job,
+    jobTitle: t.jobTitle,
+    clientName: t.clientName || null,
+    jobAmount: t.jobAmount,
+    platformCommission: t.platformCommission,
+    amountReceived: t.amountReceived,
+    duesPaid: t.duesPaid,
+    duesPaidAt: t.duesPaidAt,
+    duesPaymentOrderId: t.duesPaymentOrderId,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    status: t.duesPaid ? 'paid' : 'pending',
+  }));
+
+  return {
+    totalDues,
+    canWork,
+    transactions: mappedTransactions,
+  };
+}
+
 module.exports = router;
