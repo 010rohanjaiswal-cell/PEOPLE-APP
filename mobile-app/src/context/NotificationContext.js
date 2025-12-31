@@ -147,14 +147,14 @@ export const NotificationProvider = ({ children }) => {
     }
     
     if (!isConnected) {
-      console.log('⚠️ Socket not connected for notifications');
+      console.log('⚠️ Socket not connected for notifications. Socket connected:', socket.connected);
       return;
     }
 
-    console.log('✅ Setting up notification listener on socket');
+    console.log('✅ Setting up notification listener on socket. Socket ID:', socket.id);
     
     const handleNewNotification = (data) => {
-      console.log('🔔 New notification received via Socket.io:', data);
+      console.log('🔔 New notification received via Socket.io:', JSON.stringify(data, null, 2));
       const newNotification = data.notification;
       
       if (!newNotification) {
@@ -162,24 +162,45 @@ export const NotificationProvider = ({ children }) => {
         return;
       }
       
+      console.log('📬 Adding notification to list:', newNotification.title);
+      
       // Add notification to the beginning of the list
-      setNotifications(prev => [newNotification, ...prev]);
+      setNotifications(prev => {
+        // Check if notification already exists (avoid duplicates)
+        const exists = prev.some(n => n._id === newNotification._id);
+        if (exists) {
+          console.log('⚠️ Notification already exists, skipping duplicate');
+          return prev;
+        }
+        return [newNotification, ...prev];
+      });
       
       // Increment unread count if notification is unread
       if (!newNotification.read) {
-        setUnreadCount(prev => prev + 1);
-        console.log('📬 Unread count incremented');
+        setUnreadCount(prev => {
+          const newCount = prev + 1;
+          console.log('📬 Unread count incremented from', prev, 'to', newCount);
+          return newCount;
+        });
       }
+      
+      // Also refresh the full notification list to ensure consistency
+      setTimeout(() => {
+        console.log('🔄 Refreshing notification list after receiving new notification');
+        loadNotifications(false);
+      }, 500);
     };
 
     socket.on('new_notification', handleNewNotification);
-    console.log('✅ Notification listener registered');
+    console.log('✅ Notification listener registered on socket');
 
     return () => {
       console.log('🧹 Cleaning up notification listener');
-      socket.off('new_notification', handleNewNotification);
+      if (socket) {
+        socket.off('new_notification', handleNewNotification);
+      }
     };
-  }, [socket, isConnected]);
+  }, [socket, isConnected, loadNotifications]);
 
   // Periodically refresh unread count (every 30 seconds)
   useEffect(() => {

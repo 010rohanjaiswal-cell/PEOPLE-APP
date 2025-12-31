@@ -19,13 +19,15 @@ export const useSocket = () => {
   useEffect(() => {
     const initializeSocket = async () => {
       try {
-        // Get JWT token from storage
-        const token = await AsyncStorage.getItem('token');
+        // Get JWT token from storage (using authToken key)
+        const token = await AsyncStorage.getItem('authToken');
         
         if (!token) {
-          console.log('No token found, skipping socket connection');
+          console.log('⚠️ No authToken found, skipping socket connection');
           return;
         }
+        
+        console.log('🔑 Token found, initializing socket connection');
 
         // Reuse existing socket if available
         if (socketInstance && socketInstance.connected) {
@@ -46,25 +48,12 @@ export const useSocket = () => {
         });
 
         socket.on('connect', () => {
-          console.log('✅ Socket.io connected');
+          console.log('✅ Socket.io connected, socket ID:', socket.id);
           setIsConnected(true);
           
-          // Join notification room if user is authenticated
-          const joinNotificationRoom = async () => {
-            try {
-              const userData = await AsyncStorage.getItem('userData');
-              if (userData) {
-                const user = JSON.parse(userData);
-                const userId = user._id || user.id;
-                if (userId) {
-                  socket.emit('join_notification_room', { userId: userId.toString() });
-                }
-              }
-            } catch (error) {
-              console.error('Error joining notification room:', error);
-            }
-          };
-          joinNotificationRoom();
+          // Rooms are automatically joined on connection via backend authentication
+          // The backend joins user to `user_${userId}` and `notifications_${userId}` rooms
+          console.log('✅ Socket connected and rooms should be joined automatically');
         });
 
         socket.on('disconnect', () => {
