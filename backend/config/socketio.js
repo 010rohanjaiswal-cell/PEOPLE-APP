@@ -31,9 +31,19 @@ const setupSocketIO = (server) => {
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id || decoded._id);
+      
+      // JWT token contains userId field (not id or _id)
+      const userId = decoded.userId || decoded.id || decoded._id;
+      
+      if (!userId) {
+        return next(new Error('Authentication error: Invalid token format'));
+      }
+      
+      const user = await User.findById(userId);
       
       if (!user) {
+        console.error('Socket.io auth: User not found for userId:', userId);
+        console.error('Decoded token:', { userId: decoded.userId, id: decoded.id, _id: decoded._id });
         return next(new Error('Authentication error: User not found'));
       }
 
