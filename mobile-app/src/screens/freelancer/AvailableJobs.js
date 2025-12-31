@@ -27,7 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const AvailableJobs = () => {
+const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
@@ -628,7 +628,13 @@ const AvailableJobs = () => {
         visible={pickupSuccessModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPickupSuccessModalVisible(false)}
+        onRequestClose={() => {
+          setPickupSuccessModalVisible(false);
+          // Navigate to My Jobs tab after closing success modal
+          if (onJobPickedUp) {
+            onJobPickedUp();
+          }
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -642,7 +648,13 @@ const AvailableJobs = () => {
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
-                onPress={() => setPickupSuccessModalVisible(false)}
+                onPress={() => {
+                  setPickupSuccessModalVisible(false);
+                  // Navigate to My Jobs tab after closing success modal
+                  if (onJobPickedUp) {
+                    onJobPickedUp();
+                  }
+                }}
               >
                 <Text style={styles.modalSubmitText}>OK</Text>
               </TouchableOpacity>

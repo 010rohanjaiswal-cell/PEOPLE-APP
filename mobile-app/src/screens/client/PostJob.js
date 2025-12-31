@@ -287,8 +287,8 @@ const PostJob = ({ onJobPosted }) => {
             gender: '',
             description: '',
           });
-          // Notify parent (ClientDashboard) to switch to My Jobs tab
-          if (typeof onJobPosted === 'function') {
+          // Navigate to My Jobs tab after closing success modal
+          if (onJobPosted) {
             onJobPosted();
           }
         }}

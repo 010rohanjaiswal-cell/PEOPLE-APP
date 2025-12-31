@@ -224,7 +224,11 @@ const FreelancerDashboard = () => {
 
       {/* Tab Content */}
       <View style={styles.tabContent}>
-        <ActiveScreen />
+        {activeTab === 'AvailableJobs' ? (
+          <AvailableJobsScreen onJobPickedUp={() => setActiveTab('MyJobs')} />
+        ) : (
+          <ActiveScreen />
+        )}
       </View>
 
       {/* Drawer Menu */}
