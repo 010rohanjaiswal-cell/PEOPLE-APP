@@ -65,6 +65,15 @@ const Wallet = () => {
     loadWallet();
   }, []);
 
+  // Reset pagination to page 1 when payment transactions change
+  useEffect(() => {
+    const paymentTransactions = wallet?.paymentTransactions || [];
+    const totalPages = Math.ceil(paymentTransactions.length / itemsPerPage);
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [wallet?.paymentTransactions?.length, currentPage, itemsPerPage]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadWallet();
@@ -494,13 +503,6 @@ const Wallet = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedPayments = paymentTransactions.slice(startIndex, endIndex);
-
-    // Reset to page 1 if current page is out of bounds
-    React.useEffect(() => {
-      if (currentPage > totalPages && totalPages > 0) {
-        setCurrentPage(1);
-      }
-    }, [paymentTransactions.length, currentPage, totalPages]);
 
     const formatDate = (date) => {
       if (!date) return 'N/A';
