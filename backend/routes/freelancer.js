@@ -14,6 +14,11 @@ const CommissionTransaction = require('../models/CommissionTransaction');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
+const {
+  notifyOfferReceived,
+  notifyJobAssigned,
+  notifyWorkDone,
+} = require('../services/notificationService');
 
 // Use memory storage; we'll stream buffers to Cloudinary
 const upload = multer({ storage: multer.memoryStorage() });
@@ -561,12 +566,12 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
     job.status = 'assigned';
     await job.save();
 
-    // Notify client about job pickup
+    // Notify freelancer about job assignment
     try {
-      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      const client = await User.findById(job.client).select('fullName').lean();
       await notifyJobAssigned(
         freelancerId,
-        freelancer?.fullName || 'A freelancer',
+        client?.fullName || 'The client',
         job.title
       );
     } catch (notifError) {
