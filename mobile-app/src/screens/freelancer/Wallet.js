@@ -39,6 +39,8 @@ const Wallet = () => {
   const [paying, setPaying] = useState(false);
   const [confirmPayModalVisible, setConfirmPayModalVisible] = useState(false);
   const [paymentSuccessModalVisible, setPaymentSuccessModalVisible] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const loadWallet = async () => {
     try {
@@ -487,73 +489,111 @@ const Wallet = () => {
 
 
   const renderCommissionLedger = () => {
-    const transactions = wallet?.transactions || [];
+    const paymentTransactions = wallet?.paymentTransactions || [];
+    const totalPages = Math.ceil(paymentTransactions.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedPayments = paymentTransactions.slice(startIndex, endIndex);
+
+    // Reset to page 1 if current page is out of bounds
+    React.useEffect(() => {
+      if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(1);
+      }
+    }, [paymentTransactions.length, currentPage, totalPages]);
+
+    const formatDate = (date) => {
+      if (!date) return 'N/A';
+      const d = new Date(date);
+      return d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    };
 
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="request-quote" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>Commission Ledger</Text>
+            <MaterialIcons name="payment" size={22} color={colors.text.primary} />
+            <Text style={styles.cardTitle}>Payment History</Text>
           </View>
         </View>
 
-        {transactions.length === 0 ? (
+        {paymentTransactions.length === 0 ? (
           <View style={styles.emptyInner}>
-            <MaterialIcons name="receipt" size={40} color={colors.text.muted} />
-            <Text style={styles.emptyInnerText}>No commission records yet</Text>
+            <MaterialIcons name="account-balance-wallet" size={40} color={colors.text.muted} />
+            <Text style={styles.emptyInnerText}>No payment records yet</Text>
             <Text style={styles.emptyInnerSubText}>
-              Commission will appear here after jobs are completed
+              Your dues payment history will appear here
             </Text>
           </View>
         ) : (
-          transactions.map((tx) => {
-            const isPaid = tx.duesPaid;
-            const duesAmount = tx.platformCommission || 0;
-            return (
+          <>
+            {paginatedPayments.map((payment) => (
               <View
-                key={tx.id}
-                style={[
-                  styles.ledgerItem,
-                  isPaid ? styles.ledgerItemPaid : styles.ledgerItemUnpaid,
-                ]}
+                key={payment.id}
+                style={styles.ledgerItem}
               >
                 <View style={styles.ledgerTopRow}>
                   <View style={styles.ledgerTitleContainer}>
                     <Text style={styles.ledgerJobTitle} numberOfLines={1}>
-                      {tx.jobTitle}
+                      Dues Payment
                     </Text>
                     <Text style={styles.ledgerDate}>
-                      {new Date(tx.createdAt).toLocaleString()}
+                      {formatDate(payment.paymentDate)}
                     </Text>
+                    {payment.transactionCount > 1 && (
+                      <Text style={styles.ledgerSubText}>
+                        {payment.transactionCount} transactions cleared
+                      </Text>
+                    )}
                   </View>
                   <View style={styles.ledgerRightTop}>
-                    <Text style={styles.ledgerDuesLabel}>Dues</Text>
-                    <Text style={styles.ledgerDuesAmount}>
-                      {isPaid ? 'Paid' : `₹${duesAmount}`}
+                    <Text style={styles.ledgerDuesLabel}>Amount Paid</Text>
+                    <Text style={[styles.ledgerDuesAmount, styles.paymentAmount]}>
+                      ₹{payment.amount}
                     </Text>
-                    {isPaid && (
-                      <View
-                        style={[
-                          styles.ledgerStatusBadge,
-                          styles.statusPaidBadge,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.ledgerStatusText,
-                            styles.statusPaidText,
-                          ]}
-                        >
-                          ✓ Paid
-                        </Text>
-                      </View>
-                    )}
+                    <View style={[styles.ledgerStatusBadge, styles.statusPaidBadge]}>
+                      <Text style={[styles.ledgerStatusText, styles.statusPaidText]}>
+                        ✓ Paid
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
-            );
-          })
+            ))}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <View style={styles.paginationContainer}>
+                <View style={styles.paginationButtons}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                    <TouchableOpacity
+                      key={pageNum}
+                      style={[
+                        styles.paginationButton,
+                        currentPage === pageNum && styles.paginationButtonActive,
+                      ]}
+                      onPress={() => setCurrentPage(pageNum)}
+                    >
+                      <Text
+                        style={[
+                          styles.paginationButtonText,
+                          currentPage === pageNum && styles.paginationButtonTextActive,
+                        ]}
+                      >
+                        {pageNum}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
         )}
       </View>
     );
@@ -835,6 +875,54 @@ const styles = StyleSheet.create({
   },
   ledgerStatusText: {
     ...typography.small,
+    fontWeight: '600',
+  },
+  ledgerSubText: {
+    ...typography.small,
+    color: colors.text.muted,
+    marginTop: spacing.xs / 2,
+    fontSize: 11,
+  },
+  paymentAmount: {
+    color: colors.success.main,
+    fontSize: 16,
+  },
+  paginationContainer: {
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  paginationButton: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  paginationButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  paginationButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  paginationButtonTextActive: {
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   modalOverlay: {

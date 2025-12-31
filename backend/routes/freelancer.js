@@ -909,12 +909,42 @@ router.get('/wallet', authenticate, async (req, res) => {
       status: t.duesPaid ? 'paid' : 'pending',
     }));
 
+    // Get payment transactions (grouped by duesPaymentOrderId)
+    // Each payment transaction represents one dues payment made by the user
+    const paymentTransactionsMap = new Map();
+    
+    transactions
+      .filter((t) => t.duesPaid && t.duesPaymentOrderId)
+      .forEach((t) => {
+        const orderId = t.duesPaymentOrderId;
+        if (!paymentTransactionsMap.has(orderId)) {
+          // First transaction with this order ID - create payment transaction
+          paymentTransactionsMap.set(orderId, {
+            id: orderId,
+            orderId: orderId,
+            paymentDate: t.duesPaidAt || t.updatedAt,
+            amount: 0, // Will sum up all commissions paid in this payment
+            transactionCount: 0,
+            createdAt: t.duesPaidAt || t.updatedAt,
+          });
+        }
+        // Add to the payment amount
+        const paymentTx = paymentTransactionsMap.get(orderId);
+        paymentTx.amount += t.platformCommission || 0;
+        paymentTx.transactionCount += 1;
+      });
+
+    // Convert map to array and sort by payment date (newest first)
+    const paymentTransactions = Array.from(paymentTransactionsMap.values())
+      .sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate));
+
     res.json({
       success: true,
       wallet: {
         totalDues,
         canWork,
         transactions: mappedTransactions,
+        paymentTransactions, // New: List of dues payments made
       },
     });
   } catch (error) {
