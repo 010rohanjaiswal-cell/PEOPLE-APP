@@ -148,10 +148,14 @@ const Wallet = () => {
                 
                 // Check response status
                 if (sdkResponse && sdkResponse.status === 'SUCCESS') {
-                  // Payment successful - deep link will be called
-                  // The deep link listener above will handle the callback
-                  console.log('✅ Payment successful - waiting for deep link callback');
-                  // Don't set paying to false yet - wait for deep link
+                  // Payment successful - check status immediately (deep link may not always fire)
+                  console.log('✅ Payment successful - checking status immediately...');
+                  subscription.remove();
+                  // Check payment status immediately and also set up a fallback timer
+                  setTimeout(async () => {
+                    await checkPaymentStatus(merchantOrderId);
+                  }, 2000); // Wait 2 seconds for PhonePe to update status
+                  // Also keep deep link listener as backup
                 } else if (sdkResponse && sdkResponse.status === 'FAILURE') {
                   // Payment failed or cancelled
                   console.error('❌ Payment failed:', sdkResponse.error);
@@ -299,16 +303,23 @@ const Wallet = () => {
         if (statusResponse.success) {
           if (statusResponse.isSuccess) {
             // Payment successful, process dues
+            console.log('✅ Payment status confirmed as successful, processing dues...');
             const processResponse = await paymentAPI.processDuesPayment(merchantOrderId);
             
             if (processResponse.success && processResponse.wallet) {
+              console.log('✅ Dues processed successfully, wallet updated');
               setWallet(processResponse.wallet);
-              Alert.alert('Success', 'Dues payment completed successfully!');
               setPaying(false);
+              // Refresh wallet to ensure latest data
+              loadWallet();
+              Alert.alert('Success', 'Dues payment completed successfully!');
               return true; // Stop polling
             } else {
+              console.error('❌ Failed to process dues:', processResponse.error);
               Alert.alert('Error', processResponse.error || 'Failed to process payment');
               setPaying(false);
+              // Still refresh wallet in case webhook processed it
+              loadWallet();
               return true; // Stop polling
             }
           } else if (statusResponse.isFailed) {
