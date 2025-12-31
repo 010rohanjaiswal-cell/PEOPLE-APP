@@ -3,7 +3,7 @@
  * Shows completed orders (history) for freelancer
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -22,6 +24,9 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const loadOrders = async () => {
     try {
@@ -53,6 +58,75 @@ const Orders = () => {
   useEffect(() => {
     loadOrders();
   }, []);
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedFilter]);
+
+  // Filter orders by date
+  const filteredOrders = useMemo(() => {
+    if (selectedFilter === 'all') {
+      return orders;
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthAgo = new Date(today);
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    const sixMonthsAgo = new Date(today);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    return orders.filter((order) => {
+      const orderDate = new Date(order.updatedAt || order.createdAt);
+      const orderDateOnly = new Date(
+        orderDate.getFullYear(),
+        orderDate.getMonth(),
+        orderDate.getDate()
+      );
+
+      switch (selectedFilter) {
+        case 'today':
+          return orderDateOnly.getTime() === today.getTime();
+        case 'yesterday':
+          return orderDateOnly.getTime() === yesterday.getTime();
+        case 'week':
+          return orderDate >= weekAgo;
+        case 'month':
+          return orderDate >= monthAgo;
+        case '6months':
+          return orderDate >= sixMonthsAgo;
+        default:
+          return true;
+      }
+    });
+  }, [orders, selectedFilter]);
+
+  // Paginate filtered orders
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+
+  // Reset to page 1 if current page is out of bounds
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredOrders.length, currentPage, totalPages]);
+
+  const filterOptions = [
+    { key: 'all', label: 'All' },
+    { key: 'today', label: 'Today' },
+    { key: 'yesterday', label: 'Yesterday' },
+    { key: 'week', label: 'Week' },
+    { key: 'month', label: 'Month' },
+    { key: '6months', label: '6 Months' },
+  ];
 
   const renderOrderItem = ({ item }) => {
     const client = item.client || {};
@@ -106,14 +180,10 @@ const Orders = () => {
     );
   }
 
-  if (orders.length === 0) {
+  if (loading && !refreshing) {
     return (
-      <View style={styles.container}>
-        <EmptyState
-          icon={<MaterialIcons name="receipt" size={64} color={colors.text.muted} />}
-          title="No orders yet"
-          description="Completed jobs will appear here as orders."
-        />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary.main} />
       </View>
     );
   }
@@ -125,20 +195,99 @@ const Orders = () => {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      <FlatList
-        data={orders}
-        keyExtractor={(item) => item._id || item.id}
-        renderItem={renderOrderItem}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary.main]}
-            tintColor={colors.primary.main}
+
+      {/* Filter Bar */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterBar}
+        contentContainerStyle={styles.filterBarContent}
+      >
+        {filterOptions.map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[
+              styles.filterButton,
+              selectedFilter === option.key && styles.filterButtonActive,
+            ]}
+            onPress={() => setSelectedFilter(option.key)}
+          >
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedFilter === option.key && styles.filterButtonTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {filteredOrders.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <EmptyState
+            icon={<MaterialIcons name="receipt" size={64} color={colors.text.muted} />}
+            title="No orders found"
+            description={
+              selectedFilter === 'all'
+                ? 'Completed jobs will appear here as orders.'
+                : `No orders found for ${filterOptions.find((f) => f.key === selectedFilter)?.label.toLowerCase() || 'selected period'}.`
+            }
           />
-        }
-      />
+        </View>
+      ) : (
+        <>
+          <FlatList
+            data={paginatedOrders}
+            keyExtractor={(item) => item._id || item.id}
+            renderItem={renderOrderItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[colors.primary.main]}
+                tintColor={colors.primary.main}
+              />
+            }
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary.main} />
+                </View>
+              ) : null
+            }
+          />
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <View style={styles.paginationContainer}>
+              <View style={styles.paginationButtons}>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <TouchableOpacity
+                    key={pageNum}
+                    style={[
+                      styles.paginationButton,
+                      currentPage === pageNum && styles.paginationButtonActive,
+                    ]}
+                    onPress={() => setCurrentPage(pageNum)}
+                  >
+                    <Text
+                      style={[
+                        styles.paginationButtonText,
+                        currentPage === pageNum && styles.paginationButtonTextActive,
+                      ]}
+                    >
+                      {pageNum}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 };
@@ -240,6 +389,79 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: spacing.xs,
+  },
+  filterBar: {
+    marginBottom: spacing.md,
+  },
+  filterBarContent: {
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+  },
+  filterButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    marginRight: spacing.xs,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  filterButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paginationContainer: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  paginationButton: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  paginationButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  paginationButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  paginationButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
 
