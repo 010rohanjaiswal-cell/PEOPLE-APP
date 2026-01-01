@@ -531,6 +531,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginBottom: spacing.md,
     paddingHorizontal: spacing.sm,
+    paddingTop: spacing.lg, // Add padding from top to avoid phone navigation bar
   },
   backButton: {
     paddingHorizontal: spacing.sm,
@@ -612,7 +613,10 @@ const styles = StyleSheet.create({
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center', // Center align content including arrow
     gap: spacing.sm,
+    minHeight: 50, // Increase height to prevent text from being covered
+    paddingVertical: spacing.md, // Add vertical padding
   },
   submitButtonText: {
     ...typography.button,
