@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   Image,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -377,15 +378,21 @@ const Verification = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <Button
+      <TouchableOpacity
         onPress={handleSubmitVerification}
-        loading={submitting}
         disabled={submitting}
-        style={styles.submitButton}
+        style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+        activeOpacity={0.7}
       >
-        <Text style={styles.submitButtonText}>Submit Verification</Text>
-        <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-      </Button>
+        {submitting ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <>
+            <Text style={styles.submitButtonText}>Submit Verification</Text>
+            <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+          </>
+        )}
+      </TouchableOpacity>
     </View>
   );
 
@@ -617,6 +624,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: 50, // Increase height to prevent text from being covered
     paddingVertical: spacing.md, // Add vertical padding
+    backgroundColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    paddingHorizontal: spacing.buttonPadding?.horizontal || spacing.lg,
+  },
+  submitButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
   },
   submitButtonText: {
     ...typography.button,
