@@ -67,7 +67,7 @@ const Verification = ({ navigation }) => {
     }
   }, [status, loading]);
 
-  const pickImage = async (setterUri, label) => {
+  const pickImage = async (setterUri, label, aspectRatio = [4, 3]) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -77,7 +77,7 @@ const Verification = ({ navigation }) => {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: aspectRatio,
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]?.uri) {
@@ -325,7 +325,7 @@ const Verification = ({ navigation }) => {
         <Text style={styles.uploadLabel}>Profile Photo (Required)</Text>
         <TouchableOpacity
           style={styles.uploadBox}
-          onPress={() => pickImage(setProfilePhotoUri, 'Profile Photo')}
+          onPress={() => pickImage(setProfilePhotoUri, 'Profile Photo', [9, 16])}
         >
           {profilePhotoUri ? (
             <Image source={{ uri: profilePhotoUri }} style={styles.uploadPreview} />
