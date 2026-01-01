@@ -9,7 +9,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   TouchableOpacity,
   Image,
   Modal,
@@ -33,6 +32,9 @@ const Verification = ({ navigation }) => {
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showResubmitForm, setShowResubmitForm] = useState(false); // Control form visibility for rejected status
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalTitle, setErrorModalTitle] = useState('');
+  const [errorModalMessage, setErrorModalMessage] = useState('');
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -67,11 +69,17 @@ const Verification = ({ navigation }) => {
     }
   }, [status, loading]);
 
+  const showErrorModal = (title, message) => {
+    setErrorModalTitle(title);
+    setErrorModalMessage(message);
+    setErrorModalVisible(true);
+  };
+
   const pickImage = async (setterUri, label, aspectRatio = [4, 3]) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Allow camera access to take a photo.');
+        showErrorModal('Permission denied', 'Allow camera access to take a photo.');
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -85,7 +93,7 @@ const Verification = ({ navigation }) => {
       }
     } catch (err) {
       console.error(`Error picking ${label}:`, err);
-      Alert.alert('Upload failed', `Could not select ${label}. Please try again.`);
+      showErrorModal('Upload failed', `Could not select ${label}. Please try again.`);
     }
   };
 
@@ -200,7 +208,7 @@ const Verification = ({ navigation }) => {
   const handleSubmitVerification = async () => {
     // Basic validation
     if (!fullName || !dob || !gender || !address || !profilePhotoUri || !docFrontUri || !docBackUri || !panCardUri) {
-      Alert.alert('Missing info', 'Please fill all required fields and upload all documents (including profile photo).');
+      showErrorModal('Missing info', 'Please fill all required fields and upload all documents (including profile photo).');
       return;
     }
     setSubmitting(true);
@@ -458,7 +466,7 @@ const Verification = ({ navigation }) => {
       <Modal visible={datePickerVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select Date of Birth</Text>
+            <Text style={styles.datePickerModalTitle}>Select Date of Birth</Text>
             <View style={styles.datePickers}>
               <ScrollView style={styles.pickerColumn}>
                 {years.map((y) => (
@@ -504,13 +512,41 @@ const Verification = ({ navigation }) => {
                     setDob(`${selectedYear}-${selectedMonth}-${selectedDay}`);
                     setDatePickerVisible(false);
                   } else {
-                    Alert.alert('Select date', 'Please select year, month, and day.');
+                    showErrorModal('Select date', 'Please select year, month, and day.');
                   }
                 }}
                 style={styles.modalButton}
               >
                 Confirm
               </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        visible={errorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.errorIconContainer}>
+              <MaterialIcons name="error-outline" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>{errorModalTitle}</Text>
+            <Text style={styles.modalSubtitle}>
+              {errorModalMessage}
+            </Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
+                onPress={() => setErrorModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>OK</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -720,7 +756,7 @@ const styles = StyleSheet.create({
     borderRadius: spacing.md,
     padding: spacing.lg,
   },
-  modalTitle: {
+  datePickerModalTitle: {
     ...typography.h3,
     color: colors.text.primary,
     marginBottom: spacing.md,
@@ -789,6 +825,65 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.success.dark,
     flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  errorIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  errorModalButton: {
+    alignSelf: 'center',
+    minWidth: 120,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
 
