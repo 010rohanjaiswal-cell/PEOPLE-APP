@@ -9,8 +9,18 @@ export const freelancerJobsAPI = {
    * Get available jobs for freelancer
    * @returns {Promise} List of available jobs
    */
-  getAvailableJobs: async () => {
-    const response = await apiClient.get('/api/freelancer/jobs/available');
+  getAvailableJobs: async (lat, lng) => {
+    const hasCoords =
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      !Number.isNaN(lat) &&
+      !Number.isNaN(lng);
+
+    const config = hasCoords
+      ? { params: { lat, lng } }
+      : undefined;
+
+    const response = await apiClient.get('/api/freelancer/jobs/available', config);
     return response.data;
   },
 

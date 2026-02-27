@@ -42,6 +42,19 @@ const jobSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    // GeoJSON location of the job (client's location)
+    // coordinates: [longitude, latitude]
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0],
+      },
+    },
     budget: {
       type: Number,
       required: true,
@@ -109,6 +122,7 @@ const jobSchema = new mongoose.Schema(
 );
 
 jobSchema.index({ client: 1, status: 1, createdAt: -1 });
+jobSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('Job', jobSchema);
 

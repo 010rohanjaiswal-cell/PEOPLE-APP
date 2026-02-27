@@ -19,6 +19,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
@@ -49,12 +50,41 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [hasActiveJob, setHasActiveJob] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
 
-  const loadJobs = async () => {
+  const requestLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied for AvailableJobs screen');
+        return null;
+      }
+
+      const position = await Location.getCurrentPositionAsync({});
+      const loc = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+      setCurrentLocation(loc);
+      return loc;
+    } catch (err) {
+      console.error('Error requesting location for AvailableJobs:', err);
+      return null;
+    }
+  };
+
+  const loadJobs = async (locationOverride) => {
     try {
       if (!refreshing) setLoading(true);
       setError('');
-      const response = await freelancerJobsAPI.getAvailableJobs();
+      const activeLocation = locationOverride || currentLocation;
+      const lat = activeLocation?.latitude;
+      const lng = activeLocation?.longitude;
+
+      const response = await freelancerJobsAPI.getAvailableJobs(
+        typeof lat === 'number' ? lat : undefined,
+        typeof lng === 'number' ? lng : undefined
+      );
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
       } else if (Array.isArray(response)) {
@@ -139,14 +169,30 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   };
 
   useEffect(() => {
-    // Run all API calls in parallel for faster loading
-    Promise.all([
-      loadJobs(),
-      loadWalletStatus(),
-      checkActiveJob(),
-    ]).catch(err => {
-      console.error('Error loading initial data:', err);
-    });
+    const init = async () => {
+      try {
+        const loc = await requestLocation();
+        await Promise.all([
+          loadJobs(loc),
+          loadWalletStatus(),
+          checkActiveJob(),
+        ]);
+      } catch (err) {
+        console.error('Error loading initial data:', err);
+        // Fallback: try without location if something goes wrong
+        try {
+          await Promise.all([
+            loadJobs(),
+            loadWalletStatus(),
+            checkActiveJob(),
+          ]);
+        } catch (fallbackErr) {
+          console.error('Fallback error loading initial data:', fallbackErr);
+        }
+      }
+    };
+
+    init();
   }, []);
 
   const handlePickupJob = async (job) => {

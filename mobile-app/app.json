@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "com.company.people",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

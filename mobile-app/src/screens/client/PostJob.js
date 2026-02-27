@@ -6,6 +6,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
@@ -80,6 +81,22 @@ const PostJob = ({ onJobPosted }) => {
     setError('');
 
     try {
+      // Try to capture client's current location for geo-based matching
+      let lat = null;
+      let lng = null;
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const position = await Location.getCurrentPositionAsync({});
+          lat = position.coords.latitude;
+          lng = position.coords.longitude;
+        } else {
+          console.log('Location permission denied on PostJob screen');
+        }
+      } catch (locError) {
+        console.error('Error getting location on PostJob screen:', locError);
+      }
+
       const jobData = {
         title: formData.title,
         category: formData.category,
@@ -89,6 +106,16 @@ const PostJob = ({ onJobPosted }) => {
         gender: formData.gender.toLowerCase(),
         description: formData.description || null,
       };
+
+      if (
+        typeof lat === 'number' &&
+        typeof lng === 'number' &&
+        !Number.isNaN(lat) &&
+        !Number.isNaN(lng)
+      ) {
+        jobData.lat = lat;
+        jobData.lng = lng;
+      }
 
       const result = await clientJobsAPI.postJob(jobData);
 
