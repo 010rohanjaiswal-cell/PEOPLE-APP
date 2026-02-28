@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UserProvider } from './src/context/UserContext';
 import { NotificationProvider } from './src/context/NotificationContext';
+import { LocationProvider } from './src/context/LocationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
 
@@ -42,8 +43,10 @@ export default function App() {
       <AuthProvider>
         <UserProvider>
           <NotificationProvider>
-            <StatusBar style="dark" translucent={false} />
-            <AppContent />
+            <LocationProvider>
+              <StatusBar style="dark" translucent={false} />
+              <AppContent />
+            </LocationProvider>
           </NotificationProvider>
         </UserProvider>
       </AuthProvider>

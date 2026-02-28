@@ -330,76 +330,11 @@ router.get('/jobs/available', authenticate, async (req, res) => {
 
     const freelancerId = user._id || user.id;
 
-    // Optional geo-based sorting by distance if lat/lng are provided
-    const { lat, lng, maxDistanceKm } = req.query || {};
-    const latNum = lat !== undefined ? Number(lat) : null;
-    const lngNum = lng !== undefined ? Number(lng) : null;
-
-    // Build base filter: open, unassigned, not posted by this freelancer
-    const baseFilter = {
+    const jobs = await Job.find({
       status: 'open',
       assignedFreelancer: null,
-    };
-
-    let freelancerObjectId = null;
-    try {
-      freelancerObjectId = new mongoose.Types.ObjectId(freelancerId);
-    } catch (e) {
-      freelancerObjectId = freelancerId;
-    }
-
-    if (freelancerObjectId) {
-      baseFilter.client = { $ne: freelancerObjectId };
-    }
-
-    // If valid coordinates are provided, use $geoNear to sort by distance
-    if (
-      typeof latNum === 'number' &&
-      typeof lngNum === 'number' &&
-      !Number.isNaN(latNum) &&
-      !Number.isNaN(lngNum)
-    ) {
-      const maxDistanceMeters = maxDistanceKm
-        ? Number(maxDistanceKm) * 1000
-        : 20000; // default 20km
-
-      console.log('📍 Using geo-based job search for freelancer', freelancerId, {
-        lat: latNum,
-        lng: lngNum,
-        maxDistanceMeters,
-      });
-
-      const pipeline = [
-        {
-          $geoNear: {
-            near: {
-              type: 'Point',
-              coordinates: [lngNum, latNum],
-            },
-            distanceField: 'distanceMeters',
-            spherical: true,
-            query: baseFilter,
-            maxDistance: Number.isNaN(maxDistanceMeters) ? undefined : maxDistanceMeters,
-          },
-        },
-        { $limit: 100 },
-      ];
-
-      // Remove undefined keys from $geoNear to avoid errors
-      if (!pipeline[0].$geoNear.maxDistance) {
-        delete pipeline[0].$geoNear.maxDistance;
-      }
-
-      const jobs = await Job.aggregate(pipeline);
-
-      return res.json({
-        success: true,
-        jobs,
-      });
-    }
-
-    // Fallback: no valid coordinates, use simple sorting by recency
-    const jobs = await Job.find(baseFilter)
+      client: { $ne: freelancerId },
+    })
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();

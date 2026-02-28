@@ -12,6 +12,7 @@ import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import NotificationModal from '../../components/modals/NotificationModal';
+import GpsBanner from '../../components/common/GpsBanner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -140,6 +141,8 @@ const ClientDashboard = () => {
           style={styles.notificationButton}
         />
       </View>
+
+      <GpsBanner />
 
       {/* Breadcrumb Navigation - Only show on drawer screens */}
       {activeDrawerScreen && (

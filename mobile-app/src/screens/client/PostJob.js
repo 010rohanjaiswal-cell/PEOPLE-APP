@@ -4,15 +4,16 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import { clientJobsAPI } from '../../api/clientJobs';
+import { useLocation } from '../../context/LocationContext';
 
 const PostJob = ({ onJobPosted }) => {
+  const { gpsEnabled, gpsDenied } = useLocation();
   const scrollViewRef = useRef(null);
   const descriptionInputRef = useRef(null);
   const [formData, setFormData] = useState({
@@ -27,7 +28,6 @@ const PostJob = ({ onJobPosted }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [gpsRequiredModalVisible, setGpsRequiredModalVisible] = useState(false);
 
   const categories = [
     'Delivery',
@@ -52,6 +52,10 @@ const PostJob = ({ onJobPosted }) => {
   };
 
   const handleSubmit = async () => {
+    if (gpsDenied || !gpsEnabled) {
+      setError('Please turn on GPS to post a job.');
+      return;
+    }
     // Validation
     if (!validateRequired(formData.title)) {
       setError('Please enter a job title');
@@ -82,22 +86,6 @@ const PostJob = ({ onJobPosted }) => {
     setError('');
 
     try {
-      // GPS is required to post a job
-      let { status } = await Location.getForegroundPermissionsAsync();
-      // Only show system dialog when status is 'undetermined'; if already denied, show our modal
-      if (status === 'undetermined') {
-        status = (await Location.requestForegroundPermissionsAsync()).status;
-      }
-      if (status !== 'granted') {
-        setLoading(false);
-        setGpsRequiredModalVisible(true);
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({});
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
       const jobData = {
         title: formData.title,
         category: formData.category,
@@ -107,9 +95,6 @@ const PostJob = ({ onJobPosted }) => {
         gender: formData.gender.toLowerCase(),
         description: formData.description || null,
       };
-
-      jobData.lat = lat;
-      jobData.lng = lng;
 
       const result = await clientJobsAPI.postJob(jobData);
 
@@ -142,6 +127,12 @@ const PostJob = ({ onJobPosted }) => {
         keyboardDismissMode="on-drag"
         nestedScrollEnabled={true}
       >
+        {gpsDenied && (
+          <View style={styles.gpsMessageBox}>
+            <MaterialIcons name="location-off" size={24} color={colors.warning.main} />
+            <Text style={styles.gpsMessageBoxText}>Please turn on GPS to post a job.</Text>
+          </View>
+        )}
         <Card style={styles.card}>
         <CardContent>
           {/* Job Title */}
@@ -267,8 +258,8 @@ const PostJob = ({ onJobPosted }) => {
           {/* Submit Button with Error */}
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={loading}
-            style={styles.submitButton}
+            disabled={loading || gpsDenied}
+            style={[styles.submitButton, gpsDenied && styles.submitButtonDisabled]}
             activeOpacity={0.7}
           >
             {loading ? (
@@ -290,45 +281,6 @@ const PostJob = ({ onJobPosted }) => {
           </TouchableOpacity>
         </CardContent>
       </Card>
-
-      {/* GPS Required Modal - blocks until user enables location */}
-      <Modal
-        visible={gpsRequiredModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {}}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.gpsIconContainer}>
-              <MaterialIcons name="location-off" size={56} color={colors.text.muted} />
-            </View>
-            <Text style={styles.modalTitle}>Location Required</Text>
-            <Text style={styles.modalSubtitle}>
-              You need to enable location to post a job. Please turn on GPS in settings.
-            </Text>
-            <View style={styles.gpsModalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.gpsOpenSettingsButton]}
-                onPress={() => Linking.openSettings()}
-              >
-                <Text style={styles.modalSubmitText}>Open Settings</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton]}
-                onPress={async () => {
-                  const { status } = await Location.requestForegroundPermissionsAsync();
-                  if (status === 'granted') {
-                    setGpsRequiredModalVisible(false);
-                  }
-                }}
-              >
-                <Text style={styles.modalSubmitText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Success Modal */}
       <Modal
@@ -581,18 +533,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  gpsIconContainer: {
+  gpsMessageBox: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.warning.light,
+    padding: spacing.md,
+    borderRadius: spacing.sm,
     marginBottom: spacing.md,
   },
-  gpsModalActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
+  gpsMessageBoxText: {
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
   },
-  gpsOpenSettingsButton: {
-    backgroundColor: colors.text.secondary,
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

@@ -3,7 +3,7 @@
  * Display open jobs that freelancers can see
  */
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,21 +17,20 @@ import {
   Dimensions,
   ScrollView,
   RefreshControl,
-  Linking,
-  AppState,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { walletAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { useLocation } from '../../context/LocationContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
+  const { gpsEnabled, gpsDenied } = useLocation();
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,50 +51,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [hasActiveJob, setHasActiveJob] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [locationDenied, setLocationDenied] = useState(false);
-  const hasRequestedPermissionThisSession = useRef(false);
 
-  const requestLocation = useCallback(async () => {
-    try {
-      let { status } = await Location.getForegroundPermissionsAsync();
-      // Only show system dialog once per app session when status is 'undetermined'
-      // If user already denied (or we already asked this session), show our screen instead of system popup
-      if (status === 'undetermined' && !hasRequestedPermissionThisSession.current) {
-        hasRequestedPermissionThisSession.current = true;
-        status = (await Location.requestForegroundPermissionsAsync()).status;
-      }
-      if (status !== 'granted') {
-        setLocationDenied(true);
-        return null;
-      }
-      setLocationDenied(false);
-      const position = await Location.getCurrentPositionAsync({});
-      const loc = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
-      setCurrentLocation(loc);
-      return loc;
-    } catch (err) {
-      console.error('Error requesting location for AvailableJobs:', err);
-      setLocationDenied(true);
-      return null;
-    }
-  }, []);
-
-  const loadJobs = async (locationOverride) => {
+  const loadJobs = async () => {
     try {
       if (!refreshing) setLoading(true);
       setError('');
-      const activeLocation = locationOverride || currentLocation;
-      const lat = activeLocation?.latitude;
-      const lng = activeLocation?.longitude;
 
-      const response = await freelancerJobsAPI.getAvailableJobs(
-        typeof lat === 'number' ? lat : undefined,
-        typeof lng === 'number' ? lng : undefined
-      );
+      const response = await freelancerJobsAPI.getAvailableJobs();
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
       } else if (Array.isArray(response)) {
@@ -180,48 +142,22 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const loc = await requestLocation();
-        if (loc === null) {
-          // Permission denied - locationDenied already set; don't load jobs
-          setLoading(false);
-          return;
-        }
-        await Promise.all([
-          loadJobs(loc),
-          loadWalletStatus(),
-          checkActiveJob(),
-        ]);
-      } catch (err) {
+    if (gpsEnabled) {
+      Promise.all([
+        loadJobs(),
+        loadWalletStatus(),
+        checkActiveJob(),
+      ]).catch((err) => {
         console.error('Error loading initial data:', err);
         setLoading(false);
-      }
-    };
-
-    init();
-  }, [requestLocation]);
-
-  // Re-check permission when app comes to foreground (e.g. after user opens Settings)
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && locationDenied) {
-        Location.getForegroundPermissionsAsync().then(({ status }) => {
-          if (status === 'granted') {
-            setLocationDenied(false);
-            requestLocation().then((loc) => {
-              if (loc) {
-                loadJobs(loc);
-                loadWalletStatus();
-                checkActiveJob();
-              }
-            });
-          }
-        });
-      }
-    });
-    return () => sub?.remove();
-  }, [locationDenied, requestLocation]);
+      });
+    } else {
+      Promise.all([loadWalletStatus(), checkActiveJob()]).catch((err) => {
+        console.error('Error loading wallet/active job:', err);
+      });
+      setLoading(false);
+    }
+  }, [gpsEnabled]);
 
   const handlePickupJob = async (job) => {
     if (!canWork) {
@@ -492,7 +428,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     </View>
   );};
 
-  if (loading && !locationDenied) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary.main} />
@@ -500,39 +436,14 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     );
   }
 
-  // GPS denied: show blocking screen until user enables location
-  if (locationDenied) {
+  // GPS off: show message only, no job cards (distance will be used later)
+  if (gpsDenied) {
     return (
       <View style={styles.container}>
-        <View style={styles.gpsRequiredContainer}>
-          <View style={styles.gpsIconContainer}>
-            <MaterialIcons name="location-off" size={64} color={colors.text.muted} />
-          </View>
-          <Text style={styles.gpsRequiredTitle}>Location Required</Text>
-          <Text style={styles.gpsRequiredMessage}>
-            You need to enable location to see available jobs near you. Please turn on GPS in settings.
-          </Text>
-          <View style={styles.gpsRequiredActions}>
-            <TouchableOpacity
-              style={[styles.gpsRequiredButton, styles.gpsOpenSettingsButton]}
-              onPress={() => Linking.openSettings()}
-            >
-              <Text style={styles.gpsRequiredButtonText}>Open Settings</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.gpsRequiredButton, styles.gpsRetryButton]}
-              onPress={async () => {
-                const loc = await requestLocation();
-                if (loc) {
-                  await loadJobs(loc);
-                  loadWalletStatus();
-                  checkActiveJob();
-                }
-              }}
-            >
-              <Text style={styles.gpsRequiredButtonTextLight}>Retry</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.gpsMessageCard}>
+          <MaterialIcons name="location-off" size={48} color={colors.text.muted} />
+          <Text style={styles.gpsMessageTitle}>GPS is off</Text>
+          <Text style={styles.gpsMessageText}>Please turn on GPS to get latest jobs.</Text>
         </View>
       </View>
     );
@@ -1110,55 +1021,22 @@ const styles = StyleSheet.create({
   filterOptionTextActive: {
     color: colors.background,
   },
-  gpsRequiredContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  gpsMessageCard: {
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
-  gpsIconContainer: {
-    marginBottom: spacing.lg,
-  },
-  gpsRequiredTitle: {
-    ...typography.h2,
+  gpsMessageTitle: {
+    ...typography.h3,
     color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
-  gpsRequiredMessage: {
+  gpsMessageText: {
     ...typography.body,
     color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  gpsRequiredActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  gpsRequiredButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: spacing.sm,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  gpsOpenSettingsButton: {
-    backgroundColor: colors.primary.main,
-  },
-  gpsRetryButton: {
-    backgroundColor: colors.cardBackground,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  gpsRequiredButtonText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  gpsRequiredButtonTextLight: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
   },
 });
 

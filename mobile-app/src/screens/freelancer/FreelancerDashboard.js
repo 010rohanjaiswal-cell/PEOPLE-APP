@@ -12,6 +12,7 @@ import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import NotificationModal from '../../components/modals/NotificationModal';
+import GpsBanner from '../../components/common/GpsBanner';
 import { userAPI, verificationAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -169,6 +170,8 @@ const FreelancerDashboard = () => {
           style={styles.notificationButton}
         />
       </View>
+
+      <GpsBanner />
 
       {/* Breadcrumb Navigation - Only show on drawer screens */}
       {activeDrawerScreen && (

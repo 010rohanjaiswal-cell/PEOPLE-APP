@@ -72,17 +72,7 @@ router.post('/jobs', authenticate, async (req, res) => {
       });
     }
 
-    const {
-      title,
-      category,
-      address,
-      pincode,
-      budget,
-      gender,
-      description,
-      lat,
-      lng,
-    } = req.body || {};
+    const { title, category, address, pincode, budget, gender, description } = req.body || {};
 
     // Basic validation to mirror mobile form
     if (!title || !category || !address || !pincode || !budget || !gender) {
@@ -100,7 +90,7 @@ router.post('/jobs', authenticate, async (req, res) => {
       });
     }
 
-    const jobData = {
+    const job = await Job.create({
       client: user._id || user.id,
       title: String(title).trim(),
       category: String(category).trim(),
@@ -110,24 +100,7 @@ router.post('/jobs', authenticate, async (req, res) => {
       gender: normalizedGender,
       description: description ? String(description).trim() : null,
       status: 'open',
-    };
-
-    // Attach geo location if valid coordinates are provided
-    const latNum = lat !== undefined ? Number(lat) : null;
-    const lngNum = lng !== undefined ? Number(lng) : null;
-    if (
-      typeof latNum === 'number' &&
-      typeof lngNum === 'number' &&
-      !Number.isNaN(latNum) &&
-      !Number.isNaN(lngNum)
-    ) {
-      jobData.location = {
-        type: 'Point',
-        coordinates: [lngNum, latNum],
-      };
-    }
-
-    const job = await Job.create(jobData);
+    });
 
     res.status(201).json({
       success: true,
