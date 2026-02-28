@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
+const { getStateFromPincode } = require('../services/locationService');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
 const {
@@ -90,12 +91,22 @@ router.post('/jobs', authenticate, async (req, res) => {
       });
     }
 
+    const pincodeStr = String(pincode).trim();
+    let state = null;
+    try {
+      const pinInfo = await getStateFromPincode(pincodeStr);
+      if (pinInfo && pinInfo.state) state = pinInfo.state;
+    } catch (e) {
+      console.warn('Could not resolve state for pincode:', pincodeStr, e.message);
+    }
+
     const job = await Job.create({
       client: user._id || user.id,
       title: String(title).trim(),
       category: String(category).trim(),
       address: String(address).trim(),
-      pincode: String(pincode).trim(),
+      pincode: pincodeStr,
+      state,
       budget: Number(budget),
       gender: normalizedGender,
       description: description ? String(description).trim() : null,
@@ -326,7 +337,15 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     if (title) job.title = String(title).trim();
     if (category) job.category = String(category).trim();
     if (address) job.address = String(address).trim();
-    if (pincode) job.pincode = String(pincode).trim();
+    if (pincode) {
+      job.pincode = String(pincode).trim();
+      try {
+        const pinInfo = await getStateFromPincode(job.pincode);
+        job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
+      } catch (e) {
+        console.warn('Could not resolve state for pincode on update:', job.pincode, e.message);
+      }
+    }
     if (budget !== undefined) job.budget = Number(budget);
     if (gender) {
       const normalizedGender = String(gender).toLowerCase();

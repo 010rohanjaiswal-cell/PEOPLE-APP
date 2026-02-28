@@ -13,6 +13,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
+import { useLocation } from '../../context/LocationContext';
 import { userAPI, verificationAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -28,7 +29,16 @@ import SettingsScreen from './Settings';
 
 const FreelancerDashboard = () => {
   const { user, logout, updateUser } = useAuth();
+  const { requestPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
+
+  // Ask for GPS when user lands on freelancer dashboard (ensures dialog shows at right time)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      requestPermission();
+    }, 600);
+    return () => clearTimeout(t);
+  }, [requestPermission]);
   const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);

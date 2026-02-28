@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.company.people",
       "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby jobs and to attach your location when posting a job.",
         "LSApplicationQueriesSchemes": [
           "ppemerchantsdkv1",
           "ppemerchantsdkv2",
@@ -40,13 +41,16 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-location",
       [
         "expo-image-picker",
         {

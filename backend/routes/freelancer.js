@@ -11,6 +11,7 @@ const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
+const { getStateFromCoords } = require('../services/locationService');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
@@ -313,8 +314,8 @@ router.post(
 });
 
 /**
- * Get available jobs for freelancer
- * GET /api/freelancer/jobs/available
+ * Get available jobs for freelancer (filtered by freelancer's current state when lat/lng provided)
+ * GET /api/freelancer/jobs/available?lat=28.6139&lng=77.2090
  * Requires authentication as freelancer
  */
 router.get('/jobs/available', authenticate, async (req, res) => {
@@ -329,12 +330,27 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     }
 
     const freelancerId = user._id || user.id;
+    const { lat, lng } = req.query || {};
 
-    const jobs = await Job.find({
+    const filter = {
       status: 'open',
       assignedFreelancer: null,
       client: { $ne: freelancerId },
-    })
+    };
+
+    if (lat != null && lng != null) {
+      const freelancerState = await getStateFromCoords(lat, lng);
+      if (freelancerState) {
+        // Show jobs in freelancer's state or jobs with no state set (legacy)
+        filter.$or = [
+          { state: freelancerState },
+          { state: null },
+          { state: '' },
+        ];
+      }
+    }
+
+    const jobs = await Job.find(filter)
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();

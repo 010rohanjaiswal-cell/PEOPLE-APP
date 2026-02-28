@@ -24,11 +24,11 @@ export function LocationProvider({ children }) {
     }
   }, []);
 
-  // Ask for permission once when first needed (only if undetermined)
+  // Call this to show the system "Allow location?" dialog. Safe to call multiple times.
   const requestPermission = useCallback(async () => {
     try {
       let { status } = await Location.getForegroundPermissionsAsync();
-      if (status === 'undetermined') {
+      if (status !== 'granted') {
         status = (await Location.requestForegroundPermissionsAsync()).status;
       }
       setGpsEnabled(status === 'granted');
@@ -40,23 +40,16 @@ export function LocationProvider({ children }) {
     }
   }, []);
 
+  // On mount only CHECK permission; do NOT request here. Request is triggered only when
+  // user lands on Client/Freelancer dashboard (so the "Allow location?" dialog appears
+  // at the right moment and not in a loop or on splash/auth screen).
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (!mounted) return;
-        if (status === 'granted') {
-          setGpsEnabled(true);
-          return;
-        }
-        if (status === 'undetermined') {
-          const newStatus = (await Location.requestForegroundPermissionsAsync()).status;
-          if (!mounted) return;
-          setGpsEnabled(newStatus === 'granted');
-          return;
-        }
-        setGpsEnabled(false);
+        setGpsEnabled(status === 'granted');
       } catch (err) {
         if (mounted) setGpsEnabled(false);
       }
@@ -74,12 +67,31 @@ export function LocationProvider({ children }) {
     return () => sub?.remove();
   }, [checkPermission]);
 
+  /** Get current coordinates (for filtering jobs by state). Returns null if permission denied or error. */
+  const getCurrentCoords = useCallback(async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        maximumAge: 60000,
+        timeInterval: 10000,
+      });
+      if (loc?.coords) return { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      return null;
+    } catch (err) {
+      console.error('LocationContext getCurrentCoords:', err);
+      return null;
+    }
+  }, []);
+
   const value = {
     gpsEnabled: gpsEnabled === true,
     gpsDenied: gpsEnabled === false,
     gpsUnknown: gpsEnabled === null,
     checkPermission,
     requestPermission,
+    getCurrentCoords,
   };
 
   return (

@@ -152,7 +152,7 @@ This document contains all API endpoints, Socket.io events, and connection detai
     "description": "string"
   }
   ```
-- **Response**: Created job object
+- **Response**: Created job object (includes `state` derived from pincode for location filtering)
 
 ### 4. Update Job
 - **Endpoint**: `PUT /api/client/jobs/:jobId`
@@ -209,8 +209,9 @@ This document contains all API endpoints, Socket.io events, and connection detai
 
 ### 1. Get Available Jobs
 - **Endpoint**: `GET /api/freelancer/jobs/available`
-- **Description**: Get all available jobs that freelancer can apply for
+- **Description**: Get available jobs (optionally filtered by freelancer's state when `lat`/`lng` provided)
 - **Headers**: `Authorization: Bearer <token>`
+- **Query Parameters** (optional): `lat`, `lng` — when provided, jobs are filtered to the state of this location
 - **Response**: Array of available job objects
 
 ### 2. Get Assigned Jobs

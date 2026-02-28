@@ -42,6 +42,14 @@ const jobSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    // State derived from pincode (normalized lowercase) for filtering jobs by freelancer's state
+    state: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+      index: true,
+    },
     budget: {
       type: Number,
       required: true,
@@ -109,6 +117,7 @@ const jobSchema = new mongoose.Schema(
 );
 
 jobSchema.index({ client: 1, status: 1, createdAt: -1 });
+jobSchema.index({ status: 1, state: 1 });
 
 module.exports = mongoose.model('Job', jobSchema);
 

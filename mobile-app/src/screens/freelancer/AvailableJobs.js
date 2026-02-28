@@ -30,7 +30,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
-  const { gpsEnabled, gpsDenied } = useLocation();
+  const { gpsEnabled, gpsDenied, getCurrentCoords } = useLocation();
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +57,17 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       if (!refreshing) setLoading(true);
       setError('');
 
-      const response = await freelancerJobsAPI.getAvailableJobs();
+      let lat = null;
+      let lng = null;
+      if (gpsEnabled) {
+        const coords = await getCurrentCoords();
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+        }
+      }
+
+      const response = await freelancerJobsAPI.getAvailableJobs(lat, lng);
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
       } else if (Array.isArray(response)) {

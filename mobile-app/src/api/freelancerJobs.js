@@ -6,11 +6,18 @@ import apiClient from './client';
 
 export const freelancerJobsAPI = {
   /**
-   * Get available jobs for freelancer
+   * Get available jobs for freelancer (filtered by state when lat/lng provided)
+   * @param {number} [lat] - Latitude for state-based filtering
+   * @param {number} [lng] - Longitude for state-based filtering
    * @returns {Promise} List of available jobs
    */
-  getAvailableJobs: async () => {
-    const response = await apiClient.get('/api/freelancer/jobs/available');
+  getAvailableJobs: async (lat, lng) => {
+    const params = {};
+    if (lat != null && lng != null) {
+      params.lat = lat;
+      params.lng = lng;
+    }
+    const response = await apiClient.get('/api/freelancer/jobs/available', { params });
     return response.data;
   },
 

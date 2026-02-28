@@ -3,7 +3,7 @@
  * Main dashboard with tab navigation for clients
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
 import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
+import { useLocation } from '../../context/LocationContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -26,7 +27,16 @@ import SettingsScreen from './Settings';
 
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
+  const { requestPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('PostJob');
+
+  // Ask for GPS when user lands on client dashboard (ensures dialog shows at right time)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      requestPermission();
+    }, 600);
+    return () => clearTimeout(t);
+  }, [requestPermission]);
   const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
