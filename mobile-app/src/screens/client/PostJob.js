@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { colors, spacing, typography } from '../../theme';
@@ -27,6 +27,7 @@ const PostJob = ({ onJobPosted }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [gpsRequiredModalVisible, setGpsRequiredModalVisible] = useState(false);
 
   const categories = [
     'Delivery',
@@ -81,21 +82,21 @@ const PostJob = ({ onJobPosted }) => {
     setError('');
 
     try {
-      // Try to capture client's current location for geo-based matching
-      let lat = null;
-      let lng = null;
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const position = await Location.getCurrentPositionAsync({});
-          lat = position.coords.latitude;
-          lng = position.coords.longitude;
-        } else {
-          console.log('Location permission denied on PostJob screen');
-        }
-      } catch (locError) {
-        console.error('Error getting location on PostJob screen:', locError);
+      // GPS is required to post a job
+      let { status } = await Location.getForegroundPermissionsAsync();
+      // Only show system dialog when status is 'undetermined'; if already denied, show our modal
+      if (status === 'undetermined') {
+        status = (await Location.requestForegroundPermissionsAsync()).status;
       }
+      if (status !== 'granted') {
+        setLoading(false);
+        setGpsRequiredModalVisible(true);
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({});
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
 
       const jobData = {
         title: formData.title,
@@ -107,15 +108,8 @@ const PostJob = ({ onJobPosted }) => {
         description: formData.description || null,
       };
 
-      if (
-        typeof lat === 'number' &&
-        typeof lng === 'number' &&
-        !Number.isNaN(lat) &&
-        !Number.isNaN(lng)
-      ) {
-        jobData.lat = lat;
-        jobData.lng = lng;
-      }
+      jobData.lat = lat;
+      jobData.lng = lng;
 
       const result = await clientJobsAPI.postJob(jobData);
 
@@ -296,6 +290,45 @@ const PostJob = ({ onJobPosted }) => {
           </TouchableOpacity>
         </CardContent>
       </Card>
+
+      {/* GPS Required Modal - blocks until user enables location */}
+      <Modal
+        visible={gpsRequiredModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.gpsIconContainer}>
+              <MaterialIcons name="location-off" size={56} color={colors.text.muted} />
+            </View>
+            <Text style={styles.modalTitle}>Location Required</Text>
+            <Text style={styles.modalSubtitle}>
+              You need to enable location to post a job. Please turn on GPS in settings.
+            </Text>
+            <View style={styles.gpsModalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.gpsOpenSettingsButton]}
+                onPress={() => Linking.openSettings()}
+              >
+                <Text style={styles.modalSubmitText}>Open Settings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton]}
+                onPress={async () => {
+                  const { status } = await Location.requestForegroundPermissionsAsync();
+                  if (status === 'granted') {
+                    setGpsRequiredModalVisible(false);
+                  }
+                }}
+              >
+                <Text style={styles.modalSubmitText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Success Modal */}
       <Modal
@@ -547,6 +580,19 @@ const styles = StyleSheet.create({
   successIconContainer: {
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  gpsIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  gpsModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  gpsOpenSettingsButton: {
+    backgroundColor: colors.text.secondary,
   },
 });
 
