@@ -6,7 +6,8 @@
 const axios = require('axios');
 
 const PINCODE_API = 'https://api.postalpincode.in/pincode';
-const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse';
+const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse';
+const NOMINATIM_SEARCH = 'https://nominatim.openstreetmap.org/search';
 
 /** Normalize state name for consistent comparison (lowercase, trim) */
 function normalizeState(name) {
@@ -52,7 +53,7 @@ async function getStateFromCoords(lat, lng) {
   const longitude = Number(lng);
   if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
   try {
-    const { data } = await axios.get(NOMINATIM_URL, {
+    const { data } = await axios.get(NOMINATIM_REVERSE, {
       params: {
         lat: latitude,
         lon: longitude,
@@ -73,8 +74,59 @@ async function getStateFromCoords(lat, lng) {
   }
 }
 
+/**
+ * Get approximate lat/lng for an Indian pincode (for distance calculation)
+ * Uses Nominatim search. Rate limit: 1 req/sec.
+ * @param {string} pincode - 6-digit Indian pincode
+ * @returns {Promise<{ lat: number, lng: number }|null>}
+ */
+async function getCoordsFromPincode(pincode) {
+  const pin = String(pincode).trim();
+  if (!pin || pin.length !== 6) return null;
+  try {
+    const { data } = await axios.get(NOMINATIM_SEARCH, {
+      params: {
+        postalcode: pin,
+        country: 'India',
+        format: 'json',
+        limit: 1,
+      },
+      headers: { 'User-Agent': 'PeopleApp/1.0' },
+      timeout: 8000,
+    });
+    const first = Array.isArray(data) && data[0];
+    if (!first || first.lat == null || first.lon == null) return null;
+    return {
+      lat: Number(first.lat),
+      lng: Number(first.lon),
+    };
+  } catch (err) {
+    console.error('locationService getCoordsFromPincode:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Haversine distance in km between two points
+ */
+function haversineDistanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth radius km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 module.exports = {
   getStateFromPincode,
   getStateFromCoords,
+  getCoordsFromPincode,
+  haversineDistanceKm,
   normalizeState,
 };

@@ -50,6 +50,9 @@ const jobSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // Approximate coords of job location (from pincode) for distance display
+    jobLat: { type: Number, default: null },
+    jobLng: { type: Number, default: null },
     budget: {
       type: Number,
       required: true,

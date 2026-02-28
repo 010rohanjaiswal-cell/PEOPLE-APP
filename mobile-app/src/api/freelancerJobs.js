@@ -6,17 +6,19 @@ import apiClient from './client';
 
 export const freelancerJobsAPI = {
   /**
-   * Get available jobs for freelancer (filtered by state when lat/lng provided)
-   * @param {number} [lat] - Latitude for state-based filtering
-   * @param {number} [lng] - Longitude for state-based filtering
-   * @returns {Promise} List of available jobs
+   * Get available jobs for freelancer (filtered by state when lat/lng provided; includes distanceKm)
+   * @param {number} [lat] - Latitude for state-based filtering and distance
+   * @param {number} [lng] - Longitude for state-based filtering and distance
+   * @param {string} [sort] - 'nearest_first' | 'farthest_first'
+   * @returns {Promise} List of available jobs (each may have distanceKm)
    */
-  getAvailableJobs: async (lat, lng) => {
+  getAvailableJobs: async (lat, lng, sort) => {
     const params = {};
     if (lat != null && lng != null) {
       params.lat = lat;
       params.lng = lng;
     }
+    if (sort) params.sort = sort;
     const response = await apiClient.get('/api/freelancer/jobs/available', { params });
     return response.data;
   },

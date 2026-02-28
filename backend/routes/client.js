@@ -10,7 +10,7 @@ const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
-const { getStateFromPincode } = require('../services/locationService');
+const { getStateFromPincode, getCoordsFromPincode } = require('../services/locationService');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
 const {
@@ -93,11 +93,20 @@ router.post('/jobs', authenticate, async (req, res) => {
 
     const pincodeStr = String(pincode).trim();
     let state = null;
+    let jobLat = null;
+    let jobLng = null;
     try {
-      const pinInfo = await getStateFromPincode(pincodeStr);
+      const [pinInfo, coords] = await Promise.all([
+        getStateFromPincode(pincodeStr),
+        getCoordsFromPincode(pincodeStr),
+      ]);
       if (pinInfo && pinInfo.state) state = pinInfo.state;
+      if (coords) {
+        jobLat = coords.lat;
+        jobLng = coords.lng;
+      }
     } catch (e) {
-      console.warn('Could not resolve state for pincode:', pincodeStr, e.message);
+      console.warn('Could not resolve state/coords for pincode:', pincodeStr, e.message);
     }
 
     const job = await Job.create({
@@ -107,6 +116,8 @@ router.post('/jobs', authenticate, async (req, res) => {
       address: String(address).trim(),
       pincode: pincodeStr,
       state,
+      jobLat,
+      jobLng,
       budget: Number(budget),
       gender: normalizedGender,
       description: description ? String(description).trim() : null,
@@ -340,10 +351,20 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     if (pincode) {
       job.pincode = String(pincode).trim();
       try {
-        const pinInfo = await getStateFromPincode(job.pincode);
+        const [pinInfo, coords] = await Promise.all([
+          getStateFromPincode(job.pincode),
+          getCoordsFromPincode(job.pincode),
+        ]);
         job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
+        if (coords) {
+          job.jobLat = coords.lat;
+          job.jobLng = coords.lng;
+        } else {
+          job.jobLat = null;
+          job.jobLng = null;
+        }
       } catch (e) {
-        console.warn('Could not resolve state for pincode on update:', job.pincode, e.message);
+        console.warn('Could not resolve state/coords for pincode on update:', job.pincode, e.message);
       }
     }
     if (budget !== undefined) job.budget = Number(budget);

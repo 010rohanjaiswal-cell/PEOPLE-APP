@@ -67,7 +67,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         }
       }
 
-      const response = await freelancerJobsAPI.getAvailableJobs(lat, lng);
+      const sortParam = selectedFilter === 'farthest_first' ? 'farthest_first' : undefined;
+      const response = await freelancerJobsAPI.getAvailableJobs(lat, lng, sortParam);
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
       } else if (Array.isArray(response)) {
@@ -238,6 +239,18 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           const dateB = new Date(b.createdAt || 0);
           return dateA - dateB;
         });
+      case 'nearest_first':
+        return sortedJobs.sort((a, b) => {
+          const da = a.distanceKm != null ? a.distanceKm : Infinity;
+          const db = b.distanceKm != null ? b.distanceKm : Infinity;
+          return da - db;
+        });
+      case 'farthest_first':
+        return sortedJobs.sort((a, b) => {
+          const da = a.distanceKm != null ? a.distanceKm : -1;
+          const db = b.distanceKm != null ? b.distanceKm : -1;
+          return db - da;
+        });
       default:
         return sortedJobs;
     }
@@ -372,6 +385,12 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
           <Text style={styles.jobMetaText}>{item.pincode}</Text>
         </View>
+        {item.distanceKm != null && (
+          <View style={styles.jobMeta}>
+            <MaterialIcons name="near-me" size={16} color={colors.text.secondary} />
+            <Text style={styles.jobMetaText}>{item.distanceKm} km away</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.actionsRow}>
@@ -539,6 +558,34 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 selectedFilter === 'newest' && styles.filterOptionTextActive,
               ]}>
                 Newest First
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'nearest_first' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('nearest_first')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'nearest_first' && styles.filterOptionTextActive,
+              ]}>
+                Nearest to far
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                selectedFilter === 'farthest_first' && styles.filterOptionActive,
+              ]}
+              onPress={() => setSelectedFilter('farthest_first')}
+            >
+              <Text style={[
+                styles.filterOptionText,
+                selectedFilter === 'farthest_first' && styles.filterOptionTextActive,
+              ]}>
+                Far to nearest
               </Text>
             </TouchableOpacity>
           </ScrollView>

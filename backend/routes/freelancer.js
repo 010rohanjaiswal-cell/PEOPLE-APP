@@ -11,7 +11,7 @@ const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
-const { getStateFromCoords } = require('../services/locationService');
+const { getStateFromCoords, getCoordsFromPincode, haversineDistanceKm } = require('../services/locationService');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
@@ -330,7 +330,9 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     }
 
     const freelancerId = user._id || user.id;
-    const { lat, lng } = req.query || {};
+    const { lat, lng, sort } = req.query || {};
+    const flLat = lat != null ? Number(lat) : null;
+    const flLng = lng != null ? Number(lng) : null;
 
     const filter = {
       status: 'open',
@@ -338,10 +340,9 @@ router.get('/jobs/available', authenticate, async (req, res) => {
       client: { $ne: freelancerId },
     };
 
-    if (lat != null && lng != null) {
-      const freelancerState = await getStateFromCoords(lat, lng);
+    if (flLat != null && flLng != null && !Number.isNaN(flLat) && !Number.isNaN(flLng)) {
+      const freelancerState = await getStateFromCoords(flLat, flLng);
       if (freelancerState) {
-        // Show jobs in freelancer's state or jobs with no state set (legacy)
         filter.$or = [
           { state: freelancerState },
           { state: null },
@@ -350,10 +351,42 @@ router.get('/jobs/available', authenticate, async (req, res) => {
       }
     }
 
-    const jobs = await Job.find(filter)
+    let jobs = await Job.find(filter)
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();
+
+    // Attach distance (km) and sort when freelancer location provided
+    if (flLat != null && flLng != null && !Number.isNaN(flLat) && !Number.isNaN(flLng)) {
+      const pincodeCoordsCache = {};
+      const getJobCoords = async (job) => {
+        if (job.jobLat != null && job.jobLng != null) {
+          return { lat: job.jobLat, lng: job.jobLng };
+        }
+        const pin = (job.pincode || '').toString().trim();
+        if (!pin) return null;
+        if (pincodeCoordsCache[pin]) return pincodeCoordsCache[pin];
+        const coords = await getCoordsFromPincode(pin);
+        if (coords) pincodeCoordsCache[pin] = coords;
+        return coords;
+      };
+
+      for (const job of jobs) {
+        const coords = await getJobCoords(job);
+        if (coords) {
+          job.distanceKm = Math.round(haversineDistanceKm(flLat, flLng, coords.lat, coords.lng) * 10) / 10;
+        } else {
+          job.distanceKm = null;
+        }
+      }
+
+      const nearestFirst = sort !== 'farthest_first';
+      jobs.sort((a, b) => {
+        const da = a.distanceKm != null ? a.distanceKm : Infinity;
+        const db = b.distanceKm != null ? b.distanceKm : Infinity;
+        return nearestFirst ? da - db : db - da;
+      });
+    }
 
     res.json({
       success: true,
