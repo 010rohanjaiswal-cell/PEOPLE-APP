@@ -1,18 +1,21 @@
 /**
  * API Client - People App
  * Base configuration for all API calls
+ * Handles Render cold start: longer timeout + retry for first load
  */
 
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Base URL - Production backend
+// Base URL - Production backend (Render: free tier spins down after ~15 min; first request can take 30s–2min)
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'https://freelancing-platform-backend-backup.onrender.com';
 
-// Create axios instance
+// Longer timeout so first request survives backend cold start (Render free tier can take 1–2 min)
+const REQUEST_TIMEOUT_MS = 90000;
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -50,6 +53,18 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
+    const config = error.config;
+
+    // Retry once on timeout or network error (backend cold start on Render free tier)
+    const isRetryable =
+      (!config._retryCount || config._retryCount < 1) &&
+      (error.code === 'ECONNABORTED' || error.message === 'Network Error' || !error.response);
+    if (isRetryable && config) {
+      config._retryCount = (config._retryCount || 0) + 1;
+      await new Promise((r) => setTimeout(r, 2000));
+      return apiClient.request(config);
+    }
+
     // Enhanced error logging
     if (error.response) {
       // Server responded with error status
@@ -89,4 +104,9 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
+/** Ping backend to wake it from cold start (Render free tier). Call when app opens and user is logged in. */
+export function warmupBackend() {
+  axios.get(`${API_BASE_URL.replace(/\/$/, '')}/health`, { timeout: 15000 }).catch(() => {});
+}
 

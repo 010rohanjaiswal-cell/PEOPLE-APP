@@ -29,7 +29,7 @@ import SettingsScreen from './Settings';
 
 const FreelancerDashboard = () => {
   const { user, logout, updateUser } = useAuth();
-  const { requestPermission } = useLocation();
+  const { requestPermission, checkPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
 
   // Ask for GPS when user lands on freelancer dashboard (ensures dialog shows at right time)
@@ -39,6 +39,14 @@ const FreelancerDashboard = () => {
     }, 600);
     return () => clearTimeout(t);
   }, [requestPermission]);
+
+  // Re-check GPS on/off every 10 seconds so we show or hide jobs correctly
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkPermission();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [checkPermission]);
   const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);

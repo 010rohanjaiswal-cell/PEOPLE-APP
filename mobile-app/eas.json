@@ -1,6 +1,6 @@
 {
   "cli": {
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -29,7 +29,7 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "credentialsSource": "remote"
+      "credentialsSource": "local"
     }
   },
   "submit": {

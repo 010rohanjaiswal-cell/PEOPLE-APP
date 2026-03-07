@@ -19,8 +19,17 @@ export const userAPI = {
    * @param {string} userId - User ID
    * @returns {Promise}
    */
-  getUserProfile: async (userId) => {
-    const response = await apiClient.get(`/api/user/profile/${userId}`);
+  /**
+   * Register Expo push token with backend for push notifications
+   * @param {string} expoPushToken - Token from getExpoPushTokenAsync()
+   * @param {string} [platform] - 'android' | 'ios'
+   * @returns {Promise}
+   */
+  registerPushToken: async (expoPushToken, platform) => {
+    const response = await apiClient.post('/api/user/push-token', {
+      expoPushToken,
+      platform: platform || (require('react-native').Platform.OS === 'ios' ? 'ios' : 'android'),
+    });
     return response.data;
   },
 };

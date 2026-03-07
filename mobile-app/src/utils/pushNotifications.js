@@ -1,0 +1,59 @@
+/**
+ * Push Notifications - People App (Expo Push API / Option A)
+ * Registers Expo push token with backend so server can send push when app is in background/closed.
+ */
+
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { userAPI } from '../api/user';
+
+// Show notification when app is in foreground (optional: banner + sound)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+/**
+ * Request permission and get Expo push token; register with backend.
+ * Call when user is authenticated.
+ */
+export async function registerPushTokenAsync() {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let final = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      final = status;
+    }
+    if (final !== 'granted') return null;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const tokenResult = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
+    const token = tokenResult?.data;
+    if (!token) return null;
+
+    await userAPI.registerPushToken(token, Platform.OS);
+    return token;
+  } catch (e) {
+    console.warn('Push registration failed:', e?.message);
+    return null;
+  }
+}
+
+/**
+ * Add listener for when user taps a notification. Pass a callback that receives the notification data.
+ * @param {function(data: object)} onNotificationTapped - callback with data (type, notificationId, etc.)
+ */
+export function addNotificationResponseListener(onNotificationTapped) {
+  return Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data || {};
+    onNotificationTapped(data);
+  });
+}

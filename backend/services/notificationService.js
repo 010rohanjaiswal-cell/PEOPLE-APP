@@ -1,11 +1,50 @@
 /**
  * Notification Service - People App Backend
  * 
- * Helper functions for creating and managing notifications
+ * Helper functions for creating and managing notifications.
+ * Sends in-app (Socket.io) and push (Expo Push API) when user has registered token.
  */
 
+const axios = require('axios');
 const Notification = require('../models/Notification');
+const PushToken = require('../models/PushToken');
 const { getIO } = require('../config/socketio');
+
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+/**
+ * Send push notification via Expo Push API (non-blocking)
+ */
+async function sendExpoPush(userId, title, body, data = {}) {
+  try {
+    const tokens = await PushToken.find({ user: userId }).select('expoPushToken').lean();
+    if (!tokens.length) return;
+
+    const messages = tokens.map((t) => ({
+      to: t.expoPushToken,
+      title,
+      body,
+      data: { ...data },
+      sound: 'default',
+      channelId: 'default',
+    }));
+
+    const { data: result } = await axios.post(EXPO_PUSH_URL, messages, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+
+    if (result?.data) {
+      result.data.forEach((receipt, i) => {
+        if (receipt?.status === 'error' && receipt?.details?.error === 'DeviceNotRegistered') {
+          PushToken.deleteOne({ expoPushToken: messages[i].to }).catch(() => {});
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Expo push send error:', err.message);
+  }
+}
 
 /**
  * Create a notification and emit it via Socket.io
@@ -58,6 +97,9 @@ async function createNotification({ userId, type, title, message, data = {} }) {
     } else {
       console.warn('⚠️ Socket.io not available, notification will only be saved to database');
     }
+
+    // Push notification when app is in background/closed (Expo Push API)
+    sendExpoPush(userId, title, message, { type, notificationId: notification._id.toString(), ...data });
 
     return notification;
   } catch (error) {

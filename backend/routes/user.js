@@ -8,6 +8,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
+const PushToken = require('../models/PushToken');
 const FreelancerVerification = require('../models/FreelancerVerification');
 
 /**
@@ -187,6 +188,38 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get user profile'
+    });
+  }
+});
+
+/**
+ * Register Expo push token for push notifications
+ * POST /api/user/push-token
+ * Body: { expoPushToken: string, platform?: 'android'|'ios' }
+ * Requires authentication
+ */
+router.post('/push-token', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { expoPushToken, platform } = req.body || {};
+    const token = (expoPushToken || '').trim();
+    if (!token || !token.startsWith('ExponentPushToken[')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid Expo push token required',
+      });
+    }
+    await PushToken.findOneAndUpdate(
+      { user: userId, expoPushToken: token },
+      { user: userId, expoPushToken: token, platform: platform || null },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, message: 'Push token registered' });
+  } catch (error) {
+    console.error('Error registering push token:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to register push token',
     });
   }
 });

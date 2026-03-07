@@ -53,6 +53,14 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadJobs = async () => {
+    // Never fetch or show jobs when GPS is not granted
+    if (!gpsEnabled) {
+      setJobs([]);
+      setLoading(false);
+      setRefreshing(false);
+      setError('');
+      return;
+    }
     try {
       if (!refreshing) setLoading(true);
       setError('');
@@ -87,6 +95,11 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   };
 
   const onRefresh = () => {
+    if (!gpsEnabled) {
+      setJobs([]);
+      setRefreshing(false);
+      return;
+    }
     setRefreshing(true);
     loadJobs();
     loadWalletStatus();
@@ -169,6 +182,11 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       setLoading(false);
     }
   }, [gpsEnabled]);
+
+  // When GPS becomes denied, clear jobs so we never show list with stale data
+  useEffect(() => {
+    if (gpsDenied) setJobs([]);
+  }, [gpsDenied]);
 
   const handlePickupJob = async (job) => {
     if (!canWork) {
@@ -465,8 +483,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     );
   }
 
-  // GPS off: show message only, no job cards (distance will be used later)
-  if (gpsDenied) {
+  // GPS off or not yet determined: show message, no job cards
+  if (!gpsEnabled) {
     return (
       <View style={styles.container}>
         <View style={styles.gpsMessageCard}>

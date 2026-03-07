@@ -5,6 +5,7 @@
 
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UserProvider } from './src/context/UserContext';
@@ -12,10 +13,29 @@ import { NotificationProvider } from './src/context/NotificationContext';
 import { LocationProvider } from './src/context/LocationContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
+import { warmupBackend } from './src/api/client';
+import { registerPushTokenAsync } from './src/utils/pushNotifications';
 
 // Inner component to access auth context
 const AppContent = () => {
   const { user } = useAuth();
+
+  // Wake backend from cold start when user is logged in (Render free tier spins down after ~15 min)
+  useEffect(() => {
+    if (user) {
+      warmupBackend();
+      registerPushTokenAsync();
+    }
+  }, [user]);
+
+  // When app comes to foreground, ping backend so it stays warm (or wakes if it spun down)
+  useEffect(() => {
+    if (!user) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') warmupBackend();
+    });
+    return () => sub?.remove();
+  }, [user]);
 
   // Initialize PhonePe SDK on app start or when user logs in
   useEffect(() => {

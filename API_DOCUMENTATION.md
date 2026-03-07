@@ -383,9 +383,20 @@ This document contains all API endpoints, Socket.io events, and connection detai
 - **Headers**: `Authorization: Bearer <token>`
 - **Response**: Success message
 
----
+### 6. Register Push Token (Expo)
+- **Endpoint**: `POST /api/user/push-token`
+- **Description**: Register Expo push token for push notifications when app is in background/closed
+- **Headers**: `Authorization: Bearer <token>`
+- **Request Body**:
+  ```json
+  {
+    "expoPushToken": "ExponentPushToken[xxx]",
+    "platform": "android" | "ios"
+  }
+  ```
+- **Response**: `{ "success": true, "message": "Push token registered" }`
 
-## Chat APIs
+---
 
 ### 1. Get Messages
 - **Endpoint**: `GET /api/chat/messages/:recipientId`

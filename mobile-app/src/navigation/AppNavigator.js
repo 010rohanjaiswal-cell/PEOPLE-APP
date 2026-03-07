@@ -8,6 +8,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { addNotificationResponseListener } from '../utils/pushNotifications';
+import * as Notifications from 'expo-notifications';
 
 // Auth Screens
 import LoginScreen from '../screens/auth/Login';
@@ -85,6 +87,24 @@ const AppNavigator = () => {
       }
     }
   }, [isAuthenticated, user, loading]);
+
+  // When user taps a push notification, app opens; ensure we're on the right dashboard (no-op if already there)
+  useEffect(() => {
+    const handleNotificationTap = () => {
+      if (!navigationRef.current?.isReady() || !user) return;
+      const route = user?.role === 'client' ? 'ClientDashboard' : user?.role === 'freelancer' ? 'FreelancerDashboard' : null;
+      if (route) navigationRef.current.navigate(route);
+    };
+
+    const sub = addNotificationResponseListener(handleNotificationTap);
+
+    // Handle app opened from killed state by tapping notification
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response && user) handleNotificationTap();
+    });
+
+    return () => sub.remove();
+  }, [user?.role]);
 
   if (loading) {
     return <LoadingSpinner />;
