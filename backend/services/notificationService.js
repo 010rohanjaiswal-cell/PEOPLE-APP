@@ -18,7 +18,10 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 async function sendExpoPush(userId, title, body, data = {}) {
   try {
     const tokens = await PushToken.find({ user: userId }).select('expoPushToken').lean();
-    if (!tokens.length) return;
+    if (!tokens.length) {
+      console.log(`📲 No push tokens for user ${userId} – skip Expo push`);
+      return;
+    }
 
     const messages = tokens.map((t) => ({
       to: t.expoPushToken,
@@ -29,6 +32,7 @@ async function sendExpoPush(userId, title, body, data = {}) {
       channelId: 'default',
     }));
 
+    console.log(`📲 Sending Expo push to ${messages.length} device(s) for user ${userId}`);
     const { data: result } = await axios.post(EXPO_PUSH_URL, messages, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 10000,
@@ -36,8 +40,11 @@ async function sendExpoPush(userId, title, body, data = {}) {
 
     if (result?.data) {
       result.data.forEach((receipt, i) => {
-        if (receipt?.status === 'error' && receipt?.details?.error === 'DeviceNotRegistered') {
-          PushToken.deleteOne({ expoPushToken: messages[i].to }).catch(() => {});
+        if (receipt?.status === 'error') {
+          console.warn(`📲 Expo push error for token ${i}:`, receipt?.details?.error || receipt?.message);
+          if (receipt?.details?.error === 'DeviceNotRegistered') {
+            PushToken.deleteOne({ expoPushToken: messages[i].to }).catch(() => {});
+          }
         }
       });
     }

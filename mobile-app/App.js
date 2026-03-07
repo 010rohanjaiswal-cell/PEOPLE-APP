@@ -28,11 +28,14 @@ const AppContent = () => {
     }
   }, [user]);
 
-  // When app comes to foreground, ping backend so it stays warm (or wakes if it spun down)
+  // When app comes to foreground, ping backend and re-register push token (so token is set after backend deploy)
   useEffect(() => {
     if (!user) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') warmupBackend();
+      if (state === 'active') {
+        warmupBackend();
+        registerPushTokenAsync();
+      }
     });
     return () => sub?.remove();
   }, [user]);
