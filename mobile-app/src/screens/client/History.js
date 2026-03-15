@@ -10,8 +10,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
+import { useLanguage } from '../../context/LanguageContext';
 
 const History = () => {
+  const { t } = useLanguage();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,7 +35,7 @@ const History = () => {
       }
     } catch (err) {
       console.error('Error loading job history for client:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load job history');
+      setError(err.response?.data?.error || err.message || t('history.failedLoadHistory'));
       setJobs([]);
     } finally {
       setLoading(false);
@@ -72,7 +74,7 @@ const History = () => {
           </Text>
           <View style={styles.statusBadge}>
             <MaterialIcons name="check-circle" size={16} color={colors.success.main} />
-            <Text style={styles.statusText}>COMPLETED</Text>
+            <Text style={styles.statusText}>{t('history.statusCompleted').toUpperCase()}</Text>
           </View>
         </View>
 
@@ -125,8 +127,8 @@ const History = () => {
         <View style={styles.emptyContainer}>
           <EmptyState
             icon={<MaterialIcons name="history" size={64} color={colors.text.muted} />}
-            title="No completed jobs yet"
-            description="Jobs that are fully completed and paid will appear here."
+            title={t('history.noCompletedJobs')}
+            description={t('history.noCompletedJobsDesc')}
           />
         </View>
       ) : (

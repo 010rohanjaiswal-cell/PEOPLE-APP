@@ -3,11 +3,13 @@
  * Main dashboard with tab navigation for freelancers
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions, ActivityIndicator, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -29,6 +31,7 @@ import SettingsScreen from './Settings';
 
 const FreelancerDashboard = () => {
   const { user, logout, updateUser } = useAuth();
+  const { t } = useLanguage();
   const { requestPermission, checkPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
 
@@ -40,6 +43,17 @@ const FreelancerDashboard = () => {
     return () => clearTimeout(t);
   }, [requestPermission]);
 
+  // Stack of drawer screens so back follows history: e.g. Dashboard -> Wallet -> Profile -> Settings -> Orders; back -> Orders -> Settings -> Profile -> Wallet -> Dashboard
+  const [drawerScreenStack, setDrawerScreenStack] = useState([]);
+  const [logoutError, setLogoutError] = useState('');
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
+  const [verification, setVerification] = useState(null);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+
+  const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
+
   // Re-check GPS on/off every 10 seconds so we show or hide jobs correctly
   useEffect(() => {
     const interval = setInterval(() => {
@@ -47,13 +61,6 @@ const FreelancerDashboard = () => {
     }, 10000);
     return () => clearInterval(interval);
   }, [checkPermission]);
-  const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
-  const [logoutError, setLogoutError] = useState('');
-  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
-  const [verification, setVerification] = useState(null);
-  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
   // Refresh user profile on mount to get updated profile photo and verification data
   useEffect(() => {
@@ -98,8 +105,8 @@ const FreelancerDashboard = () => {
   }, []); // Only run on mount
 
   const tabs = [
-    { key: 'AvailableJobs', label: 'Available', icon: 'work', component: AvailableJobsScreen },
-    { key: 'MyJobs', label: 'My Jobs', icon: 'check-circle', component: MyJobsScreen },
+    { key: 'AvailableJobs', labelKey: 'available', icon: 'work', component: AvailableJobsScreen },
+    { key: 'MyJobs', labelKey: 'myJobs', icon: 'check-circle', component: MyJobsScreen },
   ];
 
   // Drawer menu items (screens accessible from drawer)
@@ -146,11 +153,42 @@ const FreelancerDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
+  // Push drawer screen onto stack so back follows history
   const handleDrawerNavigation = (screenKey) => {
-    setActiveDrawerScreen(screenKey);
+    setDrawerScreenStack(s => [...s, screenKey]);
     setActiveTab(null); // Clear tab selection when navigating to drawer screen
     closeDrawer();
   };
+
+  // Refs so BackHandler always reads latest state (useFocusEffect callback doesn't re-run when stack changes)
+  const drawerVisibleRef = useRef(drawerVisible);
+  const drawerScreenStackRef = useRef(drawerScreenStack);
+  drawerVisibleRef.current = drawerVisible;
+  drawerScreenStackRef.current = drawerScreenStack;
+
+  // Android back: only when this screen is focused. First close drawer, then pop stack, then allow exit. useFocusEffect so we run after navigator.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return;
+      const onBack = () => {
+        if (drawerVisibleRef.current) {
+          closeDrawer();
+          return true;
+        }
+        if (drawerScreenStackRef.current.length > 0) {
+          setDrawerScreenStack(s => {
+            const next = s.slice(0, -1);
+            if (next.length === 0) setActiveTab('AvailableJobs');
+            return next;
+          });
+          return true;
+        }
+        return false;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [])
+  );
 
   const handleLogout = () => {
     closeDrawer();
@@ -164,7 +202,7 @@ const FreelancerDashboard = () => {
       // For now, just logout
       await logout();
     } catch (error) {
-      setLogoutError('Failed to logout. Please try again.');
+      setLogoutError(t('common.logoutFailed'));
       setTimeout(() => setLogoutError(''), 5000);
     }
   };
@@ -181,7 +219,7 @@ const FreelancerDashboard = () => {
           <TouchableOpacity onPress={toggleDrawer} style={styles.menuButton}>
             <MaterialIcons name="menu" size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.logo}>People</Text>
+          <Text style={styles.logo}>{t('common.appName')}</Text>
         </View>
         <NotificationBell
           onPress={() => setNotificationModalVisible(true)}
@@ -190,15 +228,6 @@ const FreelancerDashboard = () => {
       </View>
 
       <GpsBanner />
-
-      {/* Breadcrumb Navigation - Only show on drawer screens */}
-      {activeDrawerScreen && (
-        <View style={styles.breadcrumb}>
-          <Text style={styles.breadcrumbText}>Dashboard</Text>
-          <MaterialIcons name="chevron-right" size={16} color={colors.text.secondary} />
-          <Text style={styles.breadcrumbText}>{activeDrawerScreen}</Text>
-        </View>
-      )}
 
         {/* Error Message */}
         {logoutError ? (
@@ -216,7 +245,7 @@ const FreelancerDashboard = () => {
                   key={tab.key}
                   onPress={() => {
                     setActiveTab(tab.key);
-                    setActiveDrawerScreen(null); // Clear drawer screen when selecting tab
+                    setDrawerScreenStack([]); // Clear drawer stack when selecting tab
                   }}
                   style={[
                     styles.tabButton,
@@ -235,7 +264,7 @@ const FreelancerDashboard = () => {
                     ]}
                     numberOfLines={1}
                   >
-                    {tab.label}
+                    {t('dashboard.' + tab.labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -292,7 +321,7 @@ const FreelancerDashboard = () => {
                 <View style={styles.drawerUserMeta}>
                   <View style={styles.drawerUserTextBlock}>
                     <Text style={styles.drawerUserName}>
-                      {verification?.fullName || user.verification?.fullName || user.fullName || 'Freelancer'}
+                      {verification?.fullName || user.verification?.fullName || user.fullName || t('common.freelancer')}
                     </Text>
                     <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
                   </View>
@@ -307,14 +336,14 @@ const FreelancerDashboard = () => {
               <View style={styles.drawerMenuItems}>
                 <TouchableOpacity 
                   onPress={() => {
-                    setActiveDrawerScreen(null);
+                    setDrawerScreenStack([]);
                     setActiveTab('AvailableJobs');
                     closeDrawer();
                   }} 
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="dashboard" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Dashboard</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('common.dashboard')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />
@@ -324,7 +353,7 @@ const FreelancerDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="account-balance-wallet" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Wallet</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.wallet')}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -332,7 +361,7 @@ const FreelancerDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="receipt" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Orders</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.orders')}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -340,7 +369,7 @@ const FreelancerDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="person" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Profile</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.profile')}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -348,7 +377,7 @@ const FreelancerDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="settings" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Settings</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.settings')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />
@@ -359,7 +388,7 @@ const FreelancerDashboard = () => {
                 >
                   <MaterialIcons name="logout" size={24} color={colors.error.main} />
                   <Text style={[styles.drawerMenuItemText, { color: colors.error.main }]}>
-                    Logout
+                    {t('common.logout')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -377,22 +406,22 @@ const FreelancerDashboard = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Logout</Text>
+            <Text style={styles.modalTitle}>{t('common.logout')}</Text>
             <Text style={styles.modalSubtitle}>
-              Are you sure you want to logout?
+              {t('common.logoutConfirmMessage')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => setLogoutModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.logoutModalButton]}
                 onPress={confirmLogout}
               >
-                <Text style={styles.modalSubmitText}>Logout</Text>
+                <Text style={styles.modalSubmitText}>{t('common.logout')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -440,19 +469,6 @@ const styles = StyleSheet.create({
     ...typography.h2,
     fontWeight: 'bold',
     color: colors.primary.main,
-  },
-  breadcrumb: {
-    backgroundColor: colors.cardBackground,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  breadcrumbText: {
-    ...typography.small,
-    color: colors.text.secondary,
   },
   errorContainer: {
     backgroundColor: colors.error.light,

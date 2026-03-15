@@ -3,11 +3,13 @@
  * Main dashboard with tab navigation for clients
  */
 
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder } from 'react-native';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -27,27 +29,23 @@ import SettingsScreen from './Settings';
 
 const ClientDashboard = () => {
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const { requestPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('PostJob');
-
-  // Ask for GPS when user lands on client dashboard (ensures dialog shows at right time)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      requestPermission();
-    }, 600);
-    return () => clearTimeout(t);
-  }, [requestPermission]);
-  const [activeDrawerScreen, setActiveDrawerScreen] = useState(null);
+  // Stack of drawer screens so back goes through history: e.g. [Wallet, Profile, Settings] -> back -> [Wallet, Profile] -> back -> [Wallet] -> back -> []
+  const [drawerScreenStack, setDrawerScreenStack] = useState([]);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
+  const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
+
   // Top tabs - only Post Job and My Jobs
   const tabs = [
-    { key: 'PostJob', label: 'Post Job', icon: 'add-circle', component: PostJobScreen },
-    { key: 'MyJobs', label: 'My Jobs', icon: 'work', component: MyJobsScreen },
+    { key: 'PostJob', labelKey: 'postJob', icon: 'add-circle', component: PostJobScreen },
+    { key: 'MyJobs', labelKey: 'myJobs', icon: 'work', component: MyJobsScreen },
   ];
 
   // Drawer menu items (screens accessible from drawer)
@@ -65,6 +63,14 @@ const ClientDashboard = () => {
     return tabs.find(tab => tab.key === activeTab)?.component || PostJobScreen;
   };
   const ActiveScreen = getActiveScreen();
+
+  // Ask for GPS when user lands on client dashboard (ensures dialog shows at right time)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      requestPermission();
+    }, 600);
+    return () => clearTimeout(t);
+  }, [requestPermission]);
 
 
   // Swipe gesture to switch between Post Job and My Jobs
@@ -109,11 +115,42 @@ const ClientDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
+  // Push drawer screen onto stack so back follows history: Dashboard -> Wallet -> Profile -> Settings -> Orders
   const handleDrawerNavigation = (screenKey) => {
-    setActiveDrawerScreen(screenKey);
+    setDrawerScreenStack(s => [...s, screenKey]);
     setActiveTab(null); // Clear tab selection when navigating to drawer screen
     closeDrawer();
   };
+
+  // Refs so BackHandler always reads latest state (useFocusEffect callback doesn't re-run when stack changes)
+  const drawerVisibleRef = useRef(drawerVisible);
+  const drawerScreenStackRef = useRef(drawerScreenStack);
+  drawerVisibleRef.current = drawerVisible;
+  drawerScreenStackRef.current = drawerScreenStack;
+
+  // Android back: only when this screen is focused. First close drawer, then pop stack, then allow exit. useFocusEffect so we run after navigator.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return;
+      const onBack = () => {
+        if (drawerVisibleRef.current) {
+          closeDrawer();
+          return true;
+        }
+        if (drawerScreenStackRef.current.length > 0) {
+          setDrawerScreenStack(s => {
+            const next = s.slice(0, -1);
+            if (next.length === 0) setActiveTab('PostJob');
+            return next;
+          });
+          return true;
+        }
+        return false;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [])
+  );
 
   const handleLogout = () => {
     closeDrawer();
@@ -127,7 +164,7 @@ const ClientDashboard = () => {
       // For now, just logout
       await logout();
     } catch (error) {
-      setLogoutError('Failed to logout. Please try again.');
+      setLogoutError(t('common.logoutFailed'));
       setTimeout(() => setLogoutError(''), 5000);
     }
   };
@@ -144,7 +181,7 @@ const ClientDashboard = () => {
           <TouchableOpacity onPress={toggleDrawer} style={styles.menuButton}>
             <MaterialIcons name="menu" size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.logo}>People</Text>
+          <Text style={styles.logo}>{t('common.appName')}</Text>
         </View>
         <NotificationBell
           onPress={() => setNotificationModalVisible(true)}
@@ -153,15 +190,6 @@ const ClientDashboard = () => {
       </View>
 
       <GpsBanner />
-
-      {/* Breadcrumb Navigation - Only show on drawer screens */}
-      {activeDrawerScreen && (
-        <View style={styles.breadcrumb}>
-          <Text style={styles.breadcrumbText}>Dashboard</Text>
-          <MaterialIcons name="chevron-right" size={16} color={colors.text.secondary} />
-          <Text style={styles.breadcrumbText}>{activeDrawerScreen}</Text>
-        </View>
-      )}
 
         {/* Error Message */}
         {logoutError ? (
@@ -195,7 +223,7 @@ const ClientDashboard = () => {
                     ]}
                     numberOfLines={1}
                   >
-                    {tab.label}
+                    {t('dashboard.' + tab.labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -251,7 +279,7 @@ const ClientDashboard = () => {
                 )}
                 <View style={styles.drawerUserMeta}>
                   <View style={styles.drawerUserTextBlock}>
-                    <Text style={styles.drawerUserName}>{user.fullName || 'User'}</Text>
+                    <Text style={styles.drawerUserName}>{user.fullName || t('common.user')}</Text>
                     <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
                   </View>
                 </View>
@@ -261,14 +289,14 @@ const ClientDashboard = () => {
               <View style={styles.drawerMenuItems}>
                 <TouchableOpacity 
                   onPress={() => {
-                    closeDrawer();
-                    setActiveDrawerScreen(null);
+                    setDrawerScreenStack([]);
                     setActiveTab('PostJob');
+                    closeDrawer();
                   }} 
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="dashboard" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Dashboard</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('common.dashboard')}</Text>
                 </TouchableOpacity>
                 <View style={styles.drawerMenuDivider} />
                 <TouchableOpacity 
@@ -276,7 +304,7 @@ const ClientDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="history" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>History</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.history')}</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -284,7 +312,7 @@ const ClientDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="person" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Profile</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.profile')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -292,7 +320,7 @@ const ClientDashboard = () => {
                   style={styles.drawerMenuItem}
                 >
                   <MaterialIcons name="settings" size={24} color={colors.text.primary} />
-                  <Text style={styles.drawerMenuItemText}>Settings</Text>
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.settings')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />
@@ -303,7 +331,7 @@ const ClientDashboard = () => {
                 >
                   <MaterialIcons name="logout" size={24} color={colors.error.main} />
                   <Text style={[styles.drawerMenuItemText, { color: colors.error.main }]}>
-                    Logout
+                    {t('common.logout')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -321,22 +349,22 @@ const ClientDashboard = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Logout</Text>
+            <Text style={styles.modalTitle}>{t('common.logout')}</Text>
             <Text style={styles.modalSubtitle}>
-              Are you sure you want to logout?
+              {t('common.logoutConfirmMessage')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => setLogoutModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.logoutModalButton]}
                 onPress={confirmLogout}
               >
-                <Text style={styles.modalSubmitText}>Logout</Text>
+                <Text style={styles.modalSubmitText}>{t('common.logout')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -384,19 +412,6 @@ const styles = StyleSheet.create({
     ...typography.h2,
     fontWeight: 'bold',
     color: colors.primary.main,
-  },
-  breadcrumb: {
-    backgroundColor: colors.cardBackground,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  breadcrumbText: {
-    ...typography.small,
-    color: colors.text.secondary,
   },
   errorContainer: {
     backgroundColor: colors.error.light,

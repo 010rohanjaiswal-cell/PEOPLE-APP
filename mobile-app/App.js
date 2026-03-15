@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UserProvider } from './src/context/UserContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import { LocationProvider } from './src/context/LocationContext';
+import { LanguageProvider } from './src/context/LanguageContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
 import { warmupBackend } from './src/api/client';
@@ -64,14 +65,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <UserProvider>
-          <NotificationProvider>
-            <LocationProvider>
-              <StatusBar style="dark" translucent={false} />
-              <AppContent />
-            </LocationProvider>
-          </NotificationProvider>
-        </UserProvider>
+        <LanguageProvider>
+          <UserProvider>
+            <NotificationProvider>
+              <LocationProvider>
+                <StatusBar style="dark" translucent={false} />
+                <AppContent />
+              </LocationProvider>
+            </NotificationProvider>
+          </UserProvider>
+        </LanguageProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -18,8 +18,10 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
+import { translateJobToHindi } from '../../utils/translate';
 import EditJobModal from '../../components/modals/EditJobModal';
 import OffersModal from '../../components/modals/OffersModal';
 import BillModal from '../../components/modals/BillModal';
@@ -28,6 +30,7 @@ import UserDetailsModal from '../../components/modals/UserDetailsModal';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const MyJobs = () => {
+  const { t, locale } = useLanguage();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +45,7 @@ const MyJobs = () => {
   const [deleteJob, setDeleteJob] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [translatedJobs, setTranslatedJobs] = useState({});
 
   const loadJobs = async () => {
     try {
@@ -57,7 +61,7 @@ const MyJobs = () => {
       }
     } catch (err) {
       console.error('Error loading client jobs:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load jobs');
+      setError(err.response?.data?.error || err.message || t('jobs.failedLoadClientJobs'));
       setJobs([]);
     } finally {
       setLoading(false);
@@ -68,6 +72,29 @@ const MyJobs = () => {
   useEffect(() => {
     loadJobs();
   }, []);
+
+  // When locale is Hindi, translate job title/description/address/pincode for display
+  useEffect(() => {
+    if (locale !== 'hi' || !jobs.length) {
+      if (locale !== 'hi') setTranslatedJobs({});
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      for (const job of jobs) {
+        const id = job._id || job.id;
+        if (!id) continue;
+        try {
+          const translated = await translateJobToHindi(job);
+          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
+        } catch (e) {
+          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: { title: job.title, description: job.description || '', address: job.address || '', pincode: job.pincode || '' } }));
+        }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [locale, jobs]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -96,11 +123,11 @@ const MyJobs = () => {
         setSuccessModalVisible(true);
         loadJobs();
       } else {
-        Alert.alert('Error', response.error || 'Failed to delete job');
+        Alert.alert(t('common.error'), response.error || t('jobs.failedDeleteJob'));
       }
     } catch (err) {
       console.error('Error deleting job:', err);
-      Alert.alert('Error', err.response?.data?.error || 'Failed to delete job');
+      Alert.alert(t('common.error'), err.response?.data?.error || t('jobs.failedDeleteJob'));
     } finally {
       setDeleting(false);
     }
@@ -123,7 +150,7 @@ const MyJobs = () => {
   const handleViewFreelancer = async (job) => {
     const freelancer = job.assignedFreelancer;
     if (!freelancer) {
-      Alert.alert('Error', 'No freelancer assigned');
+      Alert.alert(t('common.error'), t('jobs.noFreelancerAssigned'));
       return;
     }
 
@@ -217,23 +244,30 @@ const MyJobs = () => {
   };
 
   const renderJobItem = ({ item }) => {
+    const jobId = item._id || item.id;
+    const tr = locale === 'hi' && translatedJobs[jobId];
+    const title = tr ? tr.title : item.title;
+    const description = tr ? tr.description : (item.description || '');
+    const address = tr ? tr.address : (item.address || '');
+    const pincode = tr ? tr.pincode : (item.pincode || '');
+
     const statusStyle = getStatusBadgeStyle(item.status);
     const offersCount = getOffersCount(item);
     const showEditDelete = canEditOrDelete(item);
     // Default to expanded (true) unless explicitly set to false
-    const isExpanded = expandedJobs[item._id || item.id] !== false;
-    const hasDetails = item.description || item.address || item.gender || item.pincode || 
+    const isExpanded = expandedJobs[jobId] !== false;
+    const hasDetails = item.description || item.address || item.gender || item.pincode ||
       ((item.status === 'assigned' || item.status === 'work_done' || item.status === 'completed') && item.assignedFreelancer);
 
     return (
       <TouchableOpacity
         style={styles.jobCard}
-        onPress={() => hasDetails && toggleJobExpansion(item._id || item.id)}
+        onPress={() => hasDetails && toggleJobExpansion(jobId)}
         activeOpacity={hasDetails ? 0.7 : 1}
       >
         <View style={styles.jobHeader}>
           <View style={styles.jobTitleRow}>
-            <Text style={styles.jobTitle}>{item.title}</Text>
+            <Text style={styles.jobTitle}>{title}</Text>
             {showEditDelete && (
               <View style={styles.editDeleteButtons}>
                 <TouchableOpacity
@@ -263,7 +297,7 @@ const MyJobs = () => {
               style={[styles.statusBadge, { backgroundColor: statusStyle.backgroundColor }]}
             >
               <Text style={[styles.statusText, { color: statusStyle.color }]}>
-                {(item.status || 'open').toUpperCase()}
+                {t('status.' + (item.status || 'open').replace(/-/g, '_'))}
               </Text>
             </View>
           </View>
@@ -271,24 +305,24 @@ const MyJobs = () => {
 
         {isExpanded && (
           <>
-            {item.description ? (
+            {description ? (
               <Text style={styles.jobDescription} numberOfLines={2}>
-                {item.description}
+                {description}
               </Text>
             ) : null}
             <View style={styles.jobAddressRow}>
               <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-              <Text style={styles.jobAddress}>{item.address}</Text>
+              <Text style={styles.jobAddress}>{address}</Text>
             </View>
             <View style={styles.jobMetaRow}>
               <View style={styles.jobMetaLeft}>
                 <View style={styles.jobMeta}>
                   <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-                  <Text style={styles.jobMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
+                  <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
                 </View>
                 <View style={styles.jobMeta}>
                   <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-                  <Text style={styles.jobMetaText}>{item.pincode}</Text>
+                  <Text style={styles.jobMetaText}>{pincode}</Text>
                 </View>
               </View>
               {(item.status === 'assigned' ||
@@ -303,7 +337,7 @@ const MyJobs = () => {
                     }}
                   >
                     <MaterialIcons name="person" size={16} color={colors.primary.main} />
-                    <Text style={styles.viewFreelancerMetaText}>View Freelancer</Text>
+                    <Text style={styles.viewFreelancerMetaText}>{t('jobs.viewFreelancer')}</Text>
                   </TouchableOpacity>
                 )}
             </View>
@@ -322,7 +356,7 @@ const MyJobs = () => {
             >
               <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
               <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                View Offers
+                {t('jobs.viewOffers')}
               </Text>
             </TouchableOpacity>
           )}
@@ -336,7 +370,7 @@ const MyJobs = () => {
               }}
             >
               <MaterialIcons name="payment" size={18} color="#FFFFFF" />
-              <Text style={[styles.actionButtonText, { color: '#FFFFFF' }]}>Pay</Text>
+              <Text style={[styles.actionButtonText, { color: '#FFFFFF' }]}>{t('jobs.pay')}</Text>
             </TouchableOpacity>
           )}
 
@@ -344,7 +378,7 @@ const MyJobs = () => {
             <View style={styles.completedBadge}>
               <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
               <Text style={[styles.completedText, { color: colors.success.main }]}>
-                Payment Completed
+                {t('jobs.paymentCompleted')}
               </Text>
             </View>
           )}
@@ -372,8 +406,8 @@ const MyJobs = () => {
       {jobs.length === 0 ? (
         <EmptyState
           icon={<MaterialIcons name="work" size={64} color={colors.text.muted} />}
-          title="No active jobs found"
-          description="Post your first job to get started!"
+          title={t('jobs.noActiveJobs')}
+          description={t('jobs.noActiveJobsDesc')}
         />
       ) : (
         <FlatList
@@ -421,8 +455,8 @@ const MyJobs = () => {
       <UserDetailsModal
         visible={freelancerModalVisible}
         user={selectedJob?.assignedFreelancer || null}
-        roleLabel="Freelancer"
-        title="Freelancer Details"
+        roleLabel={t('common.freelancer')}
+        title={t('jobs.freelancerDetails')}
         onClose={() => {
           setFreelancerModalVisible(false);
           // keep selectedJob for other modals; don't clear here
@@ -438,9 +472,9 @@ const MyJobs = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Delete Job</Text>
+            <Text style={styles.modalTitle}>{t('jobs.deleteJob')}</Text>
             <Text style={styles.modalSubtitle}>
-              Are you sure you want to delete this job?
+              {t('jobs.deleteJobConfirm')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -451,7 +485,7 @@ const MyJobs = () => {
                 }}
                 disabled={deleting}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.deleteModalButton]}
@@ -461,7 +495,7 @@ const MyJobs = () => {
                 {deleting ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Delete</Text>
+                  <Text style={styles.modalSubmitText}>{t('common.delete')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -479,13 +513,13 @@ const MyJobs = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <MaterialIcons name="check-circle" size={48} color={colors.success.main} style={styles.modalIcon} />
-            <Text style={styles.modalTitle}>Success</Text>
-            <Text style={styles.modalSubtitle}>Job deleted successfully.</Text>
+            <Text style={styles.modalTitle}>{t('common.success')}</Text>
+            <Text style={styles.modalSubtitle}>{t('jobs.jobDeletedSuccess')}</Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
               onPress={() => setSuccessModalVisible(false)}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>

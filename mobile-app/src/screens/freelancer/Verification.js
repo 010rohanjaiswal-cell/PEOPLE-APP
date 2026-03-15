@@ -22,9 +22,11 @@ import { verificationAPI, userAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 const Verification = ({ navigation }) => {
   const { updateUser } = useAuth();
+  const { t } = useLanguage();
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,6 +60,17 @@ const Verification = ({ navigation }) => {
     checkVerificationStatus();
   }, []);
 
+  // Prefill name and profile photo from client profile when user has client account (same number, first time as freelancer)
+  const hasPrefilledFromClient = React.useRef(false);
+  useEffect(() => {
+    if (hasPrefilledFromClient.current) return;
+    const fromClient = user?.fullName || user?.profilePhoto;
+    if (!fromClient) return;
+    setFullName((prev) => (prev ? prev : (user?.fullName || '')));
+    setProfilePhotoUri((prev) => (prev ? prev : (user?.profilePhoto || null)));
+    hasPrefilledFromClient.current = true;
+  }, [user?.fullName, user?.profilePhoto]);
+
   // Auto-navigate to dashboard if verification is approved
   useEffect(() => {
     if (status === VERIFICATION_STATUS.APPROVED && !loading) {
@@ -79,7 +92,7 @@ const Verification = ({ navigation }) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        showErrorModal('Permission denied', 'Allow camera access to take a photo.');
+        showErrorModal(t('verification.permissionDenied'), t('verification.allowCameraAccess'));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -93,7 +106,7 @@ const Verification = ({ navigation }) => {
       }
     } catch (err) {
       console.error(`Error picking ${label}:`, err);
-      showErrorModal('Upload failed', `Could not select ${label}. Please try again.`);
+      showErrorModal(t('verification.uploadFailed'), t('verification.couldNotSelect').replace('{label}', label));
     }
   };
 
@@ -208,7 +221,7 @@ const Verification = ({ navigation }) => {
   const handleSubmitVerification = async () => {
     // Basic validation
     if (!fullName || !dob || !gender || !address || !profilePhotoUri || !docFrontUri || !docBackUri || !panCardUri) {
-      showErrorModal('Missing info', 'Please fill all required fields and upload all documents (including profile photo).');
+      showErrorModal(t('verification.missingInfo'), t('verification.fillAllRequired'));
       return;
     }
     setSubmitting(true);
@@ -296,7 +309,7 @@ const Verification = ({ navigation }) => {
       {/* Date Picker */}
       <TouchableOpacity style={styles.selector} onPress={() => setDatePickerVisible(true)}>
         <Text style={styles.selectorLabel}>Date of Birth</Text>
-        <Text style={styles.selectorValue}>{dob || 'Select date'}</Text>
+        <Text style={styles.selectorValue}>{dob || t('verification.selectDate')}</Text>
       </TouchableOpacity>
 
       {/* Gender Selector */}
@@ -512,12 +525,12 @@ const Verification = ({ navigation }) => {
                     setDob(`${selectedYear}-${selectedMonth}-${selectedDay}`);
                     setDatePickerVisible(false);
                   } else {
-                    showErrorModal('Select date', 'Please select year, month, and day.');
+                    showErrorModal(t('verification.selectDate'), t('verification.pleaseSelectDate'));
                   }
                 }}
                 style={styles.modalButton}
               >
-                Confirm
+                {t('common.confirm')}
               </Button>
             </View>
           </View>
@@ -545,7 +558,7 @@ const Verification = ({ navigation }) => {
                 style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
                 onPress={() => setErrorModalVisible(false)}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>

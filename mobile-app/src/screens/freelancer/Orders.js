@@ -16,10 +16,12 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 
 const Orders = () => {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,7 +44,7 @@ const Orders = () => {
       }
     } catch (err) {
       console.error('Error loading freelancer orders:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load orders');
+      setError(err.response?.data?.error || err.message || t('orders.failedLoadOrders'));
       setOrders([]);
     } finally {
       setLoading(false);
@@ -120,13 +122,14 @@ const Orders = () => {
   }, [filteredOrders.length, currentPage, totalPages]);
 
   const filterOptions = [
-    { key: 'all', label: 'All' },
-    { key: 'today', label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-    { key: 'week', label: 'Week' },
-    { key: 'month', label: 'Month' },
-    { key: '6months', label: '6 Months' },
+    { key: 'all', labelKey: 'filterAll' },
+    { key: 'today', labelKey: 'filterToday' },
+    { key: 'yesterday', labelKey: 'filterYesterday' },
+    { key: 'week', labelKey: 'filterWeek' },
+    { key: 'month', labelKey: 'filterMonth' },
+    { key: '6months', labelKey: 'filter6Months' },
   ];
+  const getFilterLabel = (option) => t('orders.' + option.labelKey);
 
   const renderOrderItem = ({ item }) => {
     const client = item.client || {};
@@ -139,7 +142,7 @@ const Orders = () => {
           </Text>
           <View style={styles.completedBadge}>
             <MaterialIcons name="check-circle" size={16} color={colors.success.main} />
-            <Text style={styles.completedText}>Completed</Text>
+            <Text style={styles.completedText}>{t('orders.completed')}</Text>
           </View>
         </View>
 
@@ -155,17 +158,17 @@ const Orders = () => {
           </View>
           <View style={styles.orderMeta}>
             <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-            <Text style={styles.orderMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
+            <Text style={styles.orderMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
           </View>
         </View>
 
         <Text style={styles.orderDate}>
-          Completed on {new Date(item.updatedAt || item.createdAt).toLocaleString()}
+          {t('orders.completedOn')} {new Date(item.updatedAt || item.createdAt).toLocaleString()}
         </Text>
 
         {client.fullName ? (
           <Text style={styles.clientInfo}>
-            Client: {client.fullName || 'N/A'}
+            {t('orders.clientLabel')}: {client.fullName || 'N/A'}
           </Text>
         ) : null}
       </View>
@@ -218,7 +221,7 @@ const Orders = () => {
                   selectedFilter === option.key && styles.filterButtonTextActive,
                 ]}
               >
-                {option.label}
+                {getFilterLabel(option)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -229,11 +232,11 @@ const Orders = () => {
         <View style={styles.emptyContainer}>
           <EmptyState
             icon={<MaterialIcons name="receipt" size={64} color={colors.text.muted} />}
-            title="No orders found"
+            title={t('orders.noOrdersFound')}
             description={
               selectedFilter === 'all'
-                ? 'Completed jobs will appear here as orders.'
-                : `No orders found for ${filterOptions.find((f) => f.key === selectedFilter)?.label.toLowerCase() || 'selected period'}.`
+                ? t('orders.completedOrdersDesc')
+                : t('orders.noOrdersForPeriod')
             }
           />
         </View>

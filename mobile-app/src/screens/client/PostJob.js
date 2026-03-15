@@ -11,8 +11,25 @@ import { Button, Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
+import { useLanguage } from '../../context/LanguageContext';
+
+const CATEGORY_KEYS = {
+  'Delivery': 'Delivery',
+  'Cooking': 'Cooking',
+  'Cleaning': 'Cleaning',
+  'Plumbing': 'Plumbing',
+  'Electrical': 'Electrical',
+  'Mechanic': 'Mechanic',
+  'Driver': 'Driver',
+  'Care taker': 'CareTaker',
+  'Tailor': 'Tailor',
+  'Barber': 'Barber',
+  'Laundry': 'Laundry',
+  'Other': 'Other',
+};
 
 const PostJob = ({ onJobPosted }) => {
+  const { t } = useLanguage();
   const { gpsEnabled, gpsDenied } = useLocation();
   const scrollViewRef = useRef(null);
   const descriptionInputRef = useRef(null);
@@ -53,32 +70,32 @@ const PostJob = ({ onJobPosted }) => {
 
   const handleSubmit = async () => {
     if (gpsDenied || !gpsEnabled) {
-      setError('Please turn on GPS to post a job.');
+      setError(t('postJob.gpsToPostJob'));
       return;
     }
     // Validation
     if (!validateRequired(formData.title)) {
-      setError('Please enter a job title');
+      setError(t('jobs.pleaseEnterJobTitle'));
       return;
     }
     if (!formData.category) {
-      setError('Please select a category');
+      setError(t('jobs.pleaseSelectCategory'));
       return;
     }
     if (!validateRequired(formData.address)) {
-      setError('Please enter an address');
+      setError(t('jobs.pleaseEnterAddress'));
       return;
     }
     if (!validatePincode(formData.pincode)) {
-      setError('Please enter a valid 6-digit pincode');
+      setError(t('jobs.pleaseEnterValidPincode'));
       return;
     }
     if (!formData.budget || parseFloat(formData.budget) < 10) {
-      setError('Budget must be at least ₹10');
+      setError(t('jobs.budgetMin10'));
       return;
     }
     if (!formData.gender) {
-      setError('Please select a gender preference');
+      setError(t('jobs.pleaseSelectGender'));
       return;
     }
 
@@ -102,11 +119,11 @@ const PostJob = ({ onJobPosted }) => {
         setLoading(false);
         setSuccessModalVisible(true);
       } else {
-        throw new Error(result.error || 'Failed to post job');
+        throw new Error(result.error || t('postJob.failedToPostJob'));
       }
     } catch (error) {
       console.error('Error posting job:', error);
-      setError(error.response?.data?.error || error.message || 'Failed to post job. Please try again.');
+      setError(error.response?.data?.error || error.message || t('postJob.failedToPostJobTryAgain'));
     } finally {
       setLoading(false);
     }
@@ -130,15 +147,15 @@ const PostJob = ({ onJobPosted }) => {
         {gpsDenied && (
           <View style={styles.gpsMessageBox}>
             <MaterialIcons name="location-off" size={24} color={colors.warning.main} />
-            <Text style={styles.gpsMessageBoxText}>Please turn on GPS to post a job.</Text>
+            <Text style={styles.gpsMessageBoxText}>{t('postJob.gpsToPostJob')}</Text>
           </View>
         )}
         <Card style={styles.card}>
         <CardContent>
           {/* Job Title */}
           <Input
-            label="Job Title"
-            placeholder="Enter job title"
+            label={t('postJob.jobTitle')}
+            placeholder={t('postJob.enterJobTitle')}
             value={formData.title}
             onChangeText={(value) => handleChange('title', value)}
             style={styles.inputField}
@@ -146,7 +163,7 @@ const PostJob = ({ onJobPosted }) => {
 
           {/* Category */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Category</Text>
+            <Text style={styles.label}>{t('postJob.category')}</Text>
             <View style={styles.categoryGrid}>
               {categories.map((cat) => (
                 <TouchableOpacity
@@ -163,7 +180,7 @@ const PostJob = ({ onJobPosted }) => {
                       formData.category === cat && styles.categoryTextActive,
                     ]}
                   >
-                    {cat}
+                    {t('postJob.category' + (CATEGORY_KEYS[cat] || cat))}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -172,8 +189,8 @@ const PostJob = ({ onJobPosted }) => {
 
           {/* Address */}
           <Input
-            label="Address"
-            placeholder="Enter address"
+            label={t('postJob.address')}
+            placeholder={t('postJob.enterAddress')}
             value={formData.address}
             onChangeText={(value) => handleChange('address', value)}
             style={styles.inputField}
@@ -181,8 +198,8 @@ const PostJob = ({ onJobPosted }) => {
 
           {/* Pincode */}
           <Input
-            label="Pincode"
-            placeholder="e.g., 400001"
+            label={t('postJob.pincode')}
+            placeholder={t('postJob.pincodePlaceholder')}
             value={formData.pincode}
             onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
             keyboardType="number-pad"
@@ -193,8 +210,8 @@ const PostJob = ({ onJobPosted }) => {
           {/* Budget */}
           <View style={styles.inputWrapper} onStartShouldSetResponder={() => true}>
             <Input
-              label="Budget (₹)"
-              placeholder="1000"
+              label={t('postJob.budget')}
+              placeholder={t('postJob.budgetPlaceholder')}
               value={formData.budget}
               onChangeText={(value) => handleChange('budget', value.replace(/\D/g, ''))}
               keyboardType="number-pad"
@@ -209,7 +226,7 @@ const PostJob = ({ onJobPosted }) => {
 
           {/* Gender */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Gender Preference</Text>
+            <Text style={styles.label}>{t('postJob.genderPreference')}</Text>
             <View style={styles.genderContainer}>
               {genders.map((gen) => (
                 <TouchableOpacity
@@ -226,7 +243,7 @@ const PostJob = ({ onJobPosted }) => {
                       formData.gender === gen && styles.genderTextActive,
                     ]}
                   >
-                    {gen}
+                    {t('gender.' + (gen === 'Any' ? 'any' : gen.toLowerCase()))}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -240,8 +257,8 @@ const PostJob = ({ onJobPosted }) => {
             onStartShouldSetResponder={() => true}
           >
             <Input
-              label="Job Description (Optional)"
-              placeholder="Describe the job requirements..."
+              label={t('postJob.jobDescriptionOptional')}
+              placeholder={t('postJob.jobDescriptionPlaceholder')}
               value={formData.description}
               onChangeText={(value) => handleChange('description', value)}
               multiline
@@ -267,7 +284,7 @@ const PostJob = ({ onJobPosted }) => {
             ) : (
               <View style={styles.buttonContent}>
                 <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-                <Text style={styles.buttonText}>Post Job</Text>
+                <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
                 {error ? (
                   <View style={styles.errorInline}>
                     <MaterialIcons name="error-outline" size={16} color="#FFFFFF" />
@@ -310,9 +327,9 @@ const PostJob = ({ onJobPosted }) => {
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
-            <Text style={styles.modalTitle}>Job Posted Successfully</Text>
+            <Text style={styles.modalTitle}>{t('postJob.jobPostedSuccessfully')}</Text>
             <Text style={styles.modalSubtitle}>
-              Your job has been posted successfully!
+              {t('postJob.jobPostedSuccessMessage')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -335,7 +352,7 @@ const PostJob = ({ onJobPosted }) => {
                   }
                 }}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>

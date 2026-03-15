@@ -19,10 +19,12 @@ import { colors, spacing, typography } from '../../theme';
 import { Button, Input, Card, CardContent } from '../../components/common';
 import { validateRequired } from '../../utils/validation';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ProfileSetup = ({ navigation }) => {
   const { user, updateUser } = useAuth();
+  const { t } = useLanguage();
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [profilePhotoUri, setProfilePhotoUri] = useState(user?.profilePhoto || null);
@@ -47,7 +49,7 @@ const ProfileSetup = ({ navigation }) => {
       // Request camera permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera permission is required to take a photo.');
+        Alert.alert(t('auth.permissionDenied'), t('auth.cameraPermissionRequired'));
         return;
       }
 
@@ -66,7 +68,7 @@ const ProfileSetup = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      setError('Failed to take photo. Please try again.');
+      setError(t('auth.failedToTakePhoto'));
     }
   };
 
@@ -75,7 +77,7 @@ const ProfileSetup = ({ navigation }) => {
       // Request media library permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Gallery permission is required to select a photo.');
+        Alert.alert(t('auth.permissionDenied'), t('auth.galleryPermissionRequired'));
         return;
       }
 

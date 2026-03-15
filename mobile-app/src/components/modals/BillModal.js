@@ -16,10 +16,12 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import { clientJobsAPI } from '../../api/clientJobs';
 
 const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
+  const { t } = useLanguage();
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -144,9 +146,9 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Confirm Payment</Text>
+          <Text style={styles.modalTitle}>{t('bill.confirmPayment')}</Text>
           <Text style={styles.modalSubtitle}>
-            Mark payment of ₹{amount} as completed?
+            {t('bill.confirmPaymentMessage').replace('{amount}', amount)}
           </Text>
           <View style={styles.modalActions}>
             <TouchableOpacity
@@ -154,7 +156,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
               onPress={() => setConfirmModalVisible(false)}
               disabled={processing}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.paymentModalButton]}
@@ -164,7 +166,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
               {processing ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.modalSubmitText}>Paid</Text>
+                <Text style={styles.modalSubmitText}>{t('bill.paid')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -184,16 +186,16 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
           <View style={styles.successIconContainer}>
             <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
           </View>
-          <Text style={styles.modalTitle}>Payment Successful</Text>
+          <Text style={styles.modalTitle}>{t('bill.paymentSuccessful')}</Text>
           <Text style={styles.modalSubtitle}>
-            Payment recorded successfully!
+            {t('bill.paymentRecordedSuccess')}
           </Text>
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
               onPress={handleSuccessClose}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -212,7 +214,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
           <View style={styles.errorIconContainer}>
             <MaterialIcons name="error-outline" size={64} color={colors.error.main} />
           </View>
-          <Text style={styles.modalTitle}>Error</Text>
+          <Text style={styles.modalTitle}>{t('common.error')}</Text>
           <Text style={styles.modalSubtitle}>
             {errorMessage}
           </Text>
@@ -221,7 +223,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
               style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
               onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>

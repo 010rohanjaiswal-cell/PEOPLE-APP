@@ -15,11 +15,13 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { Button, Input } from '../common';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import { clientJobsAPI } from '../../api/clientJobs';
 
 const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -72,27 +74,27 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const handleSubmit = async () => {
     // Validation
     if (!validateRequired(formData.title)) {
-      setError('Please enter a job title');
+      setError(t('jobs.pleaseEnterJobTitle'));
       return;
     }
     if (!formData.category) {
-      setError('Please select a category');
+      setError(t('jobs.pleaseSelectCategory'));
       return;
     }
     if (!validateRequired(formData.address)) {
-      setError('Please enter an address');
+      setError(t('jobs.pleaseEnterAddress'));
       return;
     }
     if (!validatePincode(formData.pincode)) {
-      setError('Please enter a valid 6-digit pincode');
+      setError(t('jobs.pleaseEnterValidPincode'));
       return;
     }
     if (!formData.budget || parseFloat(formData.budget) < 10) {
-      setError('Budget must be at least ₹10');
+      setError(t('jobs.budgetMin10'));
       return;
     }
     if (!formData.gender) {
-      setError('Please select a gender preference');
+      setError(t('jobs.pleaseSelectGender'));
       return;
     }
 
@@ -113,15 +115,15 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       const result = await clientJobsAPI.updateJob(job._id, jobData);
 
       if (result.success) {
-        Alert.alert('Success', 'Job updated successfully!');
+        Alert.alert(t('common.success'), t('jobs.jobUpdatedSuccess'));
         if (onSuccess) onSuccess();
         onClose();
       } else {
-        setError(result.error || 'Failed to update job');
+        setError(result.error || t('jobs.failedUpdateJob'));
       }
     } catch (err) {
       console.error('Error updating job:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to update job');
+      setError(err.response?.data?.error || err.message || t('jobs.failedUpdateJob'));
     } finally {
       setLoading(false);
     }

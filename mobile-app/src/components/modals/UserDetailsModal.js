@@ -7,10 +7,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Linking, Alert, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import ChatModal from './ChatModal';
 
 const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
+  const { t } = useLanguage();
   const [chatModalVisible, setChatModalVisible] = useState(false);
   
   if (!visible || !user) return null;
@@ -62,7 +64,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
 
   const handleCall = () => {
     if (!phone) {
-      Alert.alert('Error', 'Phone number not available');
+      Alert.alert(t('common.error'), t('common.phoneNumberNotAvailable'));
       return;
     }
     // Remove spaces but keep + for tel: link
@@ -70,7 +72,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
     const telUrl = `tel:${phoneNumber}`;
     Linking.openURL(telUrl).catch((err) => {
       console.error('Error opening phone dialer:', err);
-      Alert.alert('Error', 'Unable to open phone dialer');
+      Alert.alert(t('common.error'), t('common.unableToOpenDialer'));
     });
   };
 
@@ -84,7 +86,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.title}>{title || 'User Details'}</Text>
+            <Text style={styles.title}>{title || t('common.userDetails')}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <MaterialIcons name="close" size={24} color={colors.text.primary} />
             </TouchableOpacity>

@@ -17,10 +17,12 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import { clientJobsAPI } from '../../api/clientJobs';
 
 const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
+  const { t } = useLanguage();
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +50,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     const jobId = job?._id || job?.id;
     if (!jobId) {
       console.error('No job ID found:', job);
-      setErrorMessage('Job ID not found');
+      setErrorMessage(t('offers.jobIdNotFound'));
       setErrorModalVisible(true);
       setLoading(false);
       return;
@@ -76,7 +78,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
       }
     } catch (err) {
       console.error('Error loading offers:', err);
-      setErrorMessage(err.response?.data?.error || err.message || 'Failed to load offers');
+      setErrorMessage(err.response?.data?.error || err.message || t('offers.failedLoadOffers'));
       setErrorModalVisible(true);
       setOffers([]);
     } finally {
@@ -207,7 +209,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
                 <MaterialIcons name="inbox" size={64} color={colors.text.muted} />
                 <Text style={styles.emptyText}>No offers yet</Text>
                 <Text style={styles.emptySubtext}>
-                  Freelancers can make offers on this job
+                  {t('offers.freelancersCanMakeOffers')}
                 </Text>
               </View>
             ) : (
@@ -325,22 +327,22 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Accept Offer</Text>
+          <Text style={styles.modalTitle}>{t('offers.acceptOffer')}</Text>
           <Text style={styles.modalSubtitle}>
-            Are you sure you want to accept this offer?
+            {t('offers.acceptOfferConfirm')}
           </Text>
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalCancelButton]}
               onPress={() => setAcceptConfirmVisible(false)}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton]}
               onPress={confirmAcceptOffer}
             >
-              <Text style={styles.modalSubmitText}>Accept</Text>
+              <Text style={styles.modalSubmitText}>{t('offers.accept')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -359,16 +361,16 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
           <View style={styles.successIconContainer}>
             <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
           </View>
-          <Text style={styles.modalTitle}>Offer Accepted</Text>
+          <Text style={styles.modalTitle}>{t('offers.offerAccepted')}</Text>
           <Text style={styles.modalSubtitle}>
-            Offer accepted successfully!
+            {t('offers.offerAcceptedSuccess')}
           </Text>
           <View style={[styles.modalActions, styles.modalActionsCentered]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
               onPress={handleAcceptSuccessClose}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -384,22 +386,22 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Reject Offer</Text>
+          <Text style={styles.modalTitle}>{t('offers.rejectOffer')}</Text>
           <Text style={styles.modalSubtitle}>
-            Are you sure you want to reject this offer?
+            {t('offers.rejectOfferConfirm')}
           </Text>
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalCancelButton]}
               onPress={() => setRejectConfirmVisible(false)}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.rejectModalButton]}
               onPress={confirmRejectOffer}
             >
-              <Text style={styles.modalSubmitText}>Reject</Text>
+              <Text style={styles.modalSubmitText}>{t('offers.reject')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -418,16 +420,16 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
           <View style={styles.successIconContainer}>
             <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
           </View>
-          <Text style={styles.modalTitle}>Offer Rejected</Text>
+          <Text style={styles.modalTitle}>{t('offers.offerRejected')}</Text>
           <Text style={styles.modalSubtitle}>
-            Offer rejected successfully
+            {t('offers.offerRejectedSuccess')}
           </Text>
           <View style={[styles.modalActions, styles.modalActionsCentered]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
               onPress={handleRejectSuccessClose}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -446,7 +448,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
           <View style={styles.errorIconContainer}>
             <MaterialIcons name="error" size={64} color={colors.error.main} />
           </View>
-          <Text style={styles.modalTitle}>Error</Text>
+          <Text style={styles.modalTitle}>{t('common.error')}</Text>
           <Text style={styles.modalSubtitle}>
             {errorMessage}
           </Text>
@@ -455,7 +457,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
               style={[styles.modalButton, styles.modalSubmitButton]}
               onPress={() => setErrorModalVisible(false)}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -240,11 +240,34 @@ router.post('/verify-otp', async (req, res) => {
         }
       }
 
+      // If logging in as client but no client profile (fullName), create from freelancer if they have one
+      if (role === 'client' && !user.fullName) {
+        const freelancerVerification = await FreelancerVerification.findOne({ user: user._id })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (freelancerVerification && freelancerVerification.fullName) {
+          user.fullName = freelancerVerification.fullName;
+          user.profilePhoto = freelancerVerification.profilePhoto || user.profilePhoto;
+          user.updatedAt = new Date();
+          await user.save();
+        }
+      }
+
       // Generate JWT token
       const token = generateJWT(user);
 
       // Get the appropriate profile photo (freelancer verification photo takes priority)
       const profilePhoto = await getUserProfilePhoto(user._id);
+
+      // When user has both roles (freelancer verification exists), use freelancer name/photo for display everywhere
+      let displayFullName = user.fullName || null;
+      const freelancerVerification = await FreelancerVerification.findOne({ user: user._id })
+        .select('fullName')
+        .lean()
+        .sort({ createdAt: -1 });
+      if (freelancerVerification && freelancerVerification.fullName) {
+        displayFullName = freelancerVerification.fullName;
+      }
 
       // Clean up stored OTP request
       clearOTPRequest(formattedPhone);
@@ -256,8 +279,8 @@ router.post('/verify-otp', async (req, res) => {
           id: user._id || user.id,
           phone: user.phone,
           role: user.role,
-          fullName: user.fullName || null,
-          profilePhoto: profilePhoto, // Use the helper function result
+          fullName: displayFullName,
+          profilePhoto: profilePhoto,
           email: user.email || null,
           verificationStatus: user.verificationStatus || null,
         }

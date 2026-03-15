@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
@@ -27,6 +28,7 @@ import { freelancerJobsAPI } from '../../api/freelancerJobs';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const MyJobs = () => {
+  const { t } = useLanguage();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,7 +60,7 @@ const MyJobs = () => {
       }
     } catch (err) {
       console.error('Error loading assigned jobs for freelancer:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load assigned jobs');
+      setError(err.response?.data?.error || err.message || t('jobs.failedLoadAssigned'));
       setJobs([]);
     } finally {
       setLoading(false);
@@ -92,13 +94,13 @@ const MyJobs = () => {
         setSuccessModalVisible(true);
         loadJobs();
       } else {
-        Alert.alert('Error', response.error || 'Failed to mark work as done');
+        Alert.alert(t('common.error'), response.error || t('jobs.failedMarkWorkDone'));
       }
     } catch (err) {
       console.error('Error marking work as done:', err);
       Alert.alert(
-        'Error',
-        err.response?.data?.error || err.message || 'Failed to mark work as done'
+        t('common.error'),
+        err.response?.data?.error || err.message || t('jobs.failedMarkWorkDone')
       );
     } finally {
       setMarkingWorkDone(false);
@@ -123,13 +125,13 @@ const MyJobs = () => {
         loadJobs();
       } else {
         setCompletingJob(false);
-        setCompleteJobErrorMessage(response.error || 'Failed to complete job');
+        setCompleteJobErrorMessage(response.error || t('jobs.failedCompleteJob'));
         setCompleteJobErrorModalVisible(true);
       }
     } catch (err) {
       console.error('Error fully completing job:', err);
       setCompletingJob(false);
-      setCompleteJobErrorMessage(err.response?.data?.error || err.message || 'Failed to complete job');
+      setCompleteJobErrorMessage(err.response?.data?.error || err.message || t('jobs.failedCompleteJob'));
       setCompleteJobErrorModalVisible(true);
     }
   };
@@ -141,7 +143,7 @@ const MyJobs = () => {
   const handleViewClient = (job) => {
     const client = job.client || null;
     if (!client) {
-      Alert.alert('Error', 'No client details available');
+      Alert.alert(t('common.error'), t('jobs.noClientDetails'));
       return;
     }
 
@@ -175,7 +177,7 @@ const MyJobs = () => {
               style={[styles.statusBadge, { backgroundColor: statusInfo.backgroundColor }]}
             >
               <Text style={[styles.statusText, { color: statusInfo.color }]}>
-                {statusInfo.label}
+                {t('status.' + (item.status || 'assigned').replace(/-/g, '_'))}
               </Text>
             </View>
           </View>
@@ -194,7 +196,7 @@ const MyJobs = () => {
           <View style={styles.jobMetaLeft}>
             <View style={styles.jobMeta}>
               <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-              <Text style={styles.jobMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
+              <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
             </View>
             <View style={styles.jobMeta}>
               <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
@@ -209,7 +211,7 @@ const MyJobs = () => {
               onPress={() => handleViewClient(item)}
             >
               <MaterialIcons name="person" size={16} color={colors.primary.main} />
-              <Text style={styles.viewClientMetaText}>View Client</Text>
+              <Text style={styles.viewClientMetaText}>{t('jobs.viewClient')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -223,7 +225,7 @@ const MyJobs = () => {
             >
               <MaterialIcons name="check-circle" size={18} color={colors.background} />
               <Text style={[styles.actionButtonText, styles.workDoneButtonText, { color: colors.background }]}>
-                Work Done
+                {t('status.work_done')}
               </Text>
             </TouchableOpacity>
           )}
@@ -232,7 +234,7 @@ const MyJobs = () => {
             <View style={styles.waitingPaymentBadge}>
               <MaterialIcons name="access-time" size={18} color={colors.warning.main} />
               <Text style={[styles.waitingPaymentText, { color: colors.warning.main }]}>
-                Waiting for Payment
+                {t('status.waiting_payment')}
               </Text>
             </View>
           )}
@@ -244,7 +246,7 @@ const MyJobs = () => {
             >
               <MaterialIcons name="check-circle" size={18} color="#FFFFFF" />
               <Text style={[styles.actionButtonText, { color: '#FFFFFF' }]}>
-                Completed
+                {t('status.completed')}
               </Text>
             </TouchableOpacity>
           )}
@@ -277,8 +279,8 @@ const MyJobs = () => {
           jobs.length === 0 && !loading ? (
             <EmptyState
               icon={<MaterialIcons name="check-circle" size={64} color={colors.text.muted} />}
-              title="My Assigned Jobs"
-              description="Jobs you pickup or are assigned will appear here."
+              title={t('jobs.myAssignedJobs')}
+              description={t('jobs.myAssignedJobsDesc')}
             />
           ) : null
         }
@@ -299,8 +301,8 @@ const MyJobs = () => {
       <UserDetailsModal
         visible={clientModalVisible}
         user={selectedClient}
-        roleLabel="Client"
-        title="Client Details"
+        roleLabel={t('common.client')}
+        title={t('jobs.clientDetails')}
         onClose={() => {
           setClientModalVisible(false);
           setSelectedClient(null);
@@ -316,9 +318,9 @@ const MyJobs = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Mark Work Done</Text>
+            <Text style={styles.modalTitle}>{t('jobs.markWorkDone')}</Text>
             <Text style={styles.modalSubtitle}>
-              Are you sure you want to mark this job as work done?
+              {t('jobs.markWorkDoneConfirm')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -329,7 +331,7 @@ const MyJobs = () => {
                 }}
                 disabled={markingWorkDone}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.workDoneModalButton]}
@@ -339,7 +341,7 @@ const MyJobs = () => {
                 {markingWorkDone ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Mark Done</Text>
+                  <Text style={styles.modalSubmitText}>{t('jobs.markDone')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -357,13 +359,13 @@ const MyJobs = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <MaterialIcons name="check-circle" size={48} color={colors.success.main} style={styles.modalIcon} />
-            <Text style={styles.modalTitle}>Success</Text>
-            <Text style={styles.modalSubtitle}>Job marked as work done. Waiting for client payment.</Text>
+            <Text style={styles.modalTitle}>{t('common.success')}</Text>
+            <Text style={styles.modalSubtitle}>{t('jobs.successWorkDoneMsg')}</Text>
             <TouchableOpacity
               style={[styles.modalButton, styles.modalSubmitButton]}
               onPress={() => setSuccessModalVisible(false)}
             >
-              <Text style={styles.modalSubmitText}>OK</Text>
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -378,9 +380,9 @@ const MyJobs = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Complete Job</Text>
+            <Text style={styles.modalTitle}>{t('jobs.completeJob')}</Text>
             <Text style={styles.modalSubtitle}>
-              After completing this job, it will be removed from your active list. Continue?
+              {t('jobs.completeJobConfirm')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -391,7 +393,7 @@ const MyJobs = () => {
                 }}
                 disabled={completingJob}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.completeJobModalButton]}
@@ -401,7 +403,7 @@ const MyJobs = () => {
                 {completingJob ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Complete</Text>
+                  <Text style={styles.modalSubmitText}>{t('jobs.complete')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -421,16 +423,16 @@ const MyJobs = () => {
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
-            <Text style={styles.modalTitle}>Job Completed</Text>
+            <Text style={styles.modalTitle}>{t('jobs.jobCompleted')}</Text>
             <Text style={styles.modalSubtitle}>
-              Job completed and removed from active list.
+              {t('jobs.jobCompletedMsg')}
             </Text>
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                 onPress={handleCompleteJobSuccessClose}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -449,7 +451,7 @@ const MyJobs = () => {
             <View style={styles.errorIconContainer}>
               <MaterialIcons name="error-outline" size={64} color={colors.error.main} />
             </View>
-            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={styles.modalTitle}>{t('common.error')}</Text>
             <Text style={styles.modalSubtitle}>
               {completeJobErrorMessage}
             </Text>
@@ -458,7 +460,7 @@ const MyJobs = () => {
                 style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
                 onPress={() => setCompleteJobErrorModalVisible(false)}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>

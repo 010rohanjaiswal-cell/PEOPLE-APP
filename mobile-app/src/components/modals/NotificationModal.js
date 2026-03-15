@@ -17,9 +17,12 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useNotifications } from '../../context/NotificationContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { translateNotificationToHindi } from '../../utils/translate';
 import EmptyState from '../common/EmptyState';
 
 const NotificationModal = ({ visible, onClose }) => {
+  const { t, locale } = useLanguage();
   const {
     notifications,
     unreadCount,
@@ -30,6 +33,31 @@ const NotificationModal = ({ visible, onClose }) => {
     deleteNotification,
     refreshNotifications,
   } = useNotifications();
+
+  const [translatedNotifications, setTranslatedNotifications] = useState({});
+
+  // When locale is Hindi, translate notification title and message for display
+  useEffect(() => {
+    if (locale !== 'hi' || !notifications.length) {
+      if (locale !== 'hi') setTranslatedNotifications({});
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      for (const notif of notifications) {
+        const id = notif._id;
+        if (!id) continue;
+        try {
+          const translated = await translateNotificationToHindi(notif);
+          if (!cancelled) setTranslatedNotifications((prev) => ({ ...prev, [id]: translated }));
+        } catch (e) {
+          if (!cancelled) setTranslatedNotifications((prev) => ({ ...prev, [id]: { title: notif.title || '', message: notif.message || '' } }));
+        }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [locale, notifications]);
 
   // Auto-mark all notifications as read when modal opens
   useEffect(() => {
@@ -92,10 +120,10 @@ const NotificationModal = ({ visible, onClose }) => {
     const notificationDate = new Date(date);
     const diffInSeconds = Math.floor((now - notificationDate) / 1000);
 
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    if (diffInSeconds < 60) return t('notifications.justNow');
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}${t('notifications.mAgo')}`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}${t('notifications.hAgo')}`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}${t('notifications.dAgo')}`;
     return notificationDate.toLocaleDateString();
   };
 
@@ -117,7 +145,7 @@ const NotificationModal = ({ visible, onClose }) => {
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.title}>Notifications</Text>
+            <Text style={styles.title}>{t('notifications.title')}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <MaterialIcons name="close" size={24} color={colors.text.primary} />
             </TouchableOpacity>
@@ -132,8 +160,8 @@ const NotificationModal = ({ visible, onClose }) => {
               <View style={styles.emptyContainer}>
                 <EmptyState
                   icon={<MaterialIcons name="notifications-none" size={64} color={colors.text.muted} />}
-                  title="No notifications"
-                  description="You're all caught up!"
+                  title={t('notifications.noNotifications')}
+                  description={t('notifications.allCaughtUp')}
                 />
               </View>
             ) : (
@@ -164,7 +192,11 @@ const NotificationModal = ({ visible, onClose }) => {
                     ];
                     return allowedTypes.includes(notification.type);
                   })
-                  .map((notification) => (
+                  .map((notification) => {
+                    const tr = locale === 'hi' && translatedNotifications[notification._id];
+                    const displayTitle = tr ? tr.title : (notification.title || '');
+                    const displayMessage = tr ? tr.message : (notification.message || '');
+                    return (
                   <TouchableOpacity
                     key={notification._id}
                     style={[
@@ -188,7 +220,7 @@ const NotificationModal = ({ visible, onClose }) => {
                       </View>
                       <View style={styles.notificationText}>
                         <Text style={styles.notificationTitle}>
-                          {notification.title}
+                          {displayTitle}
                         </Text>
                         <Text
                           style={[
@@ -196,7 +228,7 @@ const NotificationModal = ({ visible, onClose }) => {
                             !notification.read && styles.unreadText,
                           ]}
                         >
-                          {notification.message}
+                          {displayMessage}
                         </Text>
                         <Text style={styles.notificationTime}>
                           {formatTime(notification.createdAt)}
@@ -215,7 +247,8 @@ const NotificationModal = ({ visible, onClose }) => {
                     </View>
                     {!notification.read && <View style={styles.unreadDot} />}
                   </TouchableOpacity>
-                ))}
+                    );
+                  })}
               </ScrollView>
             )}
           </View>

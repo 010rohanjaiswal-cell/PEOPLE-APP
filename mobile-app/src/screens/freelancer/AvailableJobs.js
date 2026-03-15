@@ -24,12 +24,15 @@ import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { walletAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useLocation } from '../../context/LocationContext';
+import { translateJobToHindi } from '../../utils/translate';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
+  const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords } = useLocation();
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
@@ -51,6 +54,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [hasActiveJob, setHasActiveJob] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // When locale is Hindi, cache translated title/description/address/pincode per job
+  const [translatedJobs, setTranslatedJobs] = useState({});
 
   const loadJobs = async () => {
     // Never fetch or show jobs when GPS is not granted
@@ -86,7 +91,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       }
     } catch (err) {
       console.error('Error loading available jobs for freelancer:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load available jobs');
+      setError(err.response?.data?.error || err.message || t('jobs.failedLoadJobs'));
       setJobs([]);
     } finally {
       setLoading(false);
@@ -188,20 +193,37 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     if (gpsDenied) setJobs([]);
   }, [gpsDenied]);
 
+  // When locale is Hindi, translate job title/description/address/pincode for display
+  useEffect(() => {
+    if (locale !== 'hi' || !jobs.length) {
+      if (locale !== 'hi') setTranslatedJobs({});
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      for (const job of jobs) {
+        const id = job._id || job.id;
+        if (!id) continue;
+        try {
+          const translated = await translateJobToHindi(job);
+          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
+        } catch (e) {
+          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: { title: job.title, description: job.description || '', address: job.address || '', pincode: job.pincode || '' } }));
+        }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [locale, jobs]);
+
   const handlePickupJob = async (job) => {
     if (!canWork) {
-      Alert.alert(
-        'Cannot Pickup Job',
-        'You have unpaid commission dues. Please pay dues in Wallet before picking up new jobs.'
-      );
+      Alert.alert(t('jobs.cannotPickup'), t('jobs.cannotPickupPayDues'));
       return;
     }
 
     if (hasActiveJob) {
-      Alert.alert(
-        'Cannot Pickup Job',
-        'You already have an active job. Please complete your current job before picking up a new one.'
-      );
+      Alert.alert(t('jobs.cannotPickup'), t('jobs.cannotPickupActiveJob'));
       return;
     }
 
@@ -222,13 +244,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         loadJobs();
         checkActiveJob(); // Update active job status
       } else {
-        Alert.alert('Error', response.error || 'Failed to pickup job');
+        Alert.alert(t('common.error'), response.error || t('jobs.failedPickup'));
       }
     } catch (err) {
       console.error('Error picking up job:', err);
       Alert.alert(
-        'Error',
-        err.response?.data?.error || err.message || 'Failed to pickup job'
+        t('common.error'),
+        err.response?.data?.error || err.message || t('jobs.failedPickup')
       );
     } finally {
       setPickingUp(false);
@@ -276,26 +298,17 @@ const AvailableJobs = ({ onJobPickedUp }) => {
 
   const openOfferModal = (job) => {
     if (!canWork) {
-      Alert.alert(
-        'Cannot Make Offer',
-        'You have unpaid commission dues. Please pay dues in Wallet before making offers.'
-      );
+      Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.cannotMakeOfferPayDues'));
       return;
     }
 
     if (hasActiveJob) {
-      Alert.alert(
-        'Cannot Make Offer',
-        'You already have an active job. Please complete your current job before making offers on new jobs.'
-      );
+      Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.cannotMakeOfferActiveJob'));
       return;
     }
 
     if (job.assignedFreelancer || job.status !== 'open') {
-      Alert.alert(
-        'Cannot Make Offer',
-        'This job is no longer available.'
-      );
+      Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.cannotMakeOfferNoLonger'));
       return;
     }
 
@@ -373,6 +386,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     const canPickup = canWork && !isPickedUp && !hasActiveJob;
     // Can make offer if: canWork is true, no cooldown, job not picked up, and no active job
     const canMakeOffer = canWork && cooldownMinutes === 0 && !isPickedUp && !hasActiveJob;
+
+    const jobId = item._id || item.id;
+    const tr = locale === 'hi' && translatedJobs[jobId];
+    const title = tr ? tr.title : item.title;
+    const description = tr ? tr.description : (item.description || '');
+    const address = tr ? tr.address : (item.address || '');
+    const pincode = tr ? tr.pincode : (item.pincode || '');
     
     // Debug log for first job only to avoid spam
     if (item._id === jobs[0]?._id || item.id === jobs[0]?.id) {
@@ -382,31 +402,31 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     return (
     <View style={styles.jobCard}>
       <View style={styles.jobHeader}>
-        <Text style={styles.jobTitle}>{item.title}</Text>
+        <Text style={styles.jobTitle}>{title}</Text>
         <Text style={styles.jobBudget}>₹{item.budget}</Text>
       </View>
-      {item.description ? (
+      {description ? (
         <Text style={styles.jobDescription} numberOfLines={2}>
-          {item.description}
+          {description}
         </Text>
       ) : null}
       <View style={styles.jobAddressRow}>
         <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-        <Text style={styles.jobAddress}>{item.address}</Text>
+        <Text style={styles.jobAddress}>{address}</Text>
       </View>
       <View style={styles.jobMetaRow}>
         <View style={styles.jobMeta}>
           <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{(item.gender || 'any').toUpperCase()}</Text>
+          <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
         </View>
         <View style={styles.jobMeta}>
           <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{item.pincode}</Text>
+          <Text style={styles.jobMetaText}>{pincode}</Text>
         </View>
         {item.distanceKm != null && (
           <View style={styles.jobMeta}>
             <MaterialIcons name="near-me" size={16} color={colors.text.secondary} />
-            <Text style={styles.jobMetaText}>{item.distanceKm} km away</Text>
+            <Text style={styles.jobMetaText}>{item.distanceKm} {t('jobs.kmAway')}</Text>
           </View>
         )}
       </View>
@@ -434,10 +454,10 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             ]}
           >
             {!canWork 
-              ? 'Pay Dues' 
+              ? t('jobs.payDues') 
               : isPickedUp 
-              ? 'Already Taken'
-              : 'Pickup Job'}
+              ? t('jobs.alreadyTaken')
+              : t('jobs.pickupJob')}
           </Text>
         </TouchableOpacity>
 
@@ -463,12 +483,12 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             ]}
           >
             {!canWork
-              ? 'Pay Dues'
+              ? t('jobs.payDues')
               : isPickedUp
-              ? 'Already Taken'
+              ? t('jobs.alreadyTaken')
               : cooldownMinutes > 0
               ? `${cooldownMinutes}m`
-              : 'Make Offer'}
+              : t('jobs.makeOffer')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -489,8 +509,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       <View style={styles.container}>
         <View style={styles.gpsMessageCard}>
           <MaterialIcons name="location-off" size={48} color={colors.text.muted} />
-          <Text style={styles.gpsMessageTitle}>GPS is off</Text>
-          <Text style={styles.gpsMessageText}>Please turn on GPS to get latest jobs.</Text>
+          <Text style={styles.gpsMessageTitle}>{t('jobs.gpsOff')}</Text>
+          <Text style={styles.gpsMessageText}>{t('jobs.gpsOffMessage')}</Text>
         </View>
       </View>
     );
@@ -501,8 +521,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       <View style={styles.container}>
         <EmptyState
           icon={<MaterialIcons name="work" size={64} color={colors.text.muted} />}
-          title="No available jobs"
-          description="New jobs will appear here when clients post them."
+          title={t('jobs.noAvailableJobs')}
+          description={t('jobs.noAvailableJobsDesc')}
         />
       </View>
     );
@@ -533,7 +553,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'none' && styles.filterOptionTextActive,
               ]}>
-                All
+                {t('jobs.filterAll')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -547,7 +567,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'price_high_low' && styles.filterOptionTextActive,
               ]}>
-                Price: High to Low
+                {t('jobs.filterPriceHighLow')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -561,7 +581,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'price_low_high' && styles.filterOptionTextActive,
               ]}>
-                Price: Low to High
+                {t('jobs.filterPriceLowHigh')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -575,7 +595,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'newest' && styles.filterOptionTextActive,
               ]}>
-                Newest First
+                {t('jobs.filterNewestFirst')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -589,7 +609,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'nearest_first' && styles.filterOptionTextActive,
               ]}>
-                Nearest to far
+                {t('jobs.filterNearestToFar')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -603,7 +623,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 styles.filterOptionText,
                 selectedFilter === 'farthest_first' && styles.filterOptionTextActive,
               ]}>
-                Far to nearest
+                {t('jobs.filterFarToNearest')}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -634,9 +654,9 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Pickup Job</Text>
+            <Text style={styles.modalTitle}>{t('jobs.pickupConfirmTitle')}</Text>
             <Text style={styles.modalSubtitle}>
-              Are you sure you want to pickup this job?
+              {t('jobs.pickupConfirmMessage')}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -647,7 +667,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 }}
                 disabled={pickingUp}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.pickupButtonModal]}
@@ -657,7 +677,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 {pickingUp ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Pickup Job</Text>
+                  <Text style={styles.modalSubmitText}>{t('jobs.pickupJob')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -674,24 +694,24 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Make Offer</Text>
+            <Text style={styles.modalTitle}>{t('jobs.makeOfferTitle')}</Text>
             {offerJob && (
               <Text style={styles.modalSubtitle}>
-                {offerJob.title} · ₹{offerJob.budget}
+                {(locale === 'hi' && translatedJobs[offerJob._id || offerJob.id]?.title) || offerJob.title} · ₹{offerJob.budget}
               </Text>
             )}
-            <Text style={styles.modalLabel}>Offer Amount (₹)</Text>
+            <Text style={styles.modalLabel}>{t('jobs.offerAmount')}</Text>
             <TextInput
               style={styles.modalInput}
               keyboardType="numeric"
-              placeholder="Enter your offer amount"
+              placeholder={t('jobs.enterOfferAmount')}
               value={offerAmount}
               onChangeText={setOfferAmount}
             />
-            <Text style={styles.modalLabel}>Message (optional)</Text>
+            <Text style={styles.modalLabel}>{t('jobs.messageOptional')}</Text>
             <TextInput
               style={[styles.modalInput, styles.modalTextarea]}
-              placeholder="Write a short message for the client"
+              placeholder={t('jobs.writeMessage')}
               value={offerMessage}
               onChangeText={setOfferMessage}
               multiline
@@ -703,7 +723,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 onPress={() => setOfferModalVisible(false)}
                 disabled={submittingOffer}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton]}
@@ -713,7 +733,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 {submittingOffer ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Submit Offer</Text>
+                  <Text style={styles.modalSubmitText}>{t('jobs.submitOffer')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -739,9 +759,9 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
-            <Text style={styles.modalTitle}>Job Picked Up Successfully</Text>
+            <Text style={styles.modalTitle}>{t('jobs.jobPickedUpSuccess')}</Text>
             <Text style={styles.modalSubtitle}>
-              You have successfully picked up the job!
+              {t('jobs.jobPickedUpSuccessMsg')}
             </Text>
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
@@ -754,7 +774,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                   }
                 }}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -773,16 +793,16 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
-            <Text style={styles.modalTitle}>Offer Submitted</Text>
+            <Text style={styles.modalTitle}>{t('jobs.offerSubmitted')}</Text>
             <Text style={styles.modalSubtitle}>
-              Offer submitted successfully!
+              {t('jobs.offerSubmittedMsg')}
             </Text>
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                 onPress={() => setOfferSuccessModalVisible(false)}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -801,7 +821,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             <View style={styles.errorIconContainer}>
               <MaterialIcons name="error" size={64} color={colors.error.main} />
             </View>
-            <Text style={styles.modalTitle}>Error</Text>
+            <Text style={styles.modalTitle}>{t('common.error')}</Text>
             <Text style={styles.modalSubtitle}>
               {offerErrorMessage}
             </Text>
@@ -810,7 +830,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
                 style={[styles.modalButton, styles.modalSubmitButton]}
                 onPress={() => setOfferErrorModalVisible(false)}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>

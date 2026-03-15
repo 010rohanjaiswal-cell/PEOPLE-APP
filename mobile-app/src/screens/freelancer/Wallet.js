@@ -23,6 +23,7 @@ import * as Linking from 'expo-linking';
 import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { startPhonePeTransaction } from '../../config/phonepe';
 
 // Enable LayoutAnimation on Android
@@ -32,6 +33,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const Wallet = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +41,8 @@ const Wallet = () => {
   const [paying, setPaying] = useState(false);
   const [confirmPayModalVisible, setConfirmPayModalVisible] = useState(false);
   const [paymentSuccessModalVisible, setPaymentSuccessModalVisible] = useState(false);
+  const [paymentErrorModalVisible, setPaymentErrorModalVisible] = useState(false);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
@@ -50,11 +54,11 @@ const Wallet = () => {
       if (response.success) {
         setWallet(response.wallet);
       } else {
-        setError(response.error || 'Failed to load wallet');
-      }
+setError(response.error || t('wallet.failedLoadWallet'));
+    }
     } catch (err) {
       console.error('Error loading wallet:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load wallet');
+      setError(err.response?.data?.error || err.message || t('wallet.failedLoadWallet'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,7 +99,7 @@ const Wallet = () => {
       const orderResponse = await paymentAPI.createDuesOrder();
               
       if (!orderResponse.success) {
-        Alert.alert('Error', orderResponse.error || 'Failed to create payment order');
+        Alert.alert(t('common.error'), orderResponse.error || t('wallet.failedCreateOrder'));
         setPaying(false);
         return;
       }
@@ -103,7 +107,7 @@ const Wallet = () => {
       const { merchantOrderId, orderToken, orderId, merchantId, checkSum } = orderResponse;
 
       if (!orderToken || !orderId || !merchantId || !checkSum) {
-        Alert.alert('Error', 'Invalid payment order response. Missing orderToken, orderId, merchantId, or checkSum.');
+        Alert.alert(t('common.error'), t('wallet.invalidOrderResponse'));
         setPaying(false);
         return;
       }
@@ -198,8 +202,7 @@ const Wallet = () => {
                 console.log('🔍 PhonePe order status after FAILURE:', statusResp);
 
                 if (detailedErrorCode === 'ORDER_EXPIRED') {
-                  detailedReason =
-                    'Your payment order has expired. Please tap Pay Dues again and complete the payment within a few minutes.';
+                  detailedReason = t('wallet.orderExpired');
                 } else if (detailedErrorCode) {
                   detailedReason = `PhonePe error: ${detailedErrorCode}`;
                 }
@@ -208,12 +211,11 @@ const Wallet = () => {
               console.warn('⚠️ Failed to fetch PhonePe order status after FAILURE:', statusErr);
             }
 
-            // Show best available error message
-            Alert.alert(
-              'Payment Failed',
-              detailedReason || sdkResponse.error || 'Payment transaction failed. Please try again.',
-              [{ text: 'OK' }]
+            // Show best available error message (UI-only change)
+            setPaymentErrorMessage(
+              detailedReason || sdkResponse.error || t('wallet.paymentNotCompleted')
             );
+            setPaymentErrorModalVisible(true);
           }
         } else if (sdkResponse && sdkResponse.status === 'INTERRUPTED') {
           // Payment interrupted by user
@@ -245,7 +247,7 @@ const Wallet = () => {
         setPaying(false);
         
         // Extract error message
-        let errorMessage = 'Failed to start payment. Please try again.';
+        let errorMessage = t('wallet.failedStartPayment');
         if (paymentError.message) {
           errorMessage = paymentError.message;
         } else if (paymentError.error) {
@@ -255,16 +257,16 @@ const Wallet = () => {
         }
         
         Alert.alert(
-          'Payment Error',
+          t('wallet.paymentError'),
           errorMessage,
-          [{ text: 'OK' }]
+          [{ text: t('common.ok') }]
         );
       }
     } catch (err) {
       console.error('Error paying dues:', err);
       Alert.alert(
-        'Error',
-        err.response?.data?.error || err.message || 'Failed to process payment'
+        t('common.error'),
+        err.response?.data?.error || err.message || t('wallet.failedProcessPayment')
       );
       setPaying(false);
     }
@@ -300,7 +302,7 @@ const Wallet = () => {
               }, pollInterval);
               return false;
             } else {
-              Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+              Alert.alert(t('common.error'), t('wallet.failedCheckStatus'));
               setPaying(false);
               loadWallet();
               return true;
@@ -324,7 +326,7 @@ const Wallet = () => {
               return true; // Stop polling
             } else {
               console.error('❌ Failed to process dues:', processResponse.error);
-              Alert.alert('Error', processResponse.error || 'Failed to process payment');
+              Alert.alert(t('common.error'), processResponse.error || t('wallet.failedProcessPayment'));
               setPaying(false);
               // Still refresh wallet in case webhook processed it
               loadWallet();
@@ -335,15 +337,12 @@ const Wallet = () => {
             const detailedErrorCode = statusResponse.detailedErrorCode || statusResponse.errorCode;
 
             if (detailedErrorCode === 'ORDER_EXPIRED') {
-              // Special UX for expired orders
-              Alert.alert(
-                'Order Expired',
-                'Your payment order has expired. Please tap Pay Dues again and complete the payment within a few minutes.'
-              );
+              setPaymentErrorMessage(t('wallet.orderExpired'));
             } else {
-              Alert.alert('Payment Failed', 'Payment was not successful. Please try again.');
+              setPaymentErrorMessage(t('wallet.paymentNotCompleted'));
             }
 
+            setPaymentErrorModalVisible(true);
             setPaying(false);
             return true; // Stop polling
           } else if (statusResponse.isPending && retries < maxRetries) {
@@ -353,11 +352,7 @@ const Wallet = () => {
             }, pollInterval);
             return false; // Continue polling
           } else if (retries >= maxRetries) {
-            // Max retries reached
-            Alert.alert(
-              'Payment Status',
-              'Payment status is still pending. Please check your wallet or contact support if payment was successful.'
-            );
+            Alert.alert(t('wallet.paymentStatusTitle'), t('wallet.paymentStatusPending'));
             setPaying(false);
             // Refresh wallet to check if webhook processed it
             loadWallet();
@@ -388,8 +383,7 @@ const Wallet = () => {
             }, pollInterval);
             return false; // Continue polling
           } else {
-            // Max retries reached for other errors
-            Alert.alert('Error', 'Failed to check payment status. Please refresh your wallet.');
+            Alert.alert(t('common.error'), t('wallet.failedCheckStatus'));
             setPaying(false);
             loadWallet();
             return true; // Stop polling
@@ -406,10 +400,7 @@ const Wallet = () => {
           checkPaymentStatus(merchantOrderId, retries + 1);
         }, 5000);
       } else {
-        Alert.alert(
-          'Error',
-          'Failed to verify payment status. Please refresh your wallet to check if payment was processed.'
-        );
+        Alert.alert(t('common.error'), t('wallet.failedVerifyStatus'));
         setPaying(false);
         loadWallet();
       }
@@ -436,7 +427,7 @@ const Wallet = () => {
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
               <MaterialIcons name="receipt-long" size={24} color={colors.error.dark} />
-              <Text style={[styles.cardTitle, { color: colors.error.dark }]}>Total Dues</Text>
+              <Text style={[styles.cardTitle, { color: colors.error.dark }]}>{t('wallet.totalDues')}</Text>
             </View>
             <TouchableOpacity onPress={handleRefresh} style={styles.iconButton}>
               <MaterialIcons name="refresh" size={20} color={colors.error.dark} />
@@ -445,7 +436,7 @@ const Wallet = () => {
 
           <View style={styles.amountRow}>
             <Text style={styles.duesAmount}>₹{totalDues}</Text>
-            <Text style={styles.duesLabel}>Commission dues to be paid</Text>
+            <Text style={styles.duesLabel}>{t('wallet.commissionDuesToBePaid')}</Text>
           </View>
 
           <TouchableOpacity
@@ -458,7 +449,7 @@ const Wallet = () => {
             ) : (
               <>
                 <MaterialIcons name="credit-card" size={20} color="#FFFFFF" />
-                <Text style={styles.payDuesButtonText}>Pay Dues</Text>
+                <Text style={styles.payDuesButtonText}>{t('wallet.payDues')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -481,7 +472,7 @@ const Wallet = () => {
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <MaterialIcons name="receipt-long" size={24} color={colors.success.dark} />
-            <Text style={[styles.cardTitle, { color: colors.success.dark }]}>Total Dues</Text>
+            <Text style={[styles.cardTitle, { color: colors.success.dark }]}>{t('wallet.totalDues')}</Text>
           </View>
           <TouchableOpacity onPress={handleRefresh} style={styles.iconButton}>
             <MaterialIcons name="refresh" size={20} color={colors.success.dark} />
@@ -490,7 +481,7 @@ const Wallet = () => {
 
         <View style={styles.amountRow}>
           <Text style={styles.noDuesAmount}>₹0.00</Text>
-          <Text style={styles.noDuesLabel}>No dues is pending</Text>
+          <Text style={styles.noDuesLabel}>{t('wallet.noDuesPending')}</Text>
         </View>
       </View>
     );
@@ -521,16 +512,16 @@ const Wallet = () => {
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <MaterialIcons name="payment" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>Payment History</Text>
+            <Text style={styles.cardTitle}>{t('wallet.paymentHistory')}</Text>
           </View>
         </View>
 
         {paymentTransactions.length === 0 ? (
           <View style={styles.emptyInner}>
             <MaterialIcons name="account-balance-wallet" size={40} color={colors.text.muted} />
-            <Text style={styles.emptyInnerText}>No payment records yet</Text>
+            <Text style={styles.emptyInnerText}>{t('wallet.noPaymentRecords')}</Text>
             <Text style={styles.emptyInnerSubText}>
-              Your dues payment history will appear here
+              {t('wallet.paymentHistoryEmptyDesc')}
             </Text>
           </View>
         ) : (
@@ -543,25 +534,25 @@ const Wallet = () => {
                 <View style={styles.ledgerTopRow}>
                   <View style={styles.ledgerTitleContainer}>
                     <Text style={styles.ledgerJobTitle} numberOfLines={1}>
-                      Dues Payment
+                      {t('wallet.duesPayment')}
                     </Text>
                     <Text style={styles.ledgerDate}>
                       {formatDate(payment.paymentDate)}
                     </Text>
                     {payment.transactionCount > 1 && (
                       <Text style={styles.ledgerSubText}>
-                        {payment.transactionCount} transactions cleared
+                        {payment.transactionCount} {t('wallet.transactionsCleared')}
                       </Text>
                     )}
                   </View>
                   <View style={styles.ledgerRightTop}>
-                    <Text style={styles.ledgerDuesLabel}>Amount Paid</Text>
+                    <Text style={styles.ledgerDuesLabel}>{t('wallet.amountPaid')}</Text>
                     <Text style={[styles.ledgerDuesAmount, styles.paymentAmount]}>
                       ₹{payment.amount}
                     </Text>
                     <View style={[styles.ledgerStatusBadge, styles.statusPaidBadge]}>
                       <Text style={[styles.ledgerStatusText, styles.statusPaidText]}>
-                        ✓ Paid
+                        {t('wallet.paid')}
                       </Text>
                     </View>
                   </View>
@@ -647,16 +638,16 @@ const Wallet = () => {
             <View style={styles.modalIconContainer}>
               <MaterialIcons name="account-balance-wallet" size={64} color={colors.primary.main} />
             </View>
-            <Text style={styles.modalTitle}>Pay Dues</Text>
+            <Text style={styles.modalTitle}>{t('wallet.payDuesConfirmTitle')}</Text>
             <Text style={styles.modalSubtitle}>
-              Pay ₹{wallet?.totalDues || 0} as commission dues?
+              {t('wallet.payDuesConfirmMessage').replace('{amount}', wallet?.totalDues ?? 0)}
             </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => setConfirmPayModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton]}
@@ -666,7 +657,7 @@ const Wallet = () => {
                 {paying ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Pay</Text>
+                  <Text style={styles.modalSubmitText}>{t('jobs.pay')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -686,16 +677,42 @@ const Wallet = () => {
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
-            <Text style={styles.modalTitle}>Dues Payment Completed</Text>
+            <Text style={styles.modalTitle}>{t('wallet.duesPaymentCompleted')}</Text>
             <Text style={styles.modalSubtitle}>
-              Dues payment completed successfully!
+              {t('wallet.duesPaymentSuccessMessage')}
             </Text>
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                 onPress={() => setPaymentSuccessModalVisible(false)}
               >
-                <Text style={styles.modalSubmitText}>OK</Text>
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Payment Error Modal */}
+      <Modal
+        visible={paymentErrorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPaymentErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.errorIconContainer}>
+              <MaterialIcons name="error-outline" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>{t('wallet.paymentNotCompletedTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{paymentErrorMessage}</Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
+                onPress={() => setPaymentErrorModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -989,6 +1006,15 @@ const styles = StyleSheet.create({
   successModalButton: {
     alignSelf: 'center',
     minWidth: 120,
+  },
+  errorIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  errorModalButton: {
+    alignSelf: 'center',
+    minWidth: 120,
+    backgroundColor: colors.error.main,
   },
   modalCancelText: {
     ...typography.body,

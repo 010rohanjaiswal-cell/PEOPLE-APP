@@ -68,33 +68,33 @@ router.get('/profile', authenticate, async (req, res) => {
     // Get the appropriate profile photo (freelancer verification photo takes priority)
     const profilePhoto = await getUserProfilePhoto(userId);
 
-    // Get verification details if user is a freelancer
+    // Get verification details if user is a freelancer (or has freelancer verification for display when both roles)
     let verificationData = null;
-    if (user.role === 'freelancer') {
-      // Simple query - explicitly select fields we need, use .lean() for plain object
-      const verification = await FreelancerVerification.findOne({ user: user._id })
-        .select('fullName dob gender address status')
-        .lean() // Convert to plain object
-        .sort({ createdAt: -1 });
-      
-      // Fallback to string ID if not found
-      const verificationToUse = verification || await FreelancerVerification.findOne({ user: user._id.toString() })
-        .select('fullName dob gender address status')
-        .lean() // Convert to plain object
-        .sort({ createdAt: -1 });
-      
-      if (verificationToUse) {
-        verificationData = {
-          fullName: verificationToUse.fullName || null,
-          dob: verificationToUse.dob || null,
-          gender: verificationToUse.gender || null,
-          address: verificationToUse.address || null,
-        };
+    const verification = await FreelancerVerification.findOne({ user: user._id })
+      .select('fullName dob gender address status')
+      .lean()
+      .sort({ createdAt: -1 });
+    const verificationToUse = verification || await FreelancerVerification.findOne({ user: user._id.toString() })
+      .select('fullName dob gender address status')
+      .lean()
+      .sort({ createdAt: -1 });
+
+    if (verificationToUse) {
+      verificationData = {
+        fullName: verificationToUse.fullName || null,
+        dob: verificationToUse.dob || null,
+        gender: verificationToUse.gender || null,
+        address: verificationToUse.address || null,
+      };
+      if (user.role === 'freelancer') {
         console.log('📋 User profile - Found verification data:', verificationData);
-      } else {
-        console.log('⚠️ User profile - No verification found for user:', userId);
       }
+    } else if (user.role === 'freelancer') {
+      console.log('⚠️ User profile - No verification found for user:', userId);
     }
+
+    // When user has both roles (freelancer verification exists), use freelancer name/photo for display
+    const displayFullName = (verificationToUse && verificationToUse.fullName) ? verificationToUse.fullName : (user.fullName || null);
 
     res.json({
       success: true,
@@ -102,11 +102,11 @@ router.get('/profile', authenticate, async (req, res) => {
         id: user._id || user.id,
         phone: user.phone,
         role: user.role,
-        fullName: user.fullName || null,
-        profilePhoto: profilePhoto, // Use the helper function result
+        fullName: displayFullName,
+        profilePhoto: profilePhoto,
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,
-        verification: verificationData, // Include verification details for freelancers
+        verification: verificationData,
       }
     });
   } catch (error) {
