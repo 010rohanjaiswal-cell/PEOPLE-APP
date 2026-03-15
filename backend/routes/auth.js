@@ -161,7 +161,7 @@ router.post('/send-otp', async (req, res) => {
  */
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { phoneNumber, otp } = req.body;
+    const { phoneNumber, otp, deviceId, forceLogin } = req.body;
 
     // Validation
     if (!phoneNumber) {
@@ -227,9 +227,10 @@ router.post('/verify-otp', async (req, res) => {
         user = await User.create({
           phone: formattedPhone,
           role: role,
+          currentDeviceId: deviceId || null,
+          tokenVersion: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
-          // verificationStatus left undefined for new freelancers until they submit
         });
       } else {
         // Update role if it was changed during login
@@ -253,7 +254,28 @@ router.post('/verify-otp', async (req, res) => {
         }
       }
 
-      // Generate JWT token
+      // One device per account: if already logged in on a different device, require forceLogin
+      const requestDeviceId = (deviceId && String(deviceId).trim()) || null;
+      if (requestDeviceId && user.currentDeviceId && user.currentDeviceId !== requestDeviceId) {
+        if (!forceLogin) {
+          return res.json({
+            success: false,
+            code: 'ALREADY_LOGGED_IN_ELSEWHERE',
+            error: 'You are already logged in on another device. To login here, logout from the previous device.',
+            message: 'You are already logged in on another device. To login here, do you want to logout from the previous device?',
+          });
+        }
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+        user.currentDeviceId = requestDeviceId;
+        user.updatedAt = new Date();
+        await user.save();
+      } else if (requestDeviceId && user.currentDeviceId !== requestDeviceId) {
+        user.currentDeviceId = requestDeviceId;
+        user.updatedAt = new Date();
+        await user.save();
+      }
+
+      // Generate JWT token (includes tokenVersion)
       const token = generateJWT(user);
 
       // Get the appropriate profile photo (freelancer verification photo takes priority)

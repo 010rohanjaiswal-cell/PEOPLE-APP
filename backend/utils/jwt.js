@@ -10,11 +10,13 @@ const jwt = require('jsonwebtoken');
  * @returns {string} JWT token
  */
 function generateJWT(user) {
+  const tokenVersion = user.tokenVersion != null ? user.tokenVersion : 0;
   return jwt.sign(
     {
       userId: user._id || user.id,
       phone: user.phone,
       role: user.role,
+      tokenVersion,
     },
     process.env.JWT_SECRET,
     { 

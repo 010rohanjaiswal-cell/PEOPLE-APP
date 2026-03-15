@@ -23,12 +23,16 @@ export const authAPI = {
    * Verify OTP and get JWT token
    * @param {string} phoneNumber - Phone number with country code
    * @param {string} otp - 6-digit OTP code
-   * @returns {Promise} User data and JWT token
+   * @param {string} [deviceId] - Stable device ID for one-device-one-login
+   * @param {boolean} [forceLogin] - If true, logout other device and login here
+   * @returns {Promise} User data and JWT token, or { success: false, code: 'ALREADY_LOGGED_IN_ELSEWHERE', message }
    */
-  verifyOTP: async (phoneNumber, otp) => {
+  verifyOTP: async (phoneNumber, otp, deviceId = null, forceLogin = false) => {
     const response = await apiClient.post('/api/auth/verify-otp', {
       phoneNumber,
       otp,
+      deviceId: deviceId || undefined,
+      forceLogin: forceLogin || undefined,
     });
     return response.data;
   },

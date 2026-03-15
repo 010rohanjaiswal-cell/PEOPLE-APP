@@ -44,6 +44,15 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: null,
   },
+  currentDeviceId: {
+    type: String,
+    default: null,
+    trim: true,
+  },
+  tokenVersion: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -6,6 +6,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../api';
+import { setUnauthorizedCallback } from '../api/client';
 
 const AuthContext = createContext();
 
@@ -26,6 +27,16 @@ export const AuthProvider = ({ children }) => {
   // Check for existing auth on mount
   useEffect(() => {
     checkAuth();
+  }, []);
+
+  // When API returns 401 (e.g. logged in on another device), clear in-memory auth so user sees login
+  useEffect(() => {
+    setUnauthorizedCallback(() => {
+      setToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+    });
+    return () => setUnauthorizedCallback(null);
   }, []);
 
   const checkAuth = async () => {

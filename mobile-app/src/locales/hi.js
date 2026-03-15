@@ -38,6 +38,8 @@ export default {
     verify: 'सत्यापित करें',
     client: 'क्लाइंट',
     freelancer: 'फ्रीलांसर',
+    alreadyLoggedInElsewhere: 'आप पहले से किसी अन्य डिवाइस पर लॉग इन हैं। यहां लॉग इन करने के लिए क्या आप पिछले डिवाइस से लॉग आउट करना चाहते हैं?',
+    logoutFromOtherDevice: 'हां, लॉग आउट करें और यहां लॉग इन करें',
   },
   status: {
     open: 'खुला',

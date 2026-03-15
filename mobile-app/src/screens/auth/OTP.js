@@ -13,6 +13,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -21,10 +22,13 @@ import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { getDeviceId } from '../../utils/deviceId';
 
 const OTP = ({ navigation, route }) => {
   const { phoneNumber, selectedRole } = route?.params || {};
   const { loginWithToken } = useAuth();
+  const { t } = useLanguage();
   
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,7 +53,7 @@ const OTP = ({ navigation, route }) => {
     setError('');
   };
 
-  const handleVerifyOTP = async () => {
+  const handleVerifyOTP = async (forceLogin = false) => {
     if (!validateOTP(otp)) {
       setError('Please enter a valid 6-digit OTP');
       return;
@@ -59,39 +63,35 @@ const OTP = ({ navigation, route }) => {
     setError('');
 
     try {
-      console.log('🔐 Verifying OTP...');
-      
       if (!phoneNumber) {
         throw new Error('Phone number not found. Please go back and try again.');
       }
-      
-      // Format phone number (remove spaces, keep +)
+
       const formattedPhone = phoneNumber.replace(/\s/g, '');
-      
-      // Call backend API to verify OTP
-      // Backend handles Firebase verification and returns JWT token
-      const result = await authAPI.verifyOTP(formattedPhone, otp);
-      
+      const deviceId = await getDeviceId();
+      const result = await authAPI.verifyOTP(formattedPhone, otp, deviceId, forceLogin);
+
       if (result.success) {
-        console.log('✅ OTP verified! Authentication successful!');
-        
-        // Update auth context (this will trigger navigation via AppNavigator)
         await loginWithToken(result.token, result.user);
-        
-        // Check if user has profile
-        const user = result.user;
-        
-        // Note: Navigation will be handled automatically by AppNavigator
-        // based on auth state and user profile completeness
-        // We don't need to manually navigate here
         console.log('✅ User authenticated, navigation will be handled by AppNavigator');
-        
-        // If user needs profile setup, AppNavigator will show ProfileSetup
-        // If user has complete profile, AppNavigator will show appropriate dashboard
+      } else if (result.code === 'ALREADY_LOGGED_IN_ELSEWHERE') {
+        setLoading(false);
+        Alert.alert(
+          null,
+          t('auth.alreadyLoggedInElsewhere'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('auth.logoutFromOtherDevice'),
+              onPress: () => handleVerifyOTP(true),
+            },
+          ]
+        );
+        return;
       } else {
         throw new Error(result.error || 'Verification failed');
       }
-      
+
       setLoading(false);
     } catch (error) {
       console.error('❌ Error verifying OTP:', error);

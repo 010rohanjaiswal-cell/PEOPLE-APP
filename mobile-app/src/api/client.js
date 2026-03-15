@@ -25,6 +25,15 @@ const apiClient = axios.create({
 // Log API base URL for debugging
 console.log('🔗 API Base URL:', API_BASE_URL);
 
+// One-device-one-login: when backend returns 401 (e.g. LOGGED_IN_ELSEWHERE), clear auth state
+let onUnauthorizedCallback = null;
+export function setUnauthorizedCallback(cb) {
+  onUnauthorizedCallback = cb;
+}
+function getUnauthorizedCallback() {
+  return onUnauthorizedCallback;
+}
+
 // Request interceptor - Add auth token to requests
 apiClient.interceptors.request.use(
   async (config) => {
@@ -86,13 +95,13 @@ apiClient.interceptors.response.use(
       console.error('❌ API Error:', error.message);
     }
 
-    // Handle 401 Unauthorized - Token expired or invalid
+    // Handle 401 Unauthorized - Token expired, invalid, or logged in elsewhere
     if (error.response?.status === 401) {
       try {
-        // Clear token and redirect to login
         await AsyncStorage.removeItem('authToken');
         await AsyncStorage.removeItem('userData');
-        // Navigation will be handled by AuthContext
+        const cb = getUnauthorizedCallback();
+        if (typeof cb === 'function') cb();
       } catch (storageError) {
         console.error('Error clearing storage:', storageError);
       }

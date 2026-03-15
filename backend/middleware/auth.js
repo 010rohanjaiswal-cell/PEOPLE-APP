@@ -46,6 +46,17 @@ async function authenticate(req, res, next) {
         });
       }
 
+      // One device per account: reject if token was issued for an older session (user logged in elsewhere)
+      const tokenVersion = decoded.tokenVersion != null ? decoded.tokenVersion : 0;
+      const userVersion = user.tokenVersion != null ? user.tokenVersion : 0;
+      if (tokenVersion !== userVersion) {
+        return res.status(401).json({
+          success: false,
+          error: 'Logged in on another device. Please login again.',
+          code: 'LOGGED_IN_ELSEWHERE',
+        });
+      }
+
       req.user = user;
       req.userId = decoded.userId;
     }

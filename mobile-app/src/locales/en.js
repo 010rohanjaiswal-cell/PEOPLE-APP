@@ -38,6 +38,8 @@ export default {
     verify: 'Verify',
     client: 'Client',
     freelancer: 'Freelancer',
+    alreadyLoggedInElsewhere: 'You are already logged in on another device. To login here, do you want to logout from the previous device?',
+    logoutFromOtherDevice: 'Yes, logout and login here',
   },
   status: {
     open: 'Open',
