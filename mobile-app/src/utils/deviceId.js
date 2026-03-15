@@ -15,16 +15,17 @@ function generateUUID() {
 
 /**
  * Get or create a stable device ID for this app install.
+ * Always returns a non-empty string so backend can enforce one-device-one-login.
  * @returns {Promise<string>}
  */
 export async function getDeviceId() {
   try {
     let id = await AsyncStorage.getItem(DEVICE_ID_KEY);
-    if (!id || typeof id !== 'string') {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
       id = generateUUID();
       await AsyncStorage.setItem(DEVICE_ID_KEY, id);
     }
-    return id;
+    return id.trim();
   } catch (e) {
     return generateUUID();
   }

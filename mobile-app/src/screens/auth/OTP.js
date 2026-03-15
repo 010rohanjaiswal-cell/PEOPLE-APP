@@ -68,7 +68,15 @@ const OTP = ({ navigation, route }) => {
       }
 
       const formattedPhone = phoneNumber.replace(/\s/g, '');
-      const deviceId = await getDeviceId();
+      let deviceId;
+      try {
+        deviceId = await getDeviceId();
+      } catch (e) {
+        deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      }
+      if (!deviceId || typeof deviceId !== 'string') {
+        deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      }
       const result = await authAPI.verifyOTP(formattedPhone, otp, deviceId, forceLogin);
 
       if (result.success) {

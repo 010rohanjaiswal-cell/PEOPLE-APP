@@ -9,6 +9,21 @@ const PINCODE_API = 'https://api.postalpincode.in/pincode';
 const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse';
 const NOMINATIM_SEARCH = 'https://nominatim.openstreetmap.org/search';
 
+/** Nominatim allows 1 request per second. We throttle to avoid 429 / empty responses. */
+let lastNominatimCall = 0;
+const NOMINATIM_MIN_INTERVAL_MS = 1100;
+
+function waitForNominatimRateLimit() {
+  const now = Date.now();
+  const elapsed = now - lastNominatimCall;
+  if (elapsed < NOMINATIM_MIN_INTERVAL_MS) {
+    return new Promise((resolve) =>
+      setTimeout(resolve, NOMINATIM_MIN_INTERVAL_MS - elapsed)
+    );
+  }
+  return Promise.resolve();
+}
+
 /** Normalize state name for consistent comparison (lowercase, trim) */
 function normalizeState(name) {
   if (!name || typeof name !== 'string') return '';
@@ -53,6 +68,8 @@ async function getStateFromCoords(lat, lng) {
   const longitude = Number(lng);
   if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
   try {
+    await waitForNominatimRateLimit();
+    lastNominatimCall = Date.now();
     const { data } = await axios.get(NOMINATIM_REVERSE, {
       params: {
         lat: latitude,
@@ -84,6 +101,8 @@ async function getCoordsFromPincode(pincode) {
   const pin = String(pincode).trim();
   if (!pin || pin.length !== 6) return null;
   try {
+    await waitForNominatimRateLimit();
+    lastNominatimCall = Date.now();
     const { data } = await axios.get(NOMINATIM_SEARCH, {
       params: {
         postalcode: pin,

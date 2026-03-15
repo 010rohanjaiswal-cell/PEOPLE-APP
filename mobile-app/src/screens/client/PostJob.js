@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Animated, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Input, Card, CardContent } from '../../components/common';
@@ -43,8 +43,14 @@ const PostJob = ({ onJobPosted }) => {
     description: '',
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const titleBorderOpacity = useRef(new Animated.Value(0)).current;
+  const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
+  const addressBorderOpacity = useRef(new Animated.Value(0)).current;
+  const pincodeBorderOpacity = useRef(new Animated.Value(0)).current;
+  const budgetBorderOpacity = useRef(new Animated.Value(0)).current;
+  const genderBorderOpacity = useRef(new Animated.Value(0)).current;
+  const borderOpacity = { title: titleBorderOpacity, category: categoryBorderOpacity, address: addressBorderOpacity, pincode: pincodeBorderOpacity, budget: budgetBorderOpacity, gender: genderBorderOpacity };
 
   const categories = [
     'Delivery',
@@ -65,42 +71,51 @@ const PostJob = ({ onJobPosted }) => {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    setError('');
+  };
+
+  const runErrorBorderAnimation = (animValue) => {
+    animValue.setValue(1);
+    Animated.sequence([
+      Animated.delay(100),
+      Animated.timing(animValue, {
+        toValue: 0,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const handleSubmit = async () => {
     if (gpsDenied || !gpsEnabled) {
-      setError(t('postJob.gpsToPostJob'));
+      runErrorBorderAnimation(borderOpacity.title);
       return;
     }
-    // Validation
     if (!validateRequired(formData.title)) {
-      setError(t('jobs.pleaseEnterJobTitle'));
+      runErrorBorderAnimation(borderOpacity.title);
       return;
     }
     if (!formData.category) {
-      setError(t('jobs.pleaseSelectCategory'));
+      runErrorBorderAnimation(borderOpacity.category);
       return;
     }
     if (!validateRequired(formData.address)) {
-      setError(t('jobs.pleaseEnterAddress'));
+      runErrorBorderAnimation(borderOpacity.address);
       return;
     }
     if (!validatePincode(formData.pincode)) {
-      setError(t('jobs.pleaseEnterValidPincode'));
+      runErrorBorderAnimation(borderOpacity.pincode);
       return;
     }
     if (!formData.budget || parseFloat(formData.budget) < 10) {
-      setError(t('jobs.budgetMin10'));
+      runErrorBorderAnimation(borderOpacity.budget);
       return;
     }
     if (!formData.gender) {
-      setError(t('jobs.pleaseSelectGender'));
+      runErrorBorderAnimation(borderOpacity.gender);
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const jobData = {
@@ -121,9 +136,10 @@ const PostJob = ({ onJobPosted }) => {
       } else {
         throw new Error(result.error || t('postJob.failedToPostJob'));
       }
-    } catch (error) {
-      console.error('Error posting job:', error);
-      setError(error.response?.data?.error || error.message || t('postJob.failedToPostJobTryAgain'));
+    } catch (err) {
+      console.error('Error posting job:', err);
+      const msg = err.response?.data?.error || err.message || t('postJob.failedToPostJobTryAgain');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setLoading(false);
     }
@@ -153,62 +169,67 @@ const PostJob = ({ onJobPosted }) => {
         <Card style={styles.card}>
         <CardContent>
           {/* Job Title */}
-          <Input
-            label={t('postJob.jobTitle')}
-            placeholder={t('postJob.enterJobTitle')}
-            value={formData.title}
-            onChangeText={(value) => handleChange('title', value)}
-            style={styles.inputField}
-          />
+          <View style={styles.fieldWithErrorWrap}>
+            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.title }]} pointerEvents="none" />
+            <Input
+              label={t('postJob.jobTitle')}
+              placeholder={t('postJob.enterJobTitle')}
+              value={formData.title}
+              onChangeText={(value) => handleChange('title', value)}
+              style={styles.inputField}
+            />
+          </View>
 
           {/* Category */}
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>{t('postJob.category')}</Text>
-            <View style={styles.categoryGrid}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryButton,
-                    formData.category === cat && styles.categoryButtonActive,
-                  ]}
-                  onPress={() => handleChange('category', cat)}
-                >
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      formData.category === cat && styles.categoryTextActive,
-                    ]}
+            <View style={styles.fieldWithErrorWrap}>
+              <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.category }]} pointerEvents="none" />
+              <View style={styles.categoryGrid}>
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryButton, formData.category === cat && styles.categoryButtonActive]}
+                    onPress={() => handleChange('category', cat)}
                   >
-                    {t('postJob.category' + (CATEGORY_KEYS[cat] || cat))}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text style={[styles.categoryText, formData.category === cat && styles.categoryTextActive]}>
+                      {t('postJob.category' + (CATEGORY_KEYS[cat] || cat))}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
 
           {/* Address */}
-          <Input
-            label={t('postJob.address')}
-            placeholder={t('postJob.enterAddress')}
-            value={formData.address}
-            onChangeText={(value) => handleChange('address', value)}
-            style={styles.inputField}
-          />
+          <View style={styles.fieldWithErrorWrap}>
+            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
+            <Input
+              label={t('postJob.address')}
+              placeholder={t('postJob.enterAddress')}
+              value={formData.address}
+              onChangeText={(value) => handleChange('address', value)}
+              style={styles.inputField}
+            />
+          </View>
 
           {/* Pincode */}
-          <Input
-            label={t('postJob.pincode')}
-            placeholder={t('postJob.pincodePlaceholder')}
-            value={formData.pincode}
-            onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
-            keyboardType="number-pad"
-            maxLength={6}
-            style={styles.inputField}
-          />
+          <View style={styles.fieldWithErrorWrap}>
+            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
+            <Input
+              label={t('postJob.pincode')}
+              placeholder={t('postJob.pincodePlaceholder')}
+              value={formData.pincode}
+              onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+              style={styles.inputField}
+            />
+          </View>
 
           {/* Budget */}
-          <View style={styles.inputWrapper} onStartShouldSetResponder={() => true}>
+          <View style={[styles.inputWrapper, styles.fieldWithErrorWrap]} onStartShouldSetResponder={() => true}>
+            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.budget }]} pointerEvents="none" />
             <Input
               label={t('postJob.budget')}
               placeholder={t('postJob.budgetPlaceholder')}
@@ -217,9 +238,7 @@ const PostJob = ({ onJobPosted }) => {
               keyboardType="number-pad"
               style={styles.inputField}
               onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 100);
+                setTimeout(() => { scrollViewRef.current?.scrollToEnd({ animated: true }); }, 100);
               }}
             />
           </View>
@@ -227,26 +246,21 @@ const PostJob = ({ onJobPosted }) => {
           {/* Gender */}
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>{t('postJob.genderPreference')}</Text>
-            <View style={styles.genderContainer}>
-              {genders.map((gen) => (
-                <TouchableOpacity
-                  key={gen}
-                  style={[
-                    styles.genderButton,
-                    formData.gender === gen && styles.genderButtonActive,
-                  ]}
-                  onPress={() => handleChange('gender', gen)}
-                >
-                  <Text
-                    style={[
-                      styles.genderText,
-                      formData.gender === gen && styles.genderTextActive,
-                    ]}
+            <View style={styles.fieldWithErrorWrap}>
+              <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.gender }]} pointerEvents="none" />
+              <View style={styles.genderContainer}>
+                {genders.map((gen) => (
+                  <TouchableOpacity
+                    key={gen}
+                    style={[styles.genderButton, formData.gender === gen && styles.genderButtonActive]}
+                    onPress={() => handleChange('gender', gen)}
                   >
-                    {t('gender.' + (gen === 'Any' ? 'any' : gen.toLowerCase()))}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text style={[styles.genderText, formData.gender === gen && styles.genderTextActive]}>
+                      {t('gender.' + (gen === 'Any' ? 'any' : gen.toLowerCase()))}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
 
@@ -272,7 +286,7 @@ const PostJob = ({ onJobPosted }) => {
             />
           </View>
 
-          {/* Submit Button with Error */}
+          {/* Submit Button */}
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={loading || gpsDenied}
@@ -285,14 +299,6 @@ const PostJob = ({ onJobPosted }) => {
               <View style={styles.buttonContent}>
                 <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
                 <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
-                {error ? (
-                  <View style={styles.errorInline}>
-                    <MaterialIcons name="error-outline" size={16} color="#FFFFFF" />
-                    <Text style={styles.errorTextInline} numberOfLines={1}>
-                      {error}
-                    </Text>
-                  </View>
-                ) : null}
               </View>
             )}
           </TouchableOpacity>
@@ -387,6 +393,17 @@ const styles = StyleSheet.create({
   fieldContainer: {
     marginBottom: spacing.xs,
   },
+  fieldWithErrorWrap: {
+    position: 'relative',
+    padding: 2,
+    borderRadius: spacing.sm,
+  },
+  errorBorderBox: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 2,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+  },
   label: {
     ...typography.body,
     fontWeight: '600',
@@ -469,29 +486,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: typography.button.fontSize,
     fontWeight: typography.button.fontWeight,
-  },
-  errorInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginLeft: spacing.md,
-    paddingLeft: spacing.md,
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255, 255, 255, 0.3)',
-    maxWidth: '60%',
-  },
-  errorTextInline: {
-    ...typography.small,
-    color: '#FFFFFF',
-    fontSize: 11,
-    flexShrink: 1,
   },
   buttonIcon: {
     marginRight: spacing.sm,

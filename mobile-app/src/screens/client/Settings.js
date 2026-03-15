@@ -18,7 +18,7 @@ import HelpAndSupport from '../common/HelpAndSupport';
 
 const Settings = ({ onNavigate }) => {
   const { user } = useAuth();
-  const { t, locale, setLocale } = useLanguage();
+  const { t } = useLanguage();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
@@ -49,27 +49,6 @@ const Settings = ({ onNavigate }) => {
 
   return (
     <ScrollView style={styles.container}>
-      <Card style={styles.card}>
-        <CardContent>
-          <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
-          <Text style={styles.settingDescription}>{t('settings.languageDesc')}</Text>
-          <View style={styles.languageRow}>
-            {['en', 'hi'].map((code) => (
-              <TouchableOpacity
-                key={code}
-                style={[styles.languageOption, locale === code && styles.languageOptionActive]}
-                onPress={() => setLocale(code)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.languageOptionText, locale === code && styles.languageOptionTextActive]}>
-                  {t('languages.' + code)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </CardContent>
-      </Card>
-
       <Card style={styles.card}>
         <CardContent>
           <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
@@ -224,31 +203,6 @@ const styles = StyleSheet.create({
   versionText: {
     ...typography.body,
     color: colors.text.secondary,
-  },
-  languageRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.sm,
-  },
-  languageOption: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  languageOptionActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light || colors.primary.main + '20',
-  },
-  languageOptionText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  languageOptionTextActive: {
-    color: colors.primary.main,
-    fontWeight: '600',
   },
 });
 

@@ -255,7 +255,7 @@ router.post('/verify-otp', async (req, res) => {
       }
 
       // One device per account: if already logged in on a different device, require forceLogin
-      const requestDeviceId = (deviceId && String(deviceId).trim()) || null;
+      const requestDeviceId = (deviceId != null && String(deviceId).trim()) ? String(deviceId).trim() : null;
       if (requestDeviceId && user.currentDeviceId && user.currentDeviceId !== requestDeviceId) {
         if (!forceLogin) {
           return res.json({
@@ -270,6 +270,8 @@ router.post('/verify-otp', async (req, res) => {
         user.updatedAt = new Date();
         await user.save();
       } else if (requestDeviceId && user.currentDeviceId !== requestDeviceId) {
+        // New device (or first time we have deviceId): set device and invalidate any previous session
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
         user.currentDeviceId = requestDeviceId;
         user.updatedAt = new Date();
         await user.save();

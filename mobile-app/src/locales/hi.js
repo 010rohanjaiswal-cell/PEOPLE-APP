@@ -62,6 +62,8 @@ export default {
     filterNearestToFar: 'नज़दीक से दूर',
     filterFarToNearest: 'दूर से नज़दीक',
     kmAway: 'किमी दूर',
+    viewMore: 'और देखें',
+    viewLess: 'कम देखें',
     payDues: 'बकाया भरें',
     alreadyTaken: 'पहले से लिया',
     pickupJob: 'नौकरी उठाएं',

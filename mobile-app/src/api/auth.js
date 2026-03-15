@@ -28,12 +28,15 @@ export const authAPI = {
    * @returns {Promise} User data and JWT token, or { success: false, code: 'ALREADY_LOGGED_IN_ELSEWHERE', message }
    */
   verifyOTP: async (phoneNumber, otp, deviceId = null, forceLogin = false) => {
-    const response = await apiClient.post('/api/auth/verify-otp', {
+    const body = {
       phoneNumber,
       otp,
-      deviceId: deviceId || undefined,
       forceLogin: forceLogin || undefined,
-    });
+    };
+    if (deviceId != null && String(deviceId).trim() !== '') {
+      body.deviceId = String(deviceId).trim();
+    }
+    const response = await apiClient.post('/api/auth/verify-otp', body);
     return response.data;
   },
 

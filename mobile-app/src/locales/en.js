@@ -62,6 +62,8 @@ export default {
     filterNearestToFar: 'Nearest to far',
     filterFarToNearest: 'Far to nearest',
     kmAway: 'km away',
+    viewMore: 'View more',
+    viewLess: 'View less',
     payDues: 'Pay Dues',
     alreadyTaken: 'Already Taken',
     pickupJob: 'Pickup Job',

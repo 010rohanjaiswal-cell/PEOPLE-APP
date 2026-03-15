@@ -13,6 +13,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { colors, spacing, typography } from '../../theme';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import NotificationBell from '../../components/common/NotificationBell';
+import LanguageSelector from '../../components/common/LanguageSelector';
 import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import { useLocation } from '../../context/LocationContext';
@@ -183,10 +184,13 @@ const ClientDashboard = () => {
           </TouchableOpacity>
           <Text style={styles.logo}>{t('common.appName')}</Text>
         </View>
-        <NotificationBell
-          onPress={() => setNotificationModalVisible(true)}
-          style={styles.notificationButton}
-        />
+        <View style={styles.rightSection}>
+          <LanguageSelector style={styles.languageSelector} />
+          <NotificationBell
+            onPress={() => setNotificationModalVisible(true)}
+            style={styles.notificationButton}
+          />
+        </View>
       </View>
 
       <GpsBanner />
@@ -400,6 +404,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  languageSelector: {
+    marginRight: 0,
   },
   notificationButton: {
     padding: spacing.xs,

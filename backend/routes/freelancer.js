@@ -363,8 +363,9 @@ router.get('/jobs/available', authenticate, async (req, res) => {
         if (job.jobLat != null && job.jobLng != null) {
           return { lat: job.jobLat, lng: job.jobLng };
         }
-        const pin = (job.pincode || '').toString().trim();
-        if (!pin) return null;
+        const raw = (job.pincode || '').toString().trim();
+        const pin = raw.replace(/\D/g, '').slice(0, 6);
+        if (pin.length !== 6) return null;
         if (pincodeCoordsCache[pin]) return pincodeCoordsCache[pin];
         const coords = await getCoordsFromPincode(pin);
         if (coords) pincodeCoordsCache[pin] = coords;

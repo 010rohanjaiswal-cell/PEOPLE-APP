@@ -45,6 +45,7 @@ const MyJobs = () => {
   const [completingJob, setCompletingJob] = useState(false);
   const [jobToComplete, setJobToComplete] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
 
   const loadJobs = async () => {
     try {
@@ -165,6 +166,7 @@ const MyJobs = () => {
   };
 
   const renderJobItem = ({ item }) => {
+    const jobId = item._id || item.id;
     const statusInfo = getStatusBadgeStyle(item.status);
 
     return (
@@ -184,9 +186,25 @@ const MyJobs = () => {
         </View>
 
         {item.description ? (
-          <Text style={styles.jobDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
+          <View style={styles.descriptionBlock}>
+            <Text style={styles.jobDescription} numberOfLines={expandedDescriptionIds[jobId] ? undefined : 2}>
+              {item.description}
+            </Text>
+            {item.description.length > 60 ? (
+              <TouchableOpacity
+                onPress={() => setExpandedDescriptionIds((prev) => ({ ...prev, [jobId]: !prev[jobId] }))}
+                style={[
+                  styles.viewMoreButton,
+                  expandedDescriptionIds[jobId] ? styles.viewMoreButtonBlock : styles.viewMoreButtonInline,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewMoreText}>
+                  {expandedDescriptionIds[jobId] ? t('jobs.viewLess') : t('jobs.viewMore')}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.jobAddressRow}>
           <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
@@ -581,11 +599,34 @@ const styles = StyleSheet.create({
     color: colors.primary.main,
     fontWeight: '500',
   },
+  descriptionBlock: {
+    position: 'relative',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
   jobDescription: {
     ...typography.small,
     color: colors.text.secondary,
+    paddingRight: 0,
+  },
+  viewMoreButton: {
+    paddingVertical: 2,
+  },
+  viewMoreButtonInline: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.cardBackground,
+    paddingLeft: spacing.sm,
+  },
+  viewMoreButtonBlock: {
     marginTop: spacing.xs,
-    marginBottom: spacing.xs,
+    width: '100%',
+  },
+  viewMoreText: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '600',
   },
   actionsRow: {
     flexDirection: 'row',
