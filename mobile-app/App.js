@@ -7,6 +7,7 @@ import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DigiLockerProvider } from '@cashfreepayments/react-native-digilocker';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UserProvider } from './src/context/UserContext';
 import { NotificationProvider } from './src/context/NotificationContext';
@@ -64,6 +65,7 @@ const AppContent = () => {
 export default function App() {
   return (
     <SafeAreaProvider>
+      <DigiLockerProvider>
       <AuthProvider>
         <LanguageProvider>
           <UserProvider>
@@ -76,6 +78,7 @@ export default function App() {
           </UserProvider>
         </LanguageProvider>
       </AuthProvider>
+      </DigiLockerProvider>
     </SafeAreaProvider>
   );
 }

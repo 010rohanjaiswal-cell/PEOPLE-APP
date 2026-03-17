@@ -15,6 +15,7 @@ const { getStateFromCoords, getCoordsFromPincode, haversineDistanceKm } = requir
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
+const axios = require('axios');
 const {
   notifyOfferReceived,
   notifyJobAssigned,
@@ -36,6 +37,49 @@ async function uploadToCloudinary(buffer, folder) {
     );
     streamifier.createReadStream(buffer).pipe(stream);
   });
+}
+
+function getCashfreeVerificationBaseUrl() {
+  const env = (process.env.CASHFREE_ENV || process.env.CASHFREE_VRS_ENV || '').toLowerCase();
+  return env === 'sandbox' || env === 'test'
+    ? 'https://sandbox.cashfree.com/verification'
+    : 'https://api.cashfree.com/verification';
+}
+
+function getCashfreeVrsHeaders(extra = {}) {
+  const clientId = process.env.CASHFREE_CLIENT_ID;
+  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+  const apiVersion = process.env.CASHFREE_VRS_API_VERSION || '2023-12-18';
+  if (!clientId || !clientSecret) {
+    throw new Error('Cashfree SecureID credentials not configured');
+  }
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'x-client-id': clientId,
+    'x-client-secret': clientSecret,
+    'x-api-version': apiVersion,
+    ...extra,
+  };
+}
+
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function buildAddressFromSplitAddress(split = {}) {
+  const parts = [
+    split.house,
+    split.street,
+    split.landmark,
+    split.vtc,
+    split.subdist,
+    split.dist,
+    split.state,
+    split.pincode,
+    split.country,
+  ].filter(Boolean);
+  return parts.join(', ');
 }
 
 /**
@@ -179,19 +223,271 @@ router.get('/verification/status', authenticate, async (req, res) => {
 });
 
 /**
- * Submit verification
+ * DigiLocker - Create consent URL (Aadhaar + PAN)
+ * POST /api/freelancer/verification/digilocker/initiate
+ * body: { userFlow?: 'signin'|'signup' }
+ */
+router.post('/verification/digilocker/initiate', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const { userFlow } = req.body || {};
+    const verificationId = `DL_${user._id.toString()}_${Date.now()}`.slice(0, 50);
+    const baseUrl = getCashfreeVerificationBaseUrl();
+
+    // Must be https. Use BACKEND_URL if configured; otherwise fall back to Cashfree docs suggestion.
+    const redirectUrl =
+      (process.env.BACKEND_URL && process.env.BACKEND_URL.startsWith('https://'))
+        ? `${process.env.BACKEND_URL.replace(/\/$/, '')}/digilocker/return`
+        : 'https://www.cashfree.com';
+
+    const payload = {
+      verification_id: verificationId,
+      document_requested: ['AADHAAR', 'PAN'],
+      redirect_url: redirectUrl,
+      user_flow: userFlow === 'signin' ? 'signin' : 'signup',
+    };
+
+    const resp = await axios.post(`${baseUrl}/digilocker`, payload, {
+      headers: getCashfreeVrsHeaders(),
+      timeout: 15000,
+    });
+
+    const data = resp.data || {};
+
+    // Save "pending" verification state tied to this freelancer
+    await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        source: 'cashfree_secure_id',
+        status: 'pending',
+        rejectionReason: null,
+        secureIdReferenceId: data.reference_id != null ? String(data.reference_id) : null,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    user.verificationStatus = 'pending';
+    user.verificationRejectionReason = null;
+    await user.save();
+
+    return res.json({
+      success: true,
+      verificationId: data.verification_id || verificationId,
+      referenceId: data.reference_id,
+      url: data.url,
+      status: data.status,
+      documentRequested: data.document_requested,
+      redirectUrl: data.redirect_url,
+      userFlow: data.user_flow,
+    });
+  } catch (error) {
+    console.error('Cashfree DigiLocker initiate error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error.message || 'Failed to initiate DigiLocker verification',
+    });
+  }
+});
+
+/**
+ * DigiLocker - Check status
+ * GET /api/freelancer/verification/digilocker/status?verificationId=...
+ */
+router.get('/verification/digilocker/status', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const verificationId = String(req.query?.verificationId || '').trim();
+    if (!verificationId) {
+      return res.status(400).json({ success: false, error: 'verificationId is required' });
+    }
+
+    const baseUrl = getCashfreeVerificationBaseUrl();
+    const resp = await axios.get(`${baseUrl}/digilocker`, {
+      headers: getCashfreeVrsHeaders(),
+      params: { verification_id: verificationId },
+      timeout: 15000,
+    });
+
+    return res.json({ success: true, ...resp.data });
+  } catch (error) {
+    console.error('Cashfree DigiLocker status error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error.message || 'Failed to get DigiLocker status',
+    });
+  }
+});
+
+/**
+ * DigiLocker - Fetch documents and approve freelancer
+ * POST /api/freelancer/verification/digilocker/fetch
+ * body: { verificationId: string }
+ */
+router.post('/verification/digilocker/fetch', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const { verificationId } = req.body || {};
+    const vId = String(verificationId || '').trim();
+    if (!vId) return res.status(400).json({ success: false, error: 'verificationId is required' });
+
+    const baseUrl = getCashfreeVerificationBaseUrl();
+
+    // 1) Ensure AUTHENTICATED
+    const statusResp = await axios.get(`${baseUrl}/digilocker`, {
+      headers: getCashfreeVrsHeaders(),
+      params: { verification_id: vId },
+      timeout: 15000,
+    });
+    const statusData = statusResp.data || {};
+    if (statusData.status !== 'AUTHENTICATED') {
+      return res.status(400).json({
+        success: false,
+        error: `DigiLocker not ready. Current status: ${statusData.status || 'UNKNOWN'}`,
+        status: statusData.status,
+        details: statusData,
+      });
+    }
+
+    // 2) Fetch Aadhaar and PAN docs
+    const [aadhaarResp, panResp] = await Promise.all([
+      axios.get(`${baseUrl}/digilocker/document/AADHAAR`, {
+        headers: getCashfreeVrsHeaders(),
+        params: { verification_id: vId },
+        timeout: 20000,
+      }),
+      axios.get(`${baseUrl}/digilocker/document/PAN`, {
+        headers: getCashfreeVrsHeaders(),
+        params: { verification_id: vId },
+        timeout: 20000,
+      }),
+    ]);
+
+    const aadhaar = aadhaarResp.data || {};
+    const pan = panResp.data || {};
+
+    if (aadhaar.status !== 'SUCCESS') {
+      return res.status(400).json({
+        success: false,
+        error: `Failed to fetch Aadhaar from DigiLocker. Status: ${aadhaar.status || 'UNKNOWN'}`,
+        aadhaar,
+      });
+    }
+    if (pan.status !== 'SUCCESS') {
+      return res.status(400).json({
+        success: false,
+        error: `Failed to fetch PAN from DigiLocker. Status: ${pan.status || 'UNKNOWN'}`,
+        pan,
+      });
+    }
+
+    const fullName = aadhaar.name || pan.name_pan_card || null;
+    const dob = aadhaar.dob || pan.dob || null;
+    const gender =
+      (aadhaar.gender === 'M' ? 'Male' : aadhaar.gender === 'F' ? 'Female' : aadhaar.gender) ||
+      pan.gender ||
+      null;
+    const address = aadhaar.split_address ? buildAddressFromSplitAddress(aadhaar.split_address) : null;
+
+    const aadhaarMasked = aadhaar.uid ? String(aadhaar.uid) : null; // already masked like xxxxxxxx5647
+    const panNumber = pan.pan ? String(pan.pan).toUpperCase() : null;
+
+    // Aadhaar photo is Base64 in "photo_link" (per docs). Use it as profile photo if present.
+    let profilePhotoUrl = null;
+    if (aadhaar.photo_link) {
+      try {
+        const base64 = String(aadhaar.photo_link);
+        const buf = Buffer.from(base64, 'base64');
+        const folderBase = `people-app/freelancers/${user._id.toString()}`;
+        profilePhotoUrl = await uploadToCloudinary(buf, `${folderBase}/profile`);
+      } catch (e) {
+        console.warn('Failed to upload DigiLocker Aadhaar photo to Cloudinary:', e?.message || e);
+      }
+    }
+
+    // Save verification + approve
+    const verification = await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        source: 'cashfree_secure_id',
+        fullName,
+        dob,
+        gender,
+        address,
+        profilePhoto: profilePhotoUrl || null,
+        aadhaarMasked,
+        panNumber,
+        status: 'approved',
+        rejectionReason: null,
+        secureIdReferenceId: pan.reference_id != null ? String(pan.reference_id) : null,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    user.verificationStatus = 'approved';
+    user.verificationRejectionReason = null;
+    if (fullName) user.fullName = fullName;
+    if (profilePhotoUrl) user.profilePhoto = profilePhotoUrl;
+    await user.save();
+
+    return res.json({
+      success: true,
+      status: 'approved',
+      verification,
+      digilocker: {
+        verificationId: vId,
+        aadhaar: {
+          uid: aadhaar.uid,
+          name: aadhaar.name,
+          dob: aadhaar.dob,
+          gender: aadhaar.gender,
+        },
+        pan: {
+          pan: pan.pan,
+          name_pan_card: pan.name_pan_card,
+          dob: pan.dob,
+          gender: pan.gender,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Cashfree DigiLocker fetch error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error.message || 'Failed to fetch DigiLocker documents',
+    });
+  }
+});
+
+/**
+ * Submit verification via SecureID (Option B - Aadhaar + PAN, instant approval).
  * POST /api/freelancer/verification
  * Requires authentication
+ *
+ * NOTE: This is a first step towards SecureID-only flow.
+ * For now it does NOT call Cashfree; it validates basic fields and
+ * immediately marks the freelancer as approved. Later we will replace
+ * the inline approval with actual Cashfree SecureID API calls.
  */
 router.post(
   '/verification',
   authenticate,
-  upload.fields([
-    { name: 'profilePhoto', maxCount: 1 },
-    { name: 'aadhaarFront', maxCount: 1 },
-    { name: 'aadhaarBack', maxCount: 1 },
-    { name: 'panCard', maxCount: 1 },
-  ]),
   async (req, res) => {
   try {
     const userId = req.user.id;
@@ -212,66 +508,54 @@ router.post(
     }
 
     const {
-      fullName,
-      dob,
-      gender,
-      address,
+      aadhaarNumber,
+      aadhaarOtp,
+      panNumber,
     } = req.body || {};
-    
-    console.log('📥 Verification submission received:', {
-      fullName,
-      dob,
-      gender,
-      address,
-      hasProfilePhoto: !!req.files?.profilePhoto?.[0],
-      hasAadhaarFront: !!req.files?.aadhaarFront?.[0],
-      hasAadhaarBack: !!req.files?.aadhaarBack?.[0],
-      hasPanCard: !!req.files?.panCard?.[0],
+
+    console.log('📥 SecureID-style verification request received:', {
+      userId,
+      hasAadhaarNumber: !!aadhaarNumber,
+      hasAadhaarOtp: !!aadhaarOtp,
+      hasPanNumber: !!panNumber,
       bodyKeys: Object.keys(req.body || {}),
     });
 
-    const profilePhotoFile = req.files?.profilePhoto?.[0];
-    const aadhaarFrontFile = req.files?.aadhaarFront?.[0];
-    const aadhaarBackFile = req.files?.aadhaarBack?.[0];
-    const panCardFile = req.files?.panCard?.[0];
-
-    // Basic validation to mirror mobile form
-    if (
-      !fullName ||
-      !dob ||
-      !gender ||
-      !address ||
-      !profilePhotoFile ||
-      !aadhaarFrontFile ||
-      !aadhaarBackFile ||
-      !panCardFile
-    ) {
+    // Basic validation – later this will be replaced by Cashfree SecureID responses
+    if (!aadhaarNumber || !panNumber || !aadhaarOtp) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required verification fields',
+        error: 'Missing required fields: aadhaarNumber, aadhaarOtp and panNumber are required.',
       });
     }
 
-    // Upload images to Cloudinary
-    const folderBase = `people-app/freelancers/${user._id.toString()}`;
-    const profilePhoto = await uploadToCloudinary(profilePhotoFile.buffer, `${folderBase}/profile`);
-    const aadhaarFront = await uploadToCloudinary(aadhaarFrontFile.buffer, `${folderBase}/aadhaar`);
-    const aadhaarBack = await uploadToCloudinary(aadhaarBackFile.buffer, `${folderBase}/aadhaar`);
-    const panCard = await uploadToCloudinary(panCardFile.buffer, `${folderBase}/pan`);
+    const aadhaarDigits = String(aadhaarNumber).replace(/\D/g, '');
+    if (aadhaarDigits.length !== 12) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Aadhaar number format.',
+      });
+    }
+
+    const pan = String(panNumber).trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid PAN number format.',
+      });
+    }
+
+    const aadhaarMasked = `XXXX-XXXX-${aadhaarDigits.slice(-4)}`;
 
     // Upsert verification record for this freelancer
     const verification = await FreelancerVerification.findOneAndUpdate(
       { user: user._id },
       {
-        fullName,
-        dob,
-        gender,
-        address,
-        profilePhoto,
-        aadhaarFront,
-        aadhaarBack,
-        panCard,
-        status: 'pending',
+        // We don't have name/dob/address yet; those will come from SecureID later.
+        source: 'cashfree_secure_id',
+        aadhaarMasked,
+        panNumber: pan,
+        status: 'approved',
         rejectionReason: null,
       },
       {
@@ -280,32 +564,27 @@ router.post(
         setDefaultsOnInsert: true,
       }
     );
-    
-    console.log('💾 Verification saved to DB:', {
+
+    console.log('✅ SecureID-style verification approved (placeholder):', {
       userId: user._id,
       verificationId: verification._id,
-      savedData: {
-        fullName: verification.fullName,
-        dob: verification.dob,
-        gender: verification.gender,
-        address: verification.address,
-        status: verification.status,
-      }
+      aadhaarMasked,
+      panNumber: pan,
     });
 
-    // Keep a simple status mirror on User for quick checks
-    user.verificationStatus = 'pending';
+    // Mirror status on User so routing works as before
+    user.verificationStatus = 'approved';
     user.verificationRejectionReason = null;
     await user.save();
 
     res.json({
       success: true,
-      status: 'pending',
-      message: 'Verification submitted. Pending admin review.',
+      status: 'approved',
+      message: 'Verification approved (SecureID placeholder).',
       verification,
     });
   } catch (error) {
-    console.error('Error submitting verification:', error);
+    console.error('Error submitting SecureID verification:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to submit verification',

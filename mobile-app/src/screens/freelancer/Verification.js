@@ -10,14 +10,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Modal,
   ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { useDigiLocker } from '@cashfreepayments/react-native-digilocker';
 import { colors, spacing, typography } from '../../theme';
-import { Button, Card, CardContent, Input } from '../../components/common';
+import { Button, Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -27,6 +26,7 @@ import { useLanguage } from '../../context/LanguageContext';
 const Verification = ({ navigation }) => {
   const { updateUser } = useAuth();
   const { t } = useLanguage();
+  const { verify } = useDigiLocker();
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,38 +38,16 @@ const Verification = ({ navigation }) => {
   const [errorModalTitle, setErrorModalTitle] = useState('');
   const [errorModalMessage, setErrorModalMessage] = useState('');
 
-  // Form state
-  const [fullName, setFullName] = useState('');
-  const [dob, setDob] = useState('');
-  const [gender, setGender] = useState('');
-  const [address, setAddress] = useState('');
-  const [profilePhotoUri, setProfilePhotoUri] = useState(null);
-  const [docFrontUri, setDocFrontUri] = useState(null);
-  const [docBackUri, setDocBackUri] = useState(null);
-  const [panCardUri, setPanCardUri] = useState(null);
-  const [datePickerVisible, setDatePickerVisible] = useState(false);
-  const [selectedYear, setSelectedYear] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [selectedDay, setSelectedDay] = useState('');
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 70 }, (_, i) => `${currentYear - i}`);
-  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
-  const days = Array.from({ length: 31 }, (_, i) => `${i + 1}`.padStart(2, '0'));
+  // DigiLocker SecureID (Option B)
+  const [digilockerUrl, setDigilockerUrl] = useState(null);
+  const [digilockerVerificationId, setDigilockerVerificationId] = useState(null);
+  const [digilockerChecking, setDigilockerChecking] = useState(false);
 
   useEffect(() => {
     checkVerificationStatus();
   }, []);
 
-  // Prefill name and profile photo from client profile when user has client account (same number, first time as freelancer)
-  const hasPrefilledFromClient = React.useRef(false);
-  useEffect(() => {
-    if (hasPrefilledFromClient.current) return;
-    const fromClient = user?.fullName || user?.profilePhoto;
-    if (!fromClient) return;
-    setFullName((prev) => (prev ? prev : (user?.fullName || '')));
-    setProfilePhotoUri((prev) => (prev ? prev : (user?.profilePhoto || null)));
-    hasPrefilledFromClient.current = true;
-  }, [user?.fullName, user?.profilePhoto]);
+  // NOTE: With SecureID-only flow we no longer collect manual name/photo here.
 
   // Auto-navigate to dashboard if verification is approved
   useEffect(() => {
@@ -88,25 +66,77 @@ const Verification = ({ navigation }) => {
     setErrorModalVisible(true);
   };
 
-  const pickImage = async (setterUri, label, aspectRatio = [4, 3]) => {
+  const startDigilocker = async () => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        showErrorModal(t('verification.permissionDenied'), t('verification.allowCameraAccess'));
+      setSubmitting(true);
+      setError('');
+      setSuccessMessage('');
+      const resp = await verificationAPI.initiateDigilocker('signup');
+      if (!resp?.success || !resp?.url || !resp?.verificationId) {
+        throw new Error(resp?.error || 'Failed to start DigiLocker');
+      }
+      setDigilockerUrl(resp.url);
+      setDigilockerVerificationId(resp.verificationId);
+      setIsSubmitted(true);
+      setStatus(VERIFICATION_STATUS.PENDING);
+      verify(resp.url, undefined, {
+        userFlow: 'signup',
+        onSuccess: async (data) => {
+          try {
+            // Prefer SDK-provided verification_id if present
+            const vId = data?.verification_id || data?.verificationId || resp.verificationId;
+            setDigilockerVerificationId(vId);
+            setSuccessMessage('DigiLocker consent received. Fetching documents...');
+            await checkAndFetchDigilocker(vId);
+          } catch (e) {
+            showErrorModal('Verification Error', e?.message || 'Failed to complete verification');
+          }
+        },
+        onError: (errMsg) => {
+          showErrorModal('DigiLocker Error', errMsg || 'DigiLocker verification failed');
+        },
+        onCancel: () => {
+          showErrorModal('Cancelled', 'You cancelled the DigiLocker verification.');
+        },
+      });
+    } catch (e) {
+      console.error('DigiLocker initiate error:', e);
+      showErrorModal('DigiLocker Error', e?.response?.data?.error || e?.message || 'Failed to initiate DigiLocker');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const checkAndFetchDigilocker = async (verificationIdOverride) => {
+    const vId = verificationIdOverride || digilockerVerificationId;
+    if (!vId) return;
+    try {
+      setDigilockerChecking(true);
+      const statusResp = await verificationAPI.getDigilockerStatus(vId);
+      const st = statusResp?.status;
+      if (st !== 'AUTHENTICATED') {
+        showErrorModal(
+          'Not completed yet',
+          `DigiLocker status: ${st || 'UNKNOWN'}. Please complete consent in DigiLocker and try again.`
+        );
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: aspectRatio,
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets[0]?.uri) {
-        setterUri(result.assets[0].uri);
+      const fetchResp = await verificationAPI.fetchDigilockerDocuments(vId);
+      if (!fetchResp?.success) {
+        throw new Error(fetchResp?.error || 'Failed to fetch documents');
       }
-    } catch (err) {
-      console.error(`Error picking ${label}:`, err);
-      showErrorModal(t('verification.uploadFailed'), t('verification.couldNotSelect').replace('{label}', label));
+      setStatus(VERIFICATION_STATUS.APPROVED);
+      setSuccessMessage('Verification completed successfully. Redirecting you to dashboard...');
+
+      const profileResponse = await userAPI.getProfile();
+      if (profileResponse.success && profileResponse.user) {
+        await updateUser(profileResponse.user);
+      }
+    } catch (e) {
+      console.error('DigiLocker fetch error:', e);
+      showErrorModal('Verification Error', e?.response?.data?.error || e?.message || 'Failed to complete verification');
+    } finally {
+      setDigilockerChecking(false);
     }
   };
 
@@ -203,93 +233,24 @@ const Verification = ({ navigation }) => {
       </View>
       <Text style={styles.statusTitle}>Verification Rejected</Text>
       <Text style={styles.statusMessage}>
-        Your verification has been rejected. Please review the requirements and resubmit.
+        Your verification has been rejected. Please try again with correct Aadhaar and PAN details.
       </Text>
       <Button
         onPress={() => {
-          // Show verification form for resubmission
+          // Show SecureID form again
           setShowResubmitForm(true);
         }}
         variant="outline"
         style={styles.resubmitButton}
       >
-        <Text style={styles.resubmitButtonText}>Resubmit Verification</Text>
+        <Text style={styles.resubmitButtonText}>Retry Verification</Text>
       </Button>
     </View>
   );
 
-  const handleSubmitVerification = async () => {
-    // Basic validation
-    if (!fullName || !dob || !gender || !address || !profilePhotoUri || !docFrontUri || !docBackUri || !panCardUri) {
-      showErrorModal(t('verification.missingInfo'), t('verification.fillAllRequired'));
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    try {
-      // Build multipart form data for Cloudinary upload via backend
-      const formData = new FormData();
-      formData.append('fullName', fullName);
-      formData.append('dob', dob);
-      formData.append('gender', gender);
-      formData.append('address', address);
+  // Option B flow is now DigiLocker-based, not Aadhaar OTP inputs.
 
-      formData.append('profilePhoto', {
-        uri: profilePhotoUri,
-        name: 'profile-photo.jpg',
-        type: 'image/jpeg',
-      });
-
-      formData.append('aadhaarFront', {
-        uri: docFrontUri,
-        name: 'aadhaar-front.jpg',
-        type: 'image/jpeg',
-      });
-
-      formData.append('aadhaarBack', {
-        uri: docBackUri,
-        name: 'aadhaar-back.jpg',
-        type: 'image/jpeg',
-      });
-
-      formData.append('panCard', {
-        uri: panCardUri,
-        name: 'pan-card.jpg',
-        type: 'image/jpeg',
-      });
-
-      await verificationAPI.submitVerification(formData);
-      setStatus(VERIFICATION_STATUS.PENDING);
-      setIsSubmitted(true);
-      setShowResubmitForm(false); // Hide form after successful submission
-      setSuccessMessage('Verification submitted successfully. We will update your status soon.');
-      setError(''); // Clear any previous errors
-      
-      // Refresh user profile to get updated profile photo from backend
-      try {
-        const profileResponse = await userAPI.getProfile();
-        if (profileResponse.success && profileResponse.user) {
-          await updateUser(profileResponse.user);
-        }
-      } catch (profileError) {
-        console.error('Error refreshing user profile:', profileError);
-        // Don't show error to user, profile photo will update on next login
-      }
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => {
-        setSuccessMessage('');
-      }, 5000);
-    } catch (err) {
-      console.error('Verification submit error:', err);
-      setError(err.response?.data?.message || 'Failed to submit verification');
-      setSuccessMessage(''); // Clear success message on error
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Verification Form
+  // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
     <View style={styles.formContainer}>
       <View style={[styles.iconContainer, styles.pendingIcon]}>
@@ -297,110 +258,11 @@ const Verification = ({ navigation }) => {
       </View>
       <Text style={styles.statusTitle}>Verification Required</Text>
       <Text style={styles.statusMessage}>
-        Submit your details and documents to get approved.
+        Continue with DigiLocker to fetch your Aadhaar and PAN details securely and get instant access.
       </Text>
 
-      <Input
-        label="Full Name"
-        placeholder="Enter your full name"
-        value={fullName}
-        onChangeText={setFullName}
-      />
-      {/* Date Picker */}
-      <TouchableOpacity style={styles.selector} onPress={() => setDatePickerVisible(true)}>
-        <Text style={styles.selectorLabel}>Date of Birth</Text>
-        <Text style={styles.selectorValue}>{dob || t('verification.selectDate')}</Text>
-      </TouchableOpacity>
-
-      {/* Gender Selector */}
-      <View style={styles.genderRow}>
-        {['Male', 'Female'].map((g) => (
-          <TouchableOpacity
-            key={g}
-            style={[
-              styles.genderButton,
-              gender === g && styles.genderButtonActive,
-            ]}
-            onPress={() => setGender(g)}
-          >
-            <Text
-              style={[
-                styles.genderText,
-                gender === g && styles.genderTextActive,
-              ]}
-            >
-              {g}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <Input
-        label="Address"
-        placeholder="Enter your address"
-        value={address}
-        onChangeText={setAddress}
-        multiline
-      />
-      {/* Profile Photo */}
-      <View style={styles.uploadSection}>
-        <Text style={styles.uploadLabel}>Profile Photo (Required)</Text>
-        <TouchableOpacity
-          style={styles.uploadBox}
-          onPress={() => pickImage(setProfilePhotoUri, 'Profile Photo', [9, 16])}
-        >
-          {profilePhotoUri ? (
-            <Image source={{ uri: profilePhotoUri }} style={styles.uploadPreview} />
-          ) : (
-            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Document Uploads with preview and upload button */}
-      <View style={styles.uploadSection}>
-        <Text style={styles.uploadLabel}>Aadhaar Front (Required)</Text>
-        <TouchableOpacity
-          style={styles.uploadBox}
-          onPress={() => pickImage(setDocFrontUri, 'Aadhaar Front')}
-        >
-          {docFrontUri ? (
-            <Image source={{ uri: docFrontUri }} style={styles.uploadPreview} />
-          ) : (
-            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.uploadSection}>
-        <Text style={styles.uploadLabel}>Aadhaar Back (Required)</Text>
-        <TouchableOpacity
-          style={styles.uploadBox}
-          onPress={() => pickImage(setDocBackUri, 'Aadhaar Back')}
-        >
-          {docBackUri ? (
-            <Image source={{ uri: docBackUri }} style={styles.uploadPreview} />
-          ) : (
-            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.uploadSection}>
-        <Text style={styles.uploadLabel}>PAN Card (Required)</Text>
-        <TouchableOpacity
-          style={styles.uploadBox}
-          onPress={() => pickImage(setPanCardUri, 'PAN Card')}
-        >
-          {panCardUri ? (
-            <Image source={{ uri: panCardUri }} style={styles.uploadPreview} />
-          ) : (
-            <MaterialIcons name="upload-file" size={32} color={colors.text.muted} />
-          )}
-        </TouchableOpacity>
-      </View>
-
       <TouchableOpacity
-        onPress={handleSubmitVerification}
+        onPress={startDigilocker}
         disabled={submitting}
         style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
         activeOpacity={0.7}
@@ -409,7 +271,7 @@ const Verification = ({ navigation }) => {
           <ActivityIndicator color="#FFFFFF" size="small" />
         ) : (
           <>
-            <Text style={styles.submitButtonText}>Submit Verification</Text>
+            <Text style={styles.submitButtonText}>Continue with DigiLocker</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
           </>
         )}
@@ -427,10 +289,7 @@ const Verification = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Back to Login */}
         <View style={styles.topAction}>
           <Button variant="ghost" onPress={() => navigation.replace('Login')} style={styles.backButton}>
@@ -476,67 +335,6 @@ const Verification = ({ navigation }) => {
           </CardContent>
         </Card>
       </ScrollView>
-      <Modal visible={datePickerVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.datePickerModalTitle}>Select Date of Birth</Text>
-            <View style={styles.datePickers}>
-              <ScrollView style={styles.pickerColumn}>
-                {years.map((y) => (
-                  <TouchableOpacity
-                    key={y}
-                    style={[styles.pickerItem, selectedYear === y && styles.pickerItemActive]}
-                    onPress={() => setSelectedYear(y)}
-                  >
-                    <Text style={[styles.pickerItemText, selectedYear === y && styles.pickerItemTextActive]}>{y}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <ScrollView style={styles.pickerColumn}>
-                {months.map((m) => (
-                  <TouchableOpacity
-                    key={m}
-                    style={[styles.pickerItem, selectedMonth === m && styles.pickerItemActive]}
-                    onPress={() => setSelectedMonth(m)}
-                  >
-                    <Text style={[styles.pickerItemText, selectedMonth === m && styles.pickerItemTextActive]}>{m}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <ScrollView style={styles.pickerColumn}>
-                {days.map((d) => (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.pickerItem, selectedDay === d && styles.pickerItemActive]}
-                    onPress={() => setSelectedDay(d)}
-                  >
-                    <Text style={[styles.pickerItemText, selectedDay === d && styles.pickerItemTextActive]}>{d}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-            <View style={styles.modalActions}>
-              <Button variant="ghost" onPress={() => setDatePickerVisible(false)} style={styles.modalButton}>
-                Cancel
-              </Button>
-              <Button
-                onPress={() => {
-                  if (selectedYear && selectedMonth && selectedDay) {
-                    setDob(`${selectedYear}-${selectedMonth}-${selectedDay}`);
-                    setDatePickerVisible(false);
-                  } else {
-                    showErrorModal(t('verification.selectDate'), t('verification.pleaseSelectDate'));
-                  }
-                }}
-                style={styles.modalButton}
-              >
-                {t('common.confirm')}
-              </Button>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Error Modal */}
       <Modal
         visible={errorModalVisible}
@@ -685,127 +483,10 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: '#FFFFFF',
   },
-  uploadSection: {
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
-  },
-  uploadLabel: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  uploadBox: {
-    height: 120,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderStyle: 'dashed',
-    borderRadius: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.cardBackground,
-    marginBottom: spacing.sm,
-  },
-  uploadPreview: {
+  formContainer: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
     width: '100%',
-    height: '100%',
-    borderRadius: spacing.sm,
-  },
-  selector: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    backgroundColor: colors.cardBackground,
-  },
-  selectorLabel: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  selectorValue: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: '600',
-  },
-  genderRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  genderButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.sm,
-    alignItems: 'center',
-    backgroundColor: colors.cardBackground,
-  },
-  genderButtonActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
-  },
-  genderText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    fontWeight: '500',
-  },
-  genderTextActive: {
-    color: colors.primary.main,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  modalCard: {
-    width: '100%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-  },
-  datePickerModalTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-  },
-  datePickers: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    height: 160,
-    marginBottom: spacing.md,
-  },
-  pickerColumn: {
-    flex: 1,
-  },
-  pickerItem: {
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  pickerItemActive: {
-    backgroundColor: colors.primary.light,
-  },
-  pickerItemText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  pickerItemTextActive: {
-    color: colors.primary.main,
-    fontWeight: '700',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-  },
-  modalButton: {
-    minWidth: 100,
   },
   errorContainer: {
     flexDirection: 'row',

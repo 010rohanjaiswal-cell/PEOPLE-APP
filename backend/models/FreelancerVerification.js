@@ -57,6 +57,28 @@ const freelancerVerificationSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    // Optional: metadata when verification is done via Cashfree SecureID
+    source: {
+      type: String,
+      enum: ['manual', 'cashfree_secure_id'],
+      default: 'manual',
+      index: true,
+    },
+    aadhaarMasked: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    panNumber: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    secureIdReferenceId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     timestamps: true,

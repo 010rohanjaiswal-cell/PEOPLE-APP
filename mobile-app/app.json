@@ -35,9 +35,6 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "compileSdkVersion": 34,
-      "minSdkVersion": 21,
-      "targetSdkVersion": 34,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",

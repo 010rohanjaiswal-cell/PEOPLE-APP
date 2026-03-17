@@ -5,26 +5,25 @@
 import apiClient from './client';
 
 export const verificationAPI = {
-  /**
-   * Submit verification documents
-   * @param {Object} verificationData - Verification details and documents
-   * @returns {Promise}
-   */
-  submitVerification: async (verificationData) => {
-    const isFormData =
-      typeof FormData !== 'undefined' && verificationData instanceof FormData;
+  // DigiLocker SecureID (Option B)
+  initiateDigilocker: async (userFlow = 'signup') => {
+    const response = await apiClient.post('/api/freelancer/verification/digilocker/initiate', {
+      userFlow,
+    });
+    return response.data;
+  },
 
-    const response = await apiClient.post(
-      '/api/freelancer/verification',
-      verificationData,
-      isFormData
-        ? {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-            },
-          }
-        : undefined
-    );
+  getDigilockerStatus: async (verificationId) => {
+    const response = await apiClient.get('/api/freelancer/verification/digilocker/status', {
+      params: { verificationId },
+    });
+    return response.data;
+  },
+
+  fetchDigilockerDocuments: async (verificationId) => {
+    const response = await apiClient.post('/api/freelancer/verification/digilocker/fetch', {
+      verificationId,
+    });
     return response.data;
   },
 
