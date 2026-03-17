@@ -476,119 +476,285 @@ router.post('/verification/digilocker/fetch', authenticate, async (req, res) => 
 });
 
 /**
- * Submit verification via SecureID (Option B - Aadhaar + PAN, instant approval).
- * POST /api/freelancer/verification
- * Requires authentication
- *
- * NOTE: This is a first step towards SecureID-only flow.
- * For now it does NOT call Cashfree; it validates basic fields and
- * immediately marks the freelancer as approved. Later we will replace
- * the inline approval with actual Cashfree SecureID API calls.
+ * Offline Aadhaar OTP - Generate OTP
+ * POST /api/freelancer/verification/aadhaar/otp
+ * body: { aadhaarNumber: string }
  */
-router.post(
-  '/verification',
-  authenticate,
-  async (req, res) => {
+router.post('/verification/aadhaar/otp', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found',
-      });
-    }
-
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
     if (user.role !== 'freelancer') {
-      return res.status(403).json({
-        success: false,
-        error: 'This endpoint is only for freelancers',
-      });
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
     }
 
-    const {
-      aadhaarNumber,
-      aadhaarOtp,
-      panNumber,
-    } = req.body || {};
-
-    console.log('📥 SecureID-style verification request received:', {
-      userId,
-      hasAadhaarNumber: !!aadhaarNumber,
-      hasAadhaarOtp: !!aadhaarOtp,
-      hasPanNumber: !!panNumber,
-      bodyKeys: Object.keys(req.body || {}),
-    });
-
-    // Basic validation – later this will be replaced by Cashfree SecureID responses
-    if (!aadhaarNumber || !panNumber || !aadhaarOtp) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: aadhaarNumber, aadhaarOtp and panNumber are required.',
-      });
+    const aadhaarNumber = digitsOnly(req.body?.aadhaarNumber);
+    if (!aadhaarNumber || aadhaarNumber.length !== 12) {
+      return res.status(400).json({ success: false, error: 'Enter a valid 12-digit Aadhaar number.' });
     }
 
-    const aadhaarDigits = String(aadhaarNumber).replace(/\D/g, '');
-    if (aadhaarDigits.length !== 12) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid Aadhaar number format.',
-      });
-    }
-
-    const pan = String(panNumber).trim().toUpperCase();
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid PAN number format.',
-      });
-    }
-
-    const aadhaarMasked = `XXXX-XXXX-${aadhaarDigits.slice(-4)}`;
-
-    // Upsert verification record for this freelancer
-    const verification = await FreelancerVerification.findOneAndUpdate(
-      { user: user._id },
-      {
-        // We don't have name/dob/address yet; those will come from SecureID later.
-        source: 'cashfree_secure_id',
-        aadhaarMasked,
-        panNumber: pan,
-        status: 'approved',
-        rejectionReason: null,
-      },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      }
+    const baseUrl = getCashfreeVerificationBaseUrl();
+    const resp = await axios.post(
+      `${baseUrl}/offline-aadhaar/otp`,
+      { aadhaar_number: aadhaarNumber },
+      { headers: getCashfreeVrsHeaders(), timeout: 15000 }
     );
 
-    console.log('✅ SecureID-style verification approved (placeholder):', {
-      userId: user._id,
-      verificationId: verification._id,
-      aadhaarMasked,
-      panNumber: pan,
-    });
+    const data = resp.data || {};
+    const refId = data.ref_id != null ? String(data.ref_id) : null;
+    if (!refId) {
+      return res.status(500).json({ success: false, error: 'Failed to generate Aadhaar OTP. Please try again.' });
+    }
 
-    // Mirror status on User so routing works as before
-    user.verificationStatus = 'approved';
+    await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        source: 'cashfree_secure_id',
+        status: 'pending',
+        rejectionReason: null,
+        aadhaarOtpRefId: refId,
+        panVerified: false,
+        panRegisteredName: null,
+        termsAccepted: false,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    user.verificationStatus = 'pending';
     user.verificationRejectionReason = null;
     await user.save();
 
-    res.json({
+    return res.json({
+      success: true,
+      status: data.status || 'SUCCESS',
+      message: data.message || 'OTP sent successfully',
+      refId,
+    });
+  } catch (error) {
+    console.error('Cashfree Aadhaar OTP error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error?.response?.data?.error?.message || error.message || 'Failed to send Aadhaar OTP',
+    });
+  }
+});
+
+/**
+ * Offline Aadhaar OTP - Submit OTP and fetch Aadhaar details
+ * POST /api/freelancer/verification/aadhaar/verify
+ * body: { otp: string, refId?: string }
+ */
+router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const otp = digitsOnly(req.body?.otp);
+    if (!otp || otp.length !== 6) {
+      return res.status(400).json({ success: false, error: 'Enter the 6-digit OTP.' });
+    }
+
+    const verification = await FreelancerVerification.findOne({ user: user._id }).sort({ createdAt: -1 });
+    const refId = String(req.body?.refId || verification?.aadhaarOtpRefId || '').trim();
+    if (!refId) {
+      return res.status(400).json({ success: false, error: 'Aadhaar OTP session expired. Please request OTP again.' });
+    }
+
+    const baseUrl = getCashfreeVerificationBaseUrl();
+    const resp = await axios.post(
+      `${baseUrl}/offline-aadhaar/verify`,
+      { otp, ref_id: refId },
+      { headers: getCashfreeVrsHeaders(), timeout: 20000 }
+    );
+
+    const data = resp.data || {};
+    const status = data.status || data?.qr_details?.status || null;
+    if (status && String(status).toUpperCase() !== 'VALID') {
+      return res.status(400).json({ success: false, error: data.message || 'Aadhaar verification failed', details: data });
+    }
+
+    const qr = data.qr_details || data;
+    const fullName = qr.name || null;
+    const dob = qr.dob || data.dob || null;
+    const genderRaw = qr.gender || data.gender || null;
+    const gender = genderRaw === 'M' ? 'Male' : genderRaw === 'F' ? 'Female' : genderRaw;
+    const split = qr.split_address || data.split_address || null;
+    const address = split ? buildAddressFromSplitAddress(split) : (qr.address || data.address || null);
+    const aadhaarLast4 = digitsOnly(qr.aadhaar_last_four_digit || data.aadhaar_last_four_digit || '').slice(-4) || null;
+    const aadhaarMasked = aadhaarLast4 ? `XXXXXXXX${aadhaarLast4}` : null;
+
+    // Photo is base64 in photo_link (per Cashfree response). Upload to Cloudinary.
+    let profilePhotoUrl = null;
+    const photoBase64 = qr.photo_link || data.photo_link || null;
+    if (photoBase64) {
+      try {
+        const buf = Buffer.from(String(photoBase64), 'base64');
+        const folderBase = `people-app/freelancers/${user._id.toString()}`;
+        profilePhotoUrl = await uploadToCloudinary(buf, `${folderBase}/profile`);
+      } catch (e) {
+        console.warn('Failed to upload Aadhaar photo to Cloudinary:', e?.message || e);
+      }
+    }
+
+    const updated = await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        source: 'cashfree_secure_id',
+        status: 'pending',
+        rejectionReason: null,
+        aadhaarOtpRefId: refId,
+        fullName,
+        dob,
+        gender,
+        address,
+        profilePhoto: profilePhotoUrl || undefined,
+        aadhaarLast4,
+        aadhaarMasked: aadhaarMasked || undefined,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Prefill User as well (final approval happens after PAN + terms)
+    if (fullName) user.fullName = fullName;
+    if (profilePhotoUrl) user.profilePhoto = profilePhotoUrl;
+    user.verificationStatus = 'pending';
+    user.verificationRejectionReason = null;
+    await user.save();
+
+    return res.json({
+      success: true,
+      status: 'VALID',
+      verification: {
+        fullName: updated.fullName || null,
+        dob: updated.dob || null,
+        gender: updated.gender || null,
+        address: updated.address || null,
+        aadhaarMasked: updated.aadhaarMasked || null,
+        profilePhoto: updated.profilePhoto || null,
+      },
+    });
+  } catch (error) {
+    console.error('Cashfree Aadhaar verify error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error?.response?.data?.error?.message || error.message || 'Failed to verify Aadhaar OTP',
+    });
+  }
+});
+
+/**
+ * PAN verify
+ * POST /api/freelancer/verification/pan/verify
+ * body: { panNumber: string }
+ */
+router.post('/verification/pan/verify', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const pan = String(req.body?.panNumber || '').trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      return res.status(400).json({ success: false, error: 'Enter a valid PAN number.' });
+    }
+
+    const baseUrl = getCashfreeVerificationBaseUrl();
+    const resp = await axios.post(
+      `${baseUrl}/pan`,
+      { pan, name: user.fullName || undefined },
+      { headers: getCashfreeVrsHeaders(), timeout: 15000 }
+    );
+    const data = resp.data || {};
+    if (data.valid !== true) {
+      return res.status(400).json({ success: false, error: data.message || 'PAN verification failed', details: data });
+    }
+
+    const updated = await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        source: 'cashfree_secure_id',
+        status: 'pending',
+        rejectionReason: null,
+        panNumber: pan,
+        panVerified: true,
+        panRegisteredName: data.registered_name || data.name_pan_card || null,
+        secureIdReferenceId: data.reference_id != null ? String(data.reference_id) : undefined,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    return res.json({
+      success: true,
+      valid: true,
+      registeredName: updated.panRegisteredName || null,
+      pan: updated.panNumber || pan,
+    });
+  } catch (error) {
+    console.error('Cashfree PAN verify error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error?.response?.data?.error?.message || error.message || 'Failed to verify PAN',
+    });
+  }
+});
+
+/**
+ * Complete verification (terms accepted) and approve freelancer
+ * POST /api/freelancer/verification/complete
+ * body: { termsAccepted: boolean }
+ */
+router.post('/verification/complete', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+
+    const termsAccepted = req.body?.termsAccepted === true;
+    if (!termsAccepted) {
+      return res.status(400).json({ success: false, error: 'Please accept Terms & Conditions to continue.' });
+    }
+
+    const verification = await FreelancerVerification.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (!verification) {
+      return res.status(400).json({ success: false, error: 'Verification not started.' });
+    }
+    if (!verification.fullName || !verification.address || !verification.dob) {
+      return res.status(400).json({ success: false, error: 'Please complete Aadhaar verification first.' });
+    }
+    if (!verification.panVerified) {
+      return res.status(400).json({ success: false, error: 'Please verify PAN first.' });
+    }
+
+    verification.termsAccepted = true;
+    verification.status = 'approved';
+    verification.rejectionReason = null;
+    await verification.save();
+
+    user.verificationStatus = 'approved';
+    user.verificationRejectionReason = null;
+    if (verification.fullName) user.fullName = verification.fullName;
+    if (verification.profilePhoto) user.profilePhoto = verification.profilePhoto;
+    await user.save();
+
+    return res.json({
       success: true,
       status: 'approved',
-      message: 'Verification approved (SecureID placeholder).',
       verification,
     });
   } catch (error) {
-    console.error('Error submitting SecureID verification:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to submit verification',
-    });
+    console.error('Complete verification error:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to complete verification' });
   }
 });
 

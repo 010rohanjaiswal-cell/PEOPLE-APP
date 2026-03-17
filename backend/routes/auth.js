@@ -221,6 +221,7 @@ router.post('/verify-otp', async (req, res) => {
 
       // OTP verified! Now get or create user
       let user = await User.findOne({ phone: formattedPhone });
+      const isNewUser = !user;
 
       if (!user) {
         // Create new user
@@ -307,6 +308,7 @@ router.post('/verify-otp', async (req, res) => {
           profilePhoto: profilePhoto,
           email: user.email || null,
           verificationStatus: user.verificationStatus || null,
+          isNewUser,
         }
       });
 

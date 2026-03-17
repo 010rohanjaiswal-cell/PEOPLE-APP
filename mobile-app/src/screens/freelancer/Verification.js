@@ -12,9 +12,10 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useDigiLocker } from '@cashfreepayments/react-native-digilocker';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
@@ -24,9 +25,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 
 const Verification = ({ navigation }) => {
-  const { updateUser } = useAuth();
+  const { updateUser, isNewUser } = useAuth();
   const { t } = useLanguage();
-  const { verify } = useDigiLocker();
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,10 +38,15 @@ const Verification = ({ navigation }) => {
   const [errorModalTitle, setErrorModalTitle] = useState('');
   const [errorModalMessage, setErrorModalMessage] = useState('');
 
-  // DigiLocker SecureID (Option B)
-  const [digilockerUrl, setDigilockerUrl] = useState(null);
-  const [digilockerVerificationId, setDigilockerVerificationId] = useState(null);
-  const [digilockerChecking, setDigilockerChecking] = useState(false);
+  // Offline Aadhaar OTP + PAN verification
+  const [aadhaarNumber, setAadhaarNumber] = useState('');
+  const [aadhaarOtp, setAadhaarOtp] = useState('');
+  const [aadhaarRefId, setAadhaarRefId] = useState(null);
+  const [aadhaarVerified, setAadhaarVerified] = useState(false);
+  const [panNumber, setPanNumber] = useState('');
+  const [panRegisteredName, setPanRegisteredName] = useState(null);
+  const [panVerified, setPanVerified] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     checkVerificationStatus();
@@ -66,77 +71,83 @@ const Verification = ({ navigation }) => {
     setErrorModalVisible(true);
   };
 
-  const startDigilocker = async () => {
+  const sendAadhaarOtp = async () => {
     try {
       setSubmitting(true);
       setError('');
       setSuccessMessage('');
-      const resp = await verificationAPI.initiateDigilocker('signup');
-      if (!resp?.success || !resp?.url || !resp?.verificationId) {
-        throw new Error(resp?.error || 'Failed to start DigiLocker');
+      const resp = await verificationAPI.sendAadhaarOtp(aadhaarNumber);
+      if (!resp?.success || !resp?.refId) {
+        throw new Error(resp?.error || 'Failed to send OTP');
       }
-      setDigilockerUrl(resp.url);
-      setDigilockerVerificationId(resp.verificationId);
+      setAadhaarRefId(resp.refId);
       setIsSubmitted(true);
       setStatus(VERIFICATION_STATUS.PENDING);
-      verify(resp.url, undefined, {
-        userFlow: 'signup',
-        onSuccess: async (data) => {
-          try {
-            // Prefer SDK-provided verification_id if present
-            const vId = data?.verification_id || data?.verificationId || resp.verificationId;
-            setDigilockerVerificationId(vId);
-            setSuccessMessage('DigiLocker consent received. Fetching documents...');
-            await checkAndFetchDigilocker(vId);
-          } catch (e) {
-            showErrorModal('Verification Error', e?.message || 'Failed to complete verification');
-          }
-        },
-        onError: (errMsg) => {
-          showErrorModal('DigiLocker Error', errMsg || 'DigiLocker verification failed');
-        },
-        onCancel: () => {
-          showErrorModal('Cancelled', 'You cancelled the DigiLocker verification.');
-        },
-      });
+      setSuccessMessage('OTP sent to your Aadhaar-linked mobile number.');
     } catch (e) {
-      console.error('DigiLocker initiate error:', e);
-      showErrorModal('DigiLocker Error', e?.response?.data?.error || e?.message || 'Failed to initiate DigiLocker');
+      showErrorModal('Aadhaar OTP', e?.response?.data?.error || e?.message || 'Failed to send OTP');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const checkAndFetchDigilocker = async (verificationIdOverride) => {
-    const vId = verificationIdOverride || digilockerVerificationId;
-    if (!vId) return;
+  const verifyAadhaar = async () => {
     try {
-      setDigilockerChecking(true);
-      const statusResp = await verificationAPI.getDigilockerStatus(vId);
-      const st = statusResp?.status;
-      if (st !== 'AUTHENTICATED') {
-        showErrorModal(
-          'Not completed yet',
-          `DigiLocker status: ${st || 'UNKNOWN'}. Please complete consent in DigiLocker and try again.`
-        );
-        return;
+      setSubmitting(true);
+      setError('');
+      setSuccessMessage('');
+      const resp = await verificationAPI.verifyAadhaarOtp(aadhaarOtp, aadhaarRefId);
+      if (!resp?.success) {
+        throw new Error(resp?.error || 'Aadhaar verification failed');
       }
-      const fetchResp = await verificationAPI.fetchDigilockerDocuments(vId);
-      if (!fetchResp?.success) {
-        throw new Error(fetchResp?.error || 'Failed to fetch documents');
+      setAadhaarVerified(true);
+      setSuccessMessage('Aadhaar verified.');
+    } catch (e) {
+      showErrorModal('Aadhaar Verification', e?.response?.data?.error || e?.message || 'Aadhaar verification failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const verifyPan = async () => {
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccessMessage('');
+      const resp = await verificationAPI.verifyPan(panNumber);
+      if (!resp?.success) {
+        throw new Error(resp?.error || 'PAN verification failed');
+      }
+      setPanVerified(true);
+      setPanRegisteredName(resp.registeredName || null);
+      setSuccessMessage('PAN verified.');
+    } catch (e) {
+      showErrorModal('PAN Verification', e?.response?.data?.error || e?.message || 'PAN verification failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const complete = async () => {
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccessMessage('');
+      const resp = await verificationAPI.completeVerification(termsAccepted);
+      if (!resp?.success) {
+        throw new Error(resp?.error || 'Failed to create account');
       }
       setStatus(VERIFICATION_STATUS.APPROVED);
-      setSuccessMessage('Verification completed successfully. Redirecting you to dashboard...');
+      setSuccessMessage('Account created successfully. Redirecting you to dashboard...');
 
       const profileResponse = await userAPI.getProfile();
       if (profileResponse.success && profileResponse.user) {
         await updateUser(profileResponse.user);
       }
     } catch (e) {
-      console.error('DigiLocker fetch error:', e);
-      showErrorModal('Verification Error', e?.response?.data?.error || e?.message || 'Failed to complete verification');
+      showErrorModal('Create account', e?.response?.data?.error || e?.message || 'Failed to create account');
     } finally {
-      setDigilockerChecking(false);
+      setSubmitting(false);
     }
   };
 
@@ -158,8 +169,9 @@ const Verification = ({ navigation }) => {
         // No verification submitted yet
         setStatus(null);
       }
-      // If status is pending from backend, mark as submitted
-      setIsSubmitted(response.status === VERIFICATION_STATUS.PENDING || response.verificationStatus === VERIFICATION_STATUS.PENDING);
+      // We no longer have "admin review pending" screen in SecureID flow.
+      // Still keep isSubmitted for controlling resubmit UX in rejected case.
+      setIsSubmitted(false);
       // Reset resubmit form visibility when status changes
       if (response.status === VERIFICATION_STATUS.REJECTED || response.verificationStatus === VERIFICATION_STATUS.REJECTED) {
         setShowResubmitForm(false);
@@ -180,27 +192,6 @@ const Verification = ({ navigation }) => {
       setLoading(false);
     }
   };
-
-  // Pending Status Screen
-  const renderPendingStatus = () => (
-    <View style={styles.statusContainer}>
-      <View style={[styles.iconContainer, styles.pendingIcon]}>
-        <MaterialIcons name="schedule" size={48} color={colors.pending.main} />
-      </View>
-      <Text style={styles.statusTitle}>Verification Pending</Text>
-      <Text style={styles.statusMessage}>
-        Your verification is under review. Please wait for approval.
-      </Text>
-      <TouchableOpacity
-        onPress={checkVerificationStatus}
-        style={styles.refreshButton}
-        activeOpacity={0.7}
-      >
-        <MaterialIcons name="refresh" size={20} color={colors.primary.main} />
-        <Text style={styles.refreshButtonText}>Refresh Status</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   // Approved Status Screen
   const renderApprovedStatus = () => (
@@ -248,8 +239,6 @@ const Verification = ({ navigation }) => {
     </View>
   );
 
-  // Option B flow is now DigiLocker-based, not Aadhaar OTP inputs.
-
   // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
     <View style={styles.formContainer}>
@@ -258,20 +247,92 @@ const Verification = ({ navigation }) => {
       </View>
       <Text style={styles.statusTitle}>Verification Required</Text>
       <Text style={styles.statusMessage}>
-        Continue with DigiLocker to fetch your Aadhaar and PAN details securely and get instant access.
+        {isNewUser
+          ? 'You don’t have an existing account. Verify Aadhaar & PAN to create your account.'
+          : 'Complete Aadhaar & PAN verification to continue.'}
       </Text>
 
+      <View style={styles.stepBlock}>
+        <Text style={styles.stepTitle}>Aadhaar number</Text>
+        <TextInput
+          value={aadhaarNumber}
+          onChangeText={(v) => setAadhaarNumber(String(v || '').replace(/\D/g, '').slice(0, 12))}
+          placeholder="12-digit Aadhaar"
+          placeholderTextColor={colors.muted}
+          keyboardType="number-pad"
+          style={styles.input}
+        />
+        <TouchableOpacity
+          onPress={sendAadhaarOtp}
+          disabled={submitting || aadhaarNumber.length !== 12}
+          style={[styles.secondaryButton, (submitting || aadhaarNumber.length !== 12) && styles.submitButtonDisabled]}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.secondaryButtonText}>Send OTP</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.stepBlock}>
+        <Text style={styles.stepTitle}>Aadhaar OTP</Text>
+        <TextInput
+          value={aadhaarOtp}
+          onChangeText={(v) => setAadhaarOtp(String(v || '').replace(/\D/g, '').slice(0, 6))}
+          placeholder="6-digit OTP"
+          placeholderTextColor={colors.muted}
+          keyboardType="number-pad"
+          style={styles.input}
+        />
+        <TouchableOpacity
+          onPress={verifyAadhaar}
+          disabled={submitting || !aadhaarRefId || aadhaarOtp.length !== 6}
+          style={[styles.secondaryButton, (submitting || !aadhaarRefId || aadhaarOtp.length !== 6) && styles.submitButtonDisabled]}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.secondaryButtonText}>Verify Aadhaar</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.stepBlock}>
+        <Text style={styles.stepTitle}>PAN number</Text>
+        <TextInput
+          value={panNumber}
+          onChangeText={(v) => setPanNumber(String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+          placeholder="ABCDE1234F"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="characters"
+          style={styles.input}
+        />
+        {panVerified && !!panRegisteredName && (
+          <Text style={styles.panNameText}>{panRegisteredName}</Text>
+        )}
+        <TouchableOpacity
+          onPress={verifyPan}
+          disabled={submitting || !aadhaarVerified || panNumber.length !== 10}
+          style={[styles.secondaryButton, (submitting || !aadhaarVerified || panNumber.length !== 10) && styles.submitButtonDisabled]}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.secondaryButtonText}>Verify PAN</Text>
+        </TouchableOpacity>
+      </View>
+
+      <TouchableOpacity style={styles.termsRow} activeOpacity={0.7} onPress={() => setTermsAccepted((v) => !v)}>
+        <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+          {termsAccepted ? <MaterialIcons name="check" size={16} color="#FFFFFF" /> : null}
+        </View>
+        <Text style={styles.termsText}>I agree to Terms & Conditions</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity
-        onPress={startDigilocker}
-        disabled={submitting}
-        style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+        onPress={complete}
+        disabled={submitting || !panVerified || !termsAccepted}
+        style={[styles.submitButton, (submitting || !panVerified || !termsAccepted) && styles.submitButtonDisabled]}
         activeOpacity={0.7}
       >
         {submitting ? (
           <ActivityIndicator color="#FFFFFF" size="small" />
         ) : (
           <>
-            <Text style={styles.submitButtonText}>Continue with DigiLocker</Text>
+            <Text style={styles.submitButtonText}>Create account</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
           </>
         )}
@@ -288,7 +349,7 @@ const Verification = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Back to Login */}
         <View style={styles.topAction}>
@@ -320,8 +381,6 @@ const Verification = ({ navigation }) => {
               renderApprovedStatus()
             ) : (
               <>
-                {/* Show pending only if backend says pending and user has submitted */}
-                {status === VERIFICATION_STATUS.PENDING && isSubmitted && renderPendingStatus()}
                 {/* Show rejection info (without form) */}
                 {status === VERIFICATION_STATUS.REJECTED && !showResubmitForm && renderRejectedStatus()}
 
@@ -329,7 +388,7 @@ const Verification = ({ navigation }) => {
                     1. New user (status is null and not submitted), OR
                     2. Rejected and user clicked "Resubmit Verification" (showResubmitForm === true)
                 */}
-                {((status === null && !isSubmitted) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
+                {((status == null) || (status === VERIFICATION_STATUS.PENDING) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
               </>
             )}
           </CardContent>
@@ -362,7 +421,7 @@ const Verification = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -406,9 +465,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     alignSelf: 'center',
   },
-  pendingIcon: {
-    backgroundColor: colors.pending.light,
-  },
+  // pendingIcon removed (no pending page in new flow)
   approvedIcon: {
     backgroundColor: colors.success.light,
   },
@@ -428,25 +485,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     lineHeight: 24,
   },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.borderRadius.button,
-    minHeight: 48,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignSelf: 'center',
-    gap: spacing.md,
-  },
-  refreshButtonText: {
-    ...typography.button,
-    color: colors.text.primary,
-    marginLeft: spacing.sm,
-  },
+  // refreshButton + refreshButtonText removed (no pending page in new flow)
   dashboardButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -487,6 +526,69 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     paddingHorizontal: spacing.md,
     width: '100%',
+  },
+  stepBlock: {
+    marginBottom: spacing.lg,
+  },
+  stepTitle: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    fontWeight: '600',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.borderRadius.input,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    color: colors.text.primary,
+    backgroundColor: colors.cardBackground,
+    minHeight: 48,
+  },
+  secondaryButton: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  secondaryButtonText: {
+    ...typography.button,
+    color: colors.primary.main,
+  },
+  panNameText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginTop: spacing.sm,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cardBackground,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  termsText: {
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
   },
   errorContainer: {
     flexDirection: 'row',

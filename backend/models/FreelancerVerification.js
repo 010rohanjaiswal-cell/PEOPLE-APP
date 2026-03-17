@@ -79,6 +79,37 @@ const freelancerVerificationSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+
+    // Offline Aadhaar OTP verification (Cashfree VRS)
+    aadhaarOtpRefId: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
+    aadhaarLast4: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    // PAN verification (Cashfree VRS)
+    panVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    panRegisteredName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    // UX gating
+    termsAccepted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

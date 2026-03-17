@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(false);
 
   // Check for existing auth on mount
   useEffect(() => {
@@ -47,6 +48,7 @@ export const AuthProvider = ({ children }) => {
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+        setIsNewUser(Boolean(JSON.parse(storedUser)?.isNewUser));
         setIsAuthenticated(true);
       }
     } catch (error) {
@@ -88,6 +90,7 @@ export const AuthProvider = ({ children }) => {
 
       setToken(jwtToken);
       setUser(userData);
+      setIsNewUser(Boolean(userData?.isNewUser));
       setIsAuthenticated(true);
 
       return { success: true, user: userData };
@@ -121,6 +124,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await AsyncStorage.setItem('userData', JSON.stringify(userData));
       setUser(userData);
+      setIsNewUser(Boolean(userData?.isNewUser));
     } catch (error) {
       console.error('Error updating user:', error);
     }
@@ -131,6 +135,7 @@ export const AuthProvider = ({ children }) => {
     token,
     loading,
     isAuthenticated,
+    isNewUser,
     login,
     loginWithToken,
     logout,

@@ -5,24 +5,32 @@
 import apiClient from './client';
 
 export const verificationAPI = {
-  // DigiLocker SecureID (Option B)
-  initiateDigilocker: async (userFlow = 'signup') => {
-    const response = await apiClient.post('/api/freelancer/verification/digilocker/initiate', {
-      userFlow,
+  // Offline Aadhaar OTP + PAN verification (Cashfree VRS)
+  sendAadhaarOtp: async (aadhaarNumber) => {
+    const response = await apiClient.post('/api/freelancer/verification/aadhaar/otp', {
+      aadhaarNumber,
     });
     return response.data;
   },
 
-  getDigilockerStatus: async (verificationId) => {
-    const response = await apiClient.get('/api/freelancer/verification/digilocker/status', {
-      params: { verificationId },
+  verifyAadhaarOtp: async (otp, refId = null) => {
+    const response = await apiClient.post('/api/freelancer/verification/aadhaar/verify', {
+      otp,
+      refId: refId || undefined,
     });
     return response.data;
   },
 
-  fetchDigilockerDocuments: async (verificationId) => {
-    const response = await apiClient.post('/api/freelancer/verification/digilocker/fetch', {
-      verificationId,
+  verifyPan: async (panNumber) => {
+    const response = await apiClient.post('/api/freelancer/verification/pan/verify', {
+      panNumber,
+    });
+    return response.data;
+  },
+
+  completeVerification: async (termsAccepted) => {
+    const response = await apiClient.post('/api/freelancer/verification/complete', {
+      termsAccepted: termsAccepted === true,
     });
     return response.data;
   },
