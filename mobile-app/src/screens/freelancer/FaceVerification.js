@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, Alert, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { colors, spacing, typography } from '../../theme';
 import { Button, Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import TermsAndConditions from '../common/TermsAndConditions';
 
 const FaceVerification = ({ navigation }) => {
   const { updateUser } = useAuth();
@@ -19,6 +20,8 @@ const FaceVerification = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [score, setScore] = useState(null);
   const [lastAttemptFailed, setLastAttemptFailed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
 
   const takeSelfie = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -43,6 +46,7 @@ const FaceVerification = ({ navigation }) => {
 
   const submit = async () => {
     if (!selfie) return;
+    if (!termsAccepted) return;
     setLoading(true);
     try {
       const resp = await verificationAPI.faceMatchSelfie(selfie);
@@ -50,7 +54,7 @@ const FaceVerification = ({ navigation }) => {
       setScore(resp.score ?? null);
       setLastAttemptFailed(false);
 
-      // Mark verification complete (terms already accepted earlier)
+      // Mark verification complete
       const completeResp = await verificationAPI.completeVerification(true);
       if (!completeResp?.success) throw new Error(completeResp?.error || 'Failed to complete verification');
 
@@ -102,18 +106,31 @@ const FaceVerification = ({ navigation }) => {
             <Button onPress={takeSelfie} style={styles.takeButton}>
               {selfie ? 'Retake photo' : 'Take photo'}
             </Button>
-            <Button
-              onPress={submit}
-              disabled={!selfie || loading}
-              style={[styles.submitButton, (!selfie || loading) && styles.submitButtonDisabled]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitText}>Upload</Text>
-              )}
-            </Button>
           </View>
+
+          <TouchableOpacity style={styles.termsRow} activeOpacity={0.7} onPress={() => setTermsAccepted((v) => !v)}>
+            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+              {termsAccepted ? <MaterialIcons name="check" size={16} color="#FFFFFF" /> : null}
+            </View>
+            <Text style={styles.termsText}>
+              I agree to{' '}
+              <Text style={styles.termsLink} onPress={() => setTermsVisible(true)}>
+                Terms & Conditions
+              </Text>
+            </Text>
+          </TouchableOpacity>
+
+          <Button
+            onPress={submit}
+            disabled={!selfie || loading || !termsAccepted}
+            style={[styles.submitButton, (!selfie || loading || !termsAccepted) && styles.submitButtonDisabled]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitText}>Create account</Text>
+            )}
+          </Button>
 
           {lastAttemptFailed ? (
             <Text style={styles.helpText}>
@@ -122,6 +139,10 @@ const FaceVerification = ({ navigation }) => {
           ) : null}
         </CardContent>
       </Card>
+
+      <Modal visible={termsVisible} animationType="slide" onRequestClose={() => setTermsVisible(false)}>
+        <TermsAndConditions onClose={() => setTermsVisible(false)} />
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -140,8 +161,22 @@ const styles = StyleSheet.create({
   scorePass: { color: colors.success.main },
   scoreFail: { color: colors.error.main },
   actionsRow: { flexDirection: 'row', gap: spacing.sm },
-  takeButton: { flex: 1 },
-  submitButton: { flex: 1, backgroundColor: colors.primary.main },
+  takeButton: { flex: 1, minHeight: 52, paddingVertical: spacing.md, justifyContent: 'center' },
+  termsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.md },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cardBackground,
+  },
+  checkboxChecked: { backgroundColor: colors.primary.main, borderColor: colors.primary.main },
+  termsText: { ...typography.body, color: colors.text.primary, flex: 1 },
+  termsLink: { color: colors.primary.main, textDecorationLine: 'underline' },
+  submitButton: { backgroundColor: colors.primary.main },
   submitButtonDisabled: { opacity: 0.6 },
   submitText: { ...typography.button, color: '#fff' },
   helpText: { ...typography.small, color: colors.text.secondary, marginTop: spacing.md, textAlign: 'center' },

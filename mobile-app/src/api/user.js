@@ -14,6 +14,22 @@ export const userAPI = {
     return response.data;
   },
 
+  updateProfile: async ({ fullName, imageAsset } = {}) => {
+    const formData = new FormData();
+    if (fullName != null) formData.append('fullName', String(fullName));
+    if (imageAsset?.uri) {
+      formData.append('image', {
+        uri: imageAsset.uri,
+        name: imageAsset.fileName || 'profile.jpg',
+        type: imageAsset.mimeType || 'image/jpeg',
+      });
+    }
+    const response = await apiClient.put('/api/user/profile', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   /**
    * Get user profile by ID (for viewing other users' profiles)
    * @param {string} userId - User ID

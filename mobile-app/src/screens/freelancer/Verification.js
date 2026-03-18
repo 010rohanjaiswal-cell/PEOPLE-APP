@@ -25,7 +25,6 @@ import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import TermsAndConditions from '../common/TermsAndConditions';
 
 const Verification = ({ navigation }) => {
   const { user, updateUser, isNewUser } = useAuth();
@@ -55,8 +54,6 @@ const Verification = ({ navigation }) => {
   const [isVerifyingPan, setIsVerifyingPan] = useState(false);
   const [panNameMatchOk, setPanNameMatchOk] = useState(null);
   const [panNameMatchScore, setPanNameMatchScore] = useState(null);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [termsVisible, setTermsVisible] = useState(false);
 
   useEffect(() => {
     checkVerificationStatus();
@@ -160,26 +157,7 @@ const Verification = ({ navigation }) => {
     }
   };
 
-  const complete = async () => {
-    try {
-      setSubmitting(true);
-      setError('');
-      setSuccessMessage('');
-      const resp = await verificationAPI.completeVerification(termsAccepted);
-      if (!resp?.success) {
-        throw new Error(resp?.error || 'Failed to create account');
-      }
-      const profileResponse = await userAPI.getProfile();
-      if (profileResponse.success && profileResponse.user) {
-        await updateUser(profileResponse.user);
-      }
-      navigation.replace('FreelancerDashboard');
-    } catch (e) {
-      showErrorModal('Create account', e?.response?.data?.error || e?.message || 'Failed to create account');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  // Completion happens after selfie + T&C on FaceVerification screen.
 
   const checkVerificationStatus = async () => {
     try {
@@ -362,28 +340,15 @@ const Verification = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.termsRow} activeOpacity={0.7} onPress={() => setTermsAccepted((v) => !v)}>
-        <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-          {termsAccepted ? <MaterialIcons name="check" size={16} color="#FFFFFF" /> : null}
-        </View>
-        <Text style={styles.termsText}>
-          I agree to{' '}
-          <Text style={styles.termsLink} onPress={() => setTermsVisible(true)}>
-            Terms & Conditions
-          </Text>
-        </Text>
-      </TouchableOpacity>
-
       <TouchableOpacity
         onPress={() => navigation.navigate('FaceVerification')}
         disabled={
           submitting ||
           !panVerified ||
-          !termsAccepted ||
           panNameMatchOk === false ||
           aadhaarMobileMatchesSignup === false
         }
-        style={[styles.submitButton, (submitting || !panVerified || !termsAccepted) && styles.submitButtonDisabled]}
+        style={[styles.submitButton, (submitting || !panVerified) && styles.submitButtonDisabled]}
         activeOpacity={0.7}
       >
         {submitting ? (
@@ -480,10 +445,6 @@ const Verification = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Terms Modal (reuse Settings Terms screen) */}
-      <Modal visible={termsVisible} animationType="slide" onRequestClose={() => setTermsVisible(false)}>
-        <TermsAndConditions onClose={() => setTermsVisible(false)} />
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -655,35 +616,7 @@ const styles = StyleSheet.create({
     color: colors.error.main,
     marginTop: spacing.sm,
   },
-  termsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.cardBackground,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  termsText: {
-    ...typography.body,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  termsLink: {
-    color: colors.primary.main,
-    textDecorationLine: 'underline',
-  },
+  // Terms & Conditions styles moved to FaceVerification screen
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',

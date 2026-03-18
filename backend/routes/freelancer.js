@@ -825,6 +825,7 @@ router.post('/verification/face-match', authenticate, upload.single('image'), as
         selfieImageUrl: selfieUrl,
         faceMatchScore: scorePct,
         faceMatchOk: ok,
+        ...(ok ? { profilePhoto: selfieUrl } : {}),
       },
       { new: true }
     );

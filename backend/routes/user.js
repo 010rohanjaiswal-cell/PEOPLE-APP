@@ -10,6 +10,24 @@ const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const PushToken = require('../models/PushToken');
 const FreelancerVerification = require('../models/FreelancerVerification');
+const multer = require('multer');
+const streamifier = require('streamifier');
+const cloudinary = require('../config/cloudinary');
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+async function uploadToCloudinary(buffer, folder) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
 
 /**
  * Helper function to get the appropriate profile photo for a user
@@ -115,6 +133,52 @@ router.get('/profile', authenticate, async (req, res) => {
       success: false,
       error: error.message || 'Failed to get user profile'
     });
+  }
+});
+
+/**
+ * Update current user profile (fullName + profile photo)
+ * PUT /api/user/profile
+ * multipart/form-data:
+ * - fullName?: string
+ * - image?: file
+ */
+router.put('/profile', authenticate, upload.single('image'), async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const fullName = (req.body?.fullName || '').trim();
+    if (fullName) user.fullName = fullName;
+
+    if (req.file?.buffer) {
+      const folderBase = `people-app/users/${user._id.toString()}`;
+      const photoUrl = await uploadToCloudinary(req.file.buffer, `${folderBase}/profile`);
+      user.profilePhoto = photoUrl;
+    }
+
+    await user.save();
+
+    // Return profile in the same shape as GET /profile
+    const profilePhoto = await getUserProfilePhoto(userId);
+    return res.json({
+      success: true,
+      user: {
+        id: user._id || user.id,
+        phone: user.phone,
+        role: user.role,
+        fullName: user.fullName || null,
+        profilePhoto,
+        email: user.email || null,
+        verificationStatus: user.verificationStatus || null,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to update profile' });
   }
 });
 

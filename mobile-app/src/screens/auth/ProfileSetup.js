@@ -21,6 +21,7 @@ import { validateRequired } from '../../utils/validation';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { userAPI } from '../../api';
 
 const ProfileSetup = ({ navigation }) => {
   const { user, updateUser } = useAuth();
@@ -72,45 +73,7 @@ const ProfileSetup = ({ navigation }) => {
     }
   };
 
-  const handleGalleryPress = async () => {
-    try {
-      // Request media library permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(t('auth.permissionDenied'), t('auth.galleryPermissionRequired'));
-        return;
-      }
-
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setProfilePhotoUri(result.assets[0].uri);
-        setProfilePhoto(result.assets[0]);
-        setError('');
-      }
-    } catch (error) {
-      console.error('Error selecting photo:', error);
-      setError('Failed to select photo. Please try again.');
-    }
-  };
-
-  const uploadImageToCloudinary = async (imageUri) => {
-    // TODO: Implement Cloudinary upload
-    // For now, we'll return a mock URL
-    // In production, you'll need to:
-    // 1. Create FormData with the image
-    // 2. Upload to Cloudinary using their API
-    // 3. Return the secure URL
-    
-    // Mock implementation
-    return `https://res.cloudinary.com/your-cloud/image/upload/v${Date.now()}/profile.jpg`;
-  };
+  // Gallery option removed (camera only)
 
   const handleCompleteSetup = async () => {
     // Validation
@@ -126,27 +89,17 @@ const ProfileSetup = ({ navigation }) => {
     setError('');
 
     try {
-      let profilePhotoUrl = user?.profilePhoto || null;
-      
-      // Upload profile photo to Cloudinary if a new one was selected
-      if (profilePhotoUri && profilePhotoUri !== user?.profilePhoto) {
-        profilePhotoUrl = await uploadImageToCloudinary(profilePhotoUri);
-      }
-
-      // TODO: Submit profile data to backend
-      // In production, you'll need to:
-      // 1. Call API to update user profile
-      // 2. Include fullName and profilePhotoUrl
-      // 3. Update user context with new data
-
-      // Update local user data
-      const updatedUser = {
-        ...user,
+      const resp = await userAPI.updateProfile({
         fullName,
-        profilePhoto: profilePhotoUrl,
-      };
-      
-      await updateUser(updatedUser);
+        imageAsset: profilePhoto,
+      });
+
+      if (resp?.success && resp?.user) {
+        await updateUser(resp.user);
+      } else {
+        // Fallback to local update if API shape differs
+        await updateUser({ ...user, fullName });
+      }
 
       // Navigation will be handled automatically by AppNavigator
       // based on updated user state
@@ -155,7 +108,7 @@ const ProfileSetup = ({ navigation }) => {
       setLoading(false);
     } catch (error) {
       console.error('Error completing profile setup:', error);
-      setError(error.message || 'Failed to complete setup. Please try again.');
+      setError(error.response?.data?.error || error.message || 'Failed to complete setup. Please try again.');
       setLoading(false);
     }
   };
@@ -208,22 +161,14 @@ const ProfileSetup = ({ navigation }) => {
                     onPress={handleCameraPress}
                     style={[styles.photoButton, styles.cameraButton]}
                   >
-                    <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" style={styles.photoButtonIcon} />
-                    <Text style={styles.photoButtonText}>
-                      {Platform.OS === 'ios' ? 'Camera' : 'Camera'}
-                    </Text>
-                  </Button>
-                  <Button
-                    onPress={handleGalleryPress}
-                    variant="secondary"
-                    style={styles.photoButton}
-                  >
-                    <MaterialIcons name="upload" size={20} color="#FFFFFF" style={styles.photoButtonIcon} />
-                    <Text style={styles.photoButtonText}>Gallery</Text>
+                    <View style={styles.photoButtonContent}>
+                      <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+                      <Text style={styles.photoButtonText}>Camera</Text>
+                    </View>
                   </Button>
                 </View>
                 <Text style={styles.photoHelperText}>
-                  Take a photo or choose from gallery
+                  Take a photo
                 </Text>
               </View>
 
@@ -374,15 +319,17 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 52,
   },
   cameraButton: {
     backgroundColor: colors.primary.main,
   },
-  photoButtonIcon: {
-    marginRight: spacing.xs,
+  photoButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   photoButtonText: {
     color: '#FFFFFF',
@@ -403,6 +350,8 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: spacing.lg,
+    minHeight: 52,
+    paddingVertical: spacing.md,
   },
   skipButton: {
     marginTop: spacing.sm,
