@@ -28,7 +28,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import TermsAndConditions from '../common/TermsAndConditions';
 
 const Verification = ({ navigation }) => {
-  const { updateUser, isNewUser } = useAuth();
+  const { user, updateUser, isNewUser } = useAuth();
   const { t } = useLanguage();
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
@@ -95,7 +95,9 @@ const Verification = ({ navigation }) => {
       setAadhaarOtpCooldown(60);
       setIsSubmitted(true);
       setStatus(VERIFICATION_STATUS.PENDING);
-      setSuccessMessage('OTP sent to your Aadhaar-linked mobile number.');
+      // Cashfree OTP-send endpoint doesn't reliably return Aadhaar-linked mobile last-4.
+      // We'll show the exact xxxxxx1234 after OTP verify (when available).
+      setSuccessMessage('OTP sent successfully to your Aadhaar-linked mobile number.');
     } catch (e) {
       showErrorModal('Aadhaar OTP', e?.response?.data?.error || e?.message || 'Failed to send OTP');
     } finally {
@@ -121,14 +123,17 @@ const Verification = ({ navigation }) => {
         showErrorModal(
           'Verification Error',
           match === false
-            ? 'Entered aadhar details not belongs to your mobile number.'
+            ? 'Mobile number mismatch with Aadhaar.'
             : 'Unable to confirm your Aadhaar-linked mobile number. Please sign up using the Aadhaar-linked mobile number and try again.'
         );
         return;
       }
 
       setAadhaarVerified(true);
-      setSuccessMessage('');
+      const aadhaarMobileLast4 = resp?.verification?.aadhaarMobileLast4 || null;
+      if (aadhaarMobileLast4) {
+        setSuccessMessage(`Aadhaar verified. OTP was sent to xxxxxx${aadhaarMobileLast4}`);
+      }
     } catch (e) {
       showErrorModal('Aadhaar Verification', e?.response?.data?.error || e?.message || 'Aadhaar verification failed');
     } finally {

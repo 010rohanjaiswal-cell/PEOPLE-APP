@@ -72,6 +72,17 @@ function last4Digits(value) {
   return d.length >= 4 ? d.slice(-4) : null;
 }
 
+function mobileLast4IfLooksLikeMobile(value) {
+  if (value == null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  // Accept masked patterns (xxxxxx1234, ******1234) or 10-digit mobile present.
+  const hasMask = /[xX\*]{2,}/.test(s);
+  const has10Digits = /\d{10}/.test(s.replace(/\D/g, ''));
+  if (!hasMask && !has10Digits) return null;
+  return last4Digits(s);
+}
+
 function normalizeNameTokens(name) {
   const s = String(name || '')
     .toUpperCase()
@@ -626,12 +637,13 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
     // Try to infer Aadhaar-linked mobile (often masked) and compare last-4 with signup phone
     const signupPhoneLast4 = last4Digits(user.phone);
     const aadhaarMobileLast4 =
-      last4Digits(qr.mobile) ||
-      last4Digits(qr.mobile_number) ||
-      last4Digits(qr.masked_mobile) ||
-      last4Digits(qr.masked_mobile_number) ||
-      last4Digits(data.mobile) ||
-      last4Digits(data.mobile_number) ||
+      mobileLast4IfLooksLikeMobile(qr.mobile) ||
+      mobileLast4IfLooksLikeMobile(qr.mobile_number) ||
+      mobileLast4IfLooksLikeMobile(qr.masked_mobile) ||
+      mobileLast4IfLooksLikeMobile(qr.masked_mobile_number) ||
+      mobileLast4IfLooksLikeMobile(qr.masked_mobile_no) ||
+      mobileLast4IfLooksLikeMobile(data.mobile) ||
+      mobileLast4IfLooksLikeMobile(data.mobile_number) ||
       null;
     const aadhaarMobileHash =
       (qr.mobile_hash != null ? String(qr.mobile_hash) : null) ||
@@ -644,7 +656,7 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
     if (aadhaarMobileMatchesSignup === false) {
       return res.status(400).json({
         success: false,
-        error: 'Entered aadhar details not belongs to your mobile number.',
+        error: 'Mobile number mismatch with Aadhaar.',
       });
     }
 
@@ -700,6 +712,7 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
         aadhaarMasked: updated.aadhaarMasked || null,
         profilePhoto: updated.profilePhoto || null,
         aadhaarMobileMatchesSignup: updated.aadhaarMobileMatchesSignup ?? null,
+        aadhaarMobileLast4: updated.aadhaarMobileLast4 || null,
       },
     });
   } catch (error) {
@@ -819,7 +832,7 @@ router.post('/verification/complete', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'PAN name does not match Aadhaar name.' });
     }
     if (verification.aadhaarMobileMatchesSignup !== true) {
-      return res.status(400).json({ success: false, error: 'Entered aadhar details not belongs to your mobile number.' });
+      return res.status(400).json({ success: false, error: 'Mobile number mismatch with Aadhaar.' });
     }
 
     verification.termsAccepted = true;
