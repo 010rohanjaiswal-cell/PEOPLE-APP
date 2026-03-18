@@ -118,14 +118,9 @@ const Verification = ({ navigation }) => {
       const match = resp?.verification?.aadhaarMobileMatchesSignup ?? null;
       setAadhaarMobileMatchesSignup(match);
 
-      if (match !== true) {
+      if (match === false) {
         setAadhaarVerified(false);
-        showErrorModal(
-          'Verification Error',
-          match === false
-            ? 'Mobile number mismatch with Aadhaar.'
-            : 'Unable to confirm your Aadhaar-linked mobile number. Please sign up using the Aadhaar-linked mobile number and try again.'
-        );
+        showErrorModal('Verification Error', 'Mobile number mismatch with Aadhaar.');
         return;
       }
 

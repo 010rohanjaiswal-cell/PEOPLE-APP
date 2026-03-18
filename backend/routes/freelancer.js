@@ -76,11 +76,17 @@ function mobileLast4IfLooksLikeMobile(value) {
   if (value == null) return null;
   const s = String(value).trim();
   if (!s) return null;
-  // Accept masked patterns (xxxxxx1234, ******1234) or 10-digit mobile present.
+
+  // If the field contains a real mobile number, it should be exactly 10 digits (after stripping non-digits).
+  // This prevents accidental matches on Aadhaar (12 digits) / reference ids / pincodes etc.
+  const digits = digitsOnly(s);
+  if (digits.length === 10) return digits.slice(-4);
+
+  // Masked mobile commonly looks like xxxxxx1234 / ******1234. In that case we only see last 4 digits.
   const hasMask = /[xX\*]{2,}/.test(s);
-  const has10Digits = /\d{10}/.test(s.replace(/\D/g, ''));
-  if (!hasMask && !has10Digits) return null;
-  return last4Digits(s);
+  if (hasMask && digits.length === 4) return digits;
+
+  return null;
 }
 
 function normalizeNameTokens(name) {
@@ -636,15 +642,27 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
 
     // Try to infer Aadhaar-linked mobile (often masked) and compare last-4 with signup phone
     const signupPhoneLast4 = last4Digits(user.phone);
-    const aadhaarMobileLast4 =
-      mobileLast4IfLooksLikeMobile(qr.mobile) ||
-      mobileLast4IfLooksLikeMobile(qr.mobile_number) ||
-      mobileLast4IfLooksLikeMobile(qr.masked_mobile) ||
-      mobileLast4IfLooksLikeMobile(qr.masked_mobile_number) ||
-      mobileLast4IfLooksLikeMobile(qr.masked_mobile_no) ||
-      mobileLast4IfLooksLikeMobile(data.mobile) ||
-      mobileLast4IfLooksLikeMobile(data.mobile_number) ||
-      null;
+    let aadhaarMobileLast4 = null;
+    let aadhaarMobileSource = null;
+    const candidates = [
+      ['qr.masked_mobile', qr.masked_mobile],
+      ['qr.masked_mobile_number', qr.masked_mobile_number],
+      ['qr.masked_mobile_no', qr.masked_mobile_no],
+      ['qr.mobile', qr.mobile],
+      ['qr.mobile_number', qr.mobile_number],
+      ['data.masked_mobile', data.masked_mobile],
+      ['data.masked_mobile_number', data.masked_mobile_number],
+      ['data.mobile', data.mobile],
+      ['data.mobile_number', data.mobile_number],
+    ];
+    for (const [key, val] of candidates) {
+      const l4 = mobileLast4IfLooksLikeMobile(val);
+      if (l4) {
+        aadhaarMobileLast4 = l4;
+        aadhaarMobileSource = key;
+        break;
+      }
+    }
     const aadhaarMobileHash =
       (qr.mobile_hash != null ? String(qr.mobile_hash) : null) ||
       (data.mobile_hash != null ? String(data.mobile_hash) : null) ||
@@ -654,9 +672,20 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
 
     // If we can determine mismatch, block verification to prevent fraud.
     if (aadhaarMobileMatchesSignup === false) {
+      console.warn('Aadhaar mobile mismatch', {
+        userId: String(user._id),
+        signupLast4: signupPhoneLast4,
+        aadhaarLast4: aadhaarMobileLast4,
+        source: aadhaarMobileSource,
+      });
       return res.status(400).json({
         success: false,
         error: 'Mobile number mismatch with Aadhaar.',
+        meta: {
+          signupLast4: signupPhoneLast4,
+          aadhaarLast4: aadhaarMobileLast4,
+          source: aadhaarMobileSource,
+        },
       });
     }
 
@@ -831,7 +860,9 @@ router.post('/verification/complete', authenticate, async (req, res) => {
     if (verification.panNameMatchOk !== true) {
       return res.status(400).json({ success: false, error: 'PAN name does not match Aadhaar name.' });
     }
-    if (verification.aadhaarMobileMatchesSignup !== true) {
+    // Enforce mismatch only when we can reliably compare.
+    // Cashfree offline-aadhaar verify does not always return masked mobile/last-4, so this can be null.
+    if (verification.aadhaarMobileMatchesSignup === false) {
       return res.status(400).json({ success: false, error: 'Mobile number mismatch with Aadhaar.' });
     }
 
