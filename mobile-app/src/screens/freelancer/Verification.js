@@ -375,7 +375,7 @@ const Verification = ({ navigation }) => {
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={complete}
+        onPress={() => navigation.navigate('FaceVerification')}
         disabled={
           submitting ||
           !panVerified ||
@@ -390,7 +390,7 @@ const Verification = ({ navigation }) => {
           <ActivityIndicator color="#FFFFFF" size="small" />
         ) : (
           <>
-            <Text style={styles.submitButtonText}>Create account</Text>
+            <Text style={styles.submitButtonText}>Next</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
           </>
         )}

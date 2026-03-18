@@ -19,6 +19,7 @@ import ProfileSetupScreen from '../screens/auth/ProfileSetup';
 // Dashboard Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
 import VerificationScreen from '../screens/freelancer/Verification';
+import FaceVerificationScreen from '../screens/freelancer/FaceVerification';
 import FreelancerDashboard from '../screens/freelancer/FreelancerDashboard';
 
 const Stack = createNativeStackNavigator();
@@ -132,6 +133,7 @@ const AppNavigator = () => {
         {isAuthenticated && user?.role === 'freelancer' && (
           <>
             <Stack.Screen name="Verification" component={VerificationScreen} />
+            <Stack.Screen name="FaceVerification" component={FaceVerificationScreen} />
             <Stack.Screen name="FreelancerDashboard" component={FreelancerDashboard} />
           </>
         )}

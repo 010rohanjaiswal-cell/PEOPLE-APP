@@ -28,6 +28,19 @@ export const verificationAPI = {
     return response.data;
   },
 
+  faceMatchSelfie: async (imageAsset) => {
+    const formData = new FormData();
+    formData.append('image', {
+      uri: imageAsset.uri,
+      name: imageAsset.fileName || 'selfie.jpg',
+      type: imageAsset.mimeType || 'image/jpeg',
+    });
+    const response = await apiClient.post('/api/freelancer/verification/face-match', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   completeVerification: async (termsAccepted) => {
     const response = await apiClient.post('/api/freelancer/verification/complete', {
       termsAccepted: termsAccepted === true,

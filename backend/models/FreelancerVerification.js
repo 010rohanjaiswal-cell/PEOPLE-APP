@@ -136,6 +136,29 @@ const freelancerVerificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Face match (selfie vs Aadhaar photo)
+    aadhaarFaceImageUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    selfieImageUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    faceMatchScore: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+    faceMatchOk: {
+      type: Boolean,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

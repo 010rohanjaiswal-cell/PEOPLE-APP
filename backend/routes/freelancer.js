@@ -16,6 +16,7 @@ const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
 const axios = require('axios');
+const FormData = require('form-data');
 const {
   notifyOfferReceived,
   notifyJobAssigned,
@@ -37,6 +38,11 @@ async function uploadToCloudinary(buffer, folder) {
     );
     streamifier.createReadStream(buffer).pipe(stream);
   });
+}
+
+async function fetchImageBuffer(url) {
+  const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 20000 });
+  return Buffer.from(resp.data);
 }
 
 function getCashfreeVerificationBaseUrl() {
@@ -689,16 +695,16 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
       });
     }
 
-    // Photo is base64 in photo_link (per Cashfree response). Upload to Cloudinary.
-    let profilePhotoUrl = null;
+    // Aadhaar photo is Base64 in photo_link. We'll store it for face-match reference (not as profile photo).
+    let aadhaarFaceImageUrl = null;
     const photoBase64 = qr.photo_link || data.photo_link || null;
     if (photoBase64) {
       try {
         const buf = Buffer.from(String(photoBase64), 'base64');
         const folderBase = `people-app/freelancers/${user._id.toString()}`;
-        profilePhotoUrl = await uploadToCloudinary(buf, `${folderBase}/profile`);
+        aadhaarFaceImageUrl = await uploadToCloudinary(buf, `${folderBase}/kyc/aadhaar-face`);
       } catch (e) {
-        console.warn('Failed to upload Aadhaar photo to Cloudinary:', e?.message || e);
+        console.warn('Failed to upload Aadhaar face image to Cloudinary:', e?.message || e);
       }
     }
 
@@ -713,7 +719,7 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
         dob,
         gender,
         address,
-        profilePhoto: profilePhotoUrl || undefined,
+        aadhaarFaceImageUrl,
         aadhaarLast4,
         aadhaarMasked: aadhaarMasked || undefined,
         aadhaarMobileLast4,
@@ -723,9 +729,8 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // Prefill User as well (final approval happens after PAN + terms)
+    // Prefill User as well (final approval happens after face match + completion)
     if (fullName) user.fullName = fullName;
-    if (profilePhotoUrl) user.profilePhoto = profilePhotoUrl;
     user.verificationStatus = 'pending';
     user.verificationRejectionReason = null;
     await user.save();
@@ -742,6 +747,7 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
         profilePhoto: updated.profilePhoto || null,
         aadhaarMobileMatchesSignup: updated.aadhaarMobileMatchesSignup ?? null,
         aadhaarMobileLast4: updated.aadhaarMobileLast4 || null,
+        aadhaarFaceImageUrl: updated.aadhaarFaceImageUrl || null,
       },
     });
   } catch (error) {
@@ -755,6 +761,92 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error?.response?.data?.message || error?.response?.data?.error?.message || error.message || 'Failed to verify Aadhaar OTP',
+    });
+  }
+});
+
+/**
+ * Face match selfie with Aadhaar photo (>=65% required)
+ * POST /api/freelancer/verification/face-match
+ * multipart/form-data: image=<selfie file>
+ */
+router.post('/verification/face-match', authenticate, upload.single('image'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    }
+    if (!req.file?.buffer) {
+      return res.status(400).json({ success: false, error: 'Selfie image is required.' });
+    }
+
+    const verification = await FreelancerVerification.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (!verification?.aadhaarFaceImageUrl) {
+      return res.status(400).json({ success: false, error: 'Aadhaar photo not available for face match. Verify Aadhaar again.' });
+    }
+
+    // Upload selfie to Cloudinary (use as profile photo if match passes)
+    const folderBase = `people-app/freelancers/${user._id.toString()}`;
+    const selfieUrl = await uploadToCloudinary(req.file.buffer, `${folderBase}/kyc/selfie`);
+
+    const aadhaarBuf = await fetchImageBuffer(verification.aadhaarFaceImageUrl);
+    const selfieBuf = req.file.buffer;
+
+    const baseUrl = getCashfreeVerificationBaseUrl();
+    const verificationId = `FM_${user._id.toString()}_${Date.now()}`.slice(0, 50);
+    const threshold = 0.65;
+
+    const form = new FormData();
+    form.append('verification_id', verificationId);
+    form.append('first_image', aadhaarBuf, { filename: 'aadhaar.jpg', contentType: 'image/jpeg' });
+    form.append('second_image', selfieBuf, { filename: 'selfie.jpg', contentType: req.file.mimetype || 'image/jpeg' });
+    form.append('threshold', String(threshold));
+
+    const resp = await axios.post(`${baseUrl}/face-match`, form, {
+      headers: {
+        ...getCashfreeVrsHeaders(),
+        ...form.getHeaders(),
+      },
+      timeout: 25000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+
+    const data = resp.data || {};
+    const score01 = data.face_match_score != null ? Number(data.face_match_score) : null;
+    const scorePct = score01 != null && !Number.isNaN(score01) ? Math.round(score01 * 100) : null;
+    const ok = scorePct != null ? scorePct >= 65 : false;
+
+    await FreelancerVerification.findOneAndUpdate(
+      { user: user._id },
+      {
+        selfieImageUrl: selfieUrl,
+        faceMatchScore: scorePct,
+        faceMatchOk: ok,
+      },
+      { new: true }
+    );
+
+    if (!ok) {
+      return res.status(400).json({
+        success: false,
+        error: 'Face is not matching with aadhar.',
+        score: scorePct,
+      });
+    }
+
+    // Use selfie as profile photo
+    user.profilePhoto = selfieUrl;
+    await user.save();
+
+    return res.json({ success: true, score: scorePct, selfieUrl });
+  } catch (error) {
+    console.error('Face match error:', error?.response?.data || error.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.response?.data?.message || error.message || 'Failed to run face match',
     });
   }
 });
@@ -859,6 +951,9 @@ router.post('/verification/complete', authenticate, async (req, res) => {
     }
     if (verification.panNameMatchOk !== true) {
       return res.status(400).json({ success: false, error: 'PAN name does not match Aadhaar name.' });
+    }
+    if (verification.faceMatchOk !== true) {
+      return res.status(400).json({ success: false, error: 'Please complete face verification.' });
     }
     // Enforce mismatch only when we can reliably compare.
     // Cashfree offline-aadhaar verify does not always return masked mobile/last-4, so this can be null.
