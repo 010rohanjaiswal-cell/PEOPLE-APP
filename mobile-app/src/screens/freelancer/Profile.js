@@ -66,21 +66,33 @@ const Profile = () => {
       return null;
     }
     try {
-      // Handle YYYY-MM-DD format (from verification form)
-      let birthDate;
-      if (typeof dob === 'string' && dob.includes('-')) {
-        // Parse YYYY-MM-DD format
-        const parts = dob.split('-');
-        if (parts.length === 3) {
-          birthDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        } else {
-          birthDate = new Date(dob);
+      const parseDob = (value) => {
+        if (!value) return null;
+        if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+        const s = String(value).trim();
+        if (!s) return null;
+
+        // YYYY-MM-DD or YYYY/MM/DD
+        if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) {
+          const [y, m, d] = s.split(/[-/]/).map((p) => parseInt(p, 10));
+          const dt = new Date(y, m - 1, d);
+          return isNaN(dt.getTime()) ? null : dt;
         }
-      } else {
-        birthDate = new Date(dob);
-      }
+
+        // DD-MM-YYYY or DD/MM/YYYY (common in Aadhaar)
+        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s)) {
+          const [d, m, y] = s.split(/[-/]/).map((p) => parseInt(p, 10));
+          const dt = new Date(y, m - 1, d);
+          return isNaN(dt.getTime()) ? null : dt;
+        }
+
+        const dt = new Date(s);
+        return isNaN(dt.getTime()) ? null : dt;
+      };
+
+      const birthDate = parseDob(dob);
       
-      if (isNaN(birthDate.getTime())) {
+      if (!birthDate) {
         return null;
       }
       

@@ -13,6 +13,8 @@ import {
   Modal,
   ActivityIndicator,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +25,7 @@ import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import TermsAndConditions from '../common/TermsAndConditions';
 
 const Verification = ({ navigation }) => {
   const { updateUser, isNewUser } = useAuth();
@@ -43,27 +46,35 @@ const Verification = ({ navigation }) => {
   const [aadhaarOtp, setAadhaarOtp] = useState('');
   const [aadhaarRefId, setAadhaarRefId] = useState(null);
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
+  const [aadhaarOtpCooldown, setAadhaarOtpCooldown] = useState(0); // seconds
+  const [aadhaarMobileMatchesSignup, setAadhaarMobileMatchesSignup] = useState(null);
+  const [isVerifyingAadhaar, setIsVerifyingAadhaar] = useState(false);
   const [panNumber, setPanNumber] = useState('');
   const [panRegisteredName, setPanRegisteredName] = useState(null);
   const [panVerified, setPanVerified] = useState(false);
+  const [isVerifyingPan, setIsVerifyingPan] = useState(false);
+  const [panNameMatchOk, setPanNameMatchOk] = useState(null);
+  const [panNameMatchScore, setPanNameMatchScore] = useState(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
 
   useEffect(() => {
     checkVerificationStatus();
   }, []);
 
+  useEffect(() => {
+    if (aadhaarOtpCooldown <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAadhaarOtpCooldown((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [aadhaarOtpCooldown]);
+
   // NOTE: With SecureID-only flow we no longer collect manual name/photo here.
 
-  // Auto-navigate to dashboard if verification is approved
-  useEffect(() => {
-    if (status === VERIFICATION_STATUS.APPROVED && !loading) {
-      // Small delay to show the approved message briefly
-      const timer = setTimeout(() => {
-        navigation.replace('FreelancerDashboard');
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [status, loading]);
+  // Note: approval is auto; navigate directly on completion.
 
   const showErrorModal = (title, message) => {
     setErrorModalTitle(title);
@@ -81,6 +92,7 @@ const Verification = ({ navigation }) => {
         throw new Error(resp?.error || 'Failed to send OTP');
       }
       setAadhaarRefId(resp.refId);
+      setAadhaarOtpCooldown(60);
       setIsSubmitted(true);
       setStatus(VERIFICATION_STATUS.PENDING);
       setSuccessMessage('OTP sent to your Aadhaar-linked mobile number.');
@@ -93,6 +105,7 @@ const Verification = ({ navigation }) => {
 
   const verifyAadhaar = async () => {
     try {
+      setIsVerifyingAadhaar(true);
       setSubmitting(true);
       setError('');
       setSuccessMessage('');
@@ -100,17 +113,33 @@ const Verification = ({ navigation }) => {
       if (!resp?.success) {
         throw new Error(resp?.error || 'Aadhaar verification failed');
       }
+      const match = resp?.verification?.aadhaarMobileMatchesSignup ?? null;
+      setAadhaarMobileMatchesSignup(match);
+
+      if (match !== true) {
+        setAadhaarVerified(false);
+        showErrorModal(
+          'Verification Error',
+          match === false
+            ? 'Entered aadhar details not belongs to your mobile number.'
+            : 'Unable to confirm your Aadhaar-linked mobile number. Please sign up using the Aadhaar-linked mobile number and try again.'
+        );
+        return;
+      }
+
       setAadhaarVerified(true);
-      setSuccessMessage('Aadhaar verified.');
+      setSuccessMessage('');
     } catch (e) {
       showErrorModal('Aadhaar Verification', e?.response?.data?.error || e?.message || 'Aadhaar verification failed');
     } finally {
       setSubmitting(false);
+      setIsVerifyingAadhaar(false);
     }
   };
 
   const verifyPan = async () => {
     try {
+      setIsVerifyingPan(true);
       setSubmitting(true);
       setError('');
       setSuccessMessage('');
@@ -120,11 +149,14 @@ const Verification = ({ navigation }) => {
       }
       setPanVerified(true);
       setPanRegisteredName(resp.registeredName || null);
-      setSuccessMessage('PAN verified.');
+      setPanNameMatchOk(resp?.nameMatchOk ?? null);
+      setPanNameMatchScore(resp?.nameMatchScore ?? null);
+      setSuccessMessage('');
     } catch (e) {
       showErrorModal('PAN Verification', e?.response?.data?.error || e?.message || 'PAN verification failed');
     } finally {
       setSubmitting(false);
+      setIsVerifyingPan(false);
     }
   };
 
@@ -137,13 +169,11 @@ const Verification = ({ navigation }) => {
       if (!resp?.success) {
         throw new Error(resp?.error || 'Failed to create account');
       }
-      setStatus(VERIFICATION_STATUS.APPROVED);
-      setSuccessMessage('Account created successfully. Redirecting you to dashboard...');
-
       const profileResponse = await userAPI.getProfile();
       if (profileResponse.success && profileResponse.user) {
         await updateUser(profileResponse.user);
       }
+      navigation.replace('FreelancerDashboard');
     } catch (e) {
       showErrorModal('Create account', e?.response?.data?.error || e?.message || 'Failed to create account');
     } finally {
@@ -193,29 +223,6 @@ const Verification = ({ navigation }) => {
     }
   };
 
-  // Approved Status Screen
-  const renderApprovedStatus = () => (
-    <View style={styles.statusContainer}>
-      <View style={[styles.iconContainer, styles.approvedIcon]}>
-        <MaterialIcons name="check-circle" size={48} color={colors.success.main} />
-      </View>
-      <Text style={styles.statusTitle}>Verification Approved</Text>
-      <Text style={styles.statusMessage}>
-        Your verification has been approved! You can now access the dashboard.
-      </Text>
-      <Button
-        onPress={() => {
-          // Navigate to Freelancer Dashboard
-          navigation.replace('FreelancerDashboard');
-        }}
-        style={styles.dashboardButton}
-      >
-        <Text style={styles.dashboardButtonText}>Go to Dashboard</Text>
-        <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-      </Button>
-    </View>
-  );
-
   // Rejected Status Screen
   const renderRejectedStatus = () => (
     <View style={styles.statusContainer}>
@@ -242,10 +249,10 @@ const Verification = ({ navigation }) => {
   // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
     <View style={styles.formContainer}>
-      <View style={[styles.iconContainer, styles.pendingIcon]}>
-        <MaterialIcons name="verified-user" size={48} color={colors.primary.main} />
+      <View style={styles.headerRow}>
+        <MaterialIcons name="verified-user" size={20} color={colors.primary.main} />
+        <Text style={styles.statusTitleInline}>Verification Required</Text>
       </View>
-      <Text style={styles.statusTitle}>Verification Required</Text>
       <Text style={styles.statusMessage}>
         {isNewUser
           ? 'You don’t have an existing account. Verify Aadhaar & PAN to create your account.'
@@ -260,15 +267,23 @@ const Verification = ({ navigation }) => {
           placeholder="12-digit Aadhaar"
           placeholderTextColor={colors.muted}
           keyboardType="number-pad"
-          style={styles.input}
+          editable={!aadhaarVerified && !submitting && !aadhaarRefId}
+          style={[styles.input, (aadhaarVerified || aadhaarRefId) && styles.inputDisabled]}
         />
+        {aadhaarVerified ? <Text style={styles.verifiedInline}>Aadhaar verified successfully</Text> : null}
         <TouchableOpacity
           onPress={sendAadhaarOtp}
-          disabled={submitting || aadhaarNumber.length !== 12}
-          style={[styles.secondaryButton, (submitting || aadhaarNumber.length !== 12) && styles.submitButtonDisabled]}
+          disabled={submitting || aadhaarVerified || aadhaarNumber.length !== 12 || aadhaarOtpCooldown > 0}
+          style={[
+            styles.secondaryButton,
+            (submitting || aadhaarVerified || aadhaarNumber.length !== 12 || aadhaarOtpCooldown > 0) && styles.submitButtonDisabled,
+          ]}
           activeOpacity={0.7}
         >
-          <Text style={styles.secondaryButtonText}>Send OTP</Text>
+          <Text style={styles.secondaryButtonText}>
+            {aadhaarRefId ? 'Resend OTP' : 'Send OTP'}
+            {aadhaarOtpCooldown > 0 ? ` (${aadhaarOtpCooldown}s)` : ''}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -278,17 +293,30 @@ const Verification = ({ navigation }) => {
           value={aadhaarOtp}
           onChangeText={(v) => setAadhaarOtp(String(v || '').replace(/\D/g, '').slice(0, 6))}
           placeholder="6-digit OTP"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.text.secondary}
           keyboardType="number-pad"
-          style={styles.input}
+          editable={!aadhaarVerified && !submitting && !!aadhaarRefId}
+          style={[styles.input, (aadhaarVerified || !aadhaarRefId) && styles.inputDisabled]}
         />
         <TouchableOpacity
           onPress={verifyAadhaar}
-          disabled={submitting || !aadhaarRefId || aadhaarOtp.length !== 6}
-          style={[styles.secondaryButton, (submitting || !aadhaarRefId || aadhaarOtp.length !== 6) && styles.submitButtonDisabled]}
+          disabled={submitting || aadhaarVerified || !aadhaarRefId || aadhaarOtp.length !== 6}
+          style={[
+            styles.secondaryButton,
+            (submitting || aadhaarVerified || !aadhaarRefId || aadhaarOtp.length !== 6) && styles.submitButtonDisabled,
+          ]}
           activeOpacity={0.7}
         >
-          <Text style={styles.secondaryButtonText}>Verify Aadhaar</Text>
+          {aadhaarVerified ? (
+            <View style={styles.inlineButtonContent}>
+              <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
+              <Text style={styles.secondaryButtonTextSuccess}>Verified</Text>
+            </View>
+          ) : isVerifyingAadhaar ? (
+            <ActivityIndicator color={colors.primary.main} size="small" />
+          ) : (
+            <Text style={styles.secondaryButtonText}>Verify Aadhaar</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -300,18 +328,37 @@ const Verification = ({ navigation }) => {
           placeholder="ABCDE1234F"
           placeholderTextColor={colors.muted}
           autoCapitalize="characters"
-          style={styles.input}
+          editable={!panVerified && !submitting}
+          style={[styles.input, panVerified && styles.inputDisabled]}
         />
         {panVerified && !!panRegisteredName && (
           <Text style={styles.panNameText}>{panRegisteredName}</Text>
         )}
+        {panVerified ? <Text style={styles.verifiedInline}>PAN verified successfully</Text> : null}
+        {panVerified && panNameMatchOk === false ? (
+          <Text style={styles.mismatchInline}>
+            Name mismatch: Aadhaar & PAN should match (score {panNameMatchScore ?? 0}%)
+          </Text>
+        ) : null}
         <TouchableOpacity
           onPress={verifyPan}
-          disabled={submitting || !aadhaarVerified || panNumber.length !== 10}
-          style={[styles.secondaryButton, (submitting || !aadhaarVerified || panNumber.length !== 10) && styles.submitButtonDisabled]}
+          disabled={submitting || panVerified || !aadhaarVerified || panNumber.length !== 10}
+          style={[
+            styles.secondaryButton,
+            (submitting || panVerified || !aadhaarVerified || panNumber.length !== 10) && styles.submitButtonDisabled,
+          ]}
           activeOpacity={0.7}
         >
-          <Text style={styles.secondaryButtonText}>Verify PAN</Text>
+          {panVerified ? (
+            <View style={styles.inlineButtonContent}>
+              <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
+              <Text style={styles.secondaryButtonTextSuccess}>Verified</Text>
+            </View>
+          ) : isVerifyingPan ? (
+            <ActivityIndicator color={colors.primary.main} size="small" />
+          ) : (
+            <Text style={styles.secondaryButtonText}>Verify PAN</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -319,12 +366,23 @@ const Verification = ({ navigation }) => {
         <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
           {termsAccepted ? <MaterialIcons name="check" size={16} color="#FFFFFF" /> : null}
         </View>
-        <Text style={styles.termsText}>I agree to Terms & Conditions</Text>
+        <Text style={styles.termsText}>
+          I agree to{' '}
+          <Text style={styles.termsLink} onPress={() => setTermsVisible(true)}>
+            Terms & Conditions
+          </Text>
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         onPress={complete}
-        disabled={submitting || !panVerified || !termsAccepted}
+        disabled={
+          submitting ||
+          !panVerified ||
+          !termsAccepted ||
+          panNameMatchOk === false ||
+          aadhaarMobileMatchesSignup === false
+        }
         style={[styles.submitButton, (submitting || !panVerified || !termsAccepted) && styles.submitButtonDisabled]}
         activeOpacity={0.7}
       >
@@ -350,7 +408,16 @@ const Verification = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Back to Login */}
         <View style={styles.topAction}>
           <Button variant="ghost" onPress={() => navigation.replace('Login')} style={styles.backButton}>
@@ -376,24 +443,15 @@ const Verification = ({ navigation }) => {
               </View>
             )}
 
-            {/* Approved */}
-            {status === VERIFICATION_STATUS.APPROVED ? (
-              renderApprovedStatus()
-            ) : (
-              <>
-                {/* Show rejection info (without form) */}
-                {status === VERIFICATION_STATUS.REJECTED && !showResubmitForm && renderRejectedStatus()}
+            {/* Show rejection info (without form) */}
+            {status === VERIFICATION_STATUS.REJECTED && !showResubmitForm && renderRejectedStatus()}
 
-                {/* Show form only when:
-                    1. New user (status is null and not submitted), OR
-                    2. Rejected and user clicked "Resubmit Verification" (showResubmitForm === true)
-                */}
-                {((status == null) || (status === VERIFICATION_STATUS.PENDING) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
-              </>
-            )}
+            {/* Show form for new / pending / resubmit */}
+            {((status == null) || (status === VERIFICATION_STATUS.PENDING) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
           </CardContent>
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
       {/* Error Modal */}
       <Modal
         visible={errorModalVisible}
@@ -421,11 +479,19 @@ const Verification = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Terms Modal (reuse Settings Terms screen) */}
+      <Modal visible={termsVisible} animationType="slide" onRequestClose={() => setTermsVisible(false)}>
+        <TermsAndConditions onClose={() => setTermsVisible(false)} />
+      </Modal>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -466,36 +532,36 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   // pendingIcon removed (no pending page in new flow)
-  approvedIcon: {
-    backgroundColor: colors.success.light,
-  },
+  // approvedIcon removed (no approved page)
   rejectedIcon: {
     backgroundColor: colors.error.light,
   },
   statusTitle: {
     ...typography.h2,
     color: colors.text.primary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     textAlign: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  statusTitleInline: {
+    ...typography.h2,
+    color: colors.text.primary,
   },
   statusMessage: {
     ...typography.body,
     color: colors.text.secondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     lineHeight: 24,
   },
   // refreshButton + refreshButtonText removed (no pending page in new flow)
-  dashboardButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.success.main,
-  },
-  dashboardButtonText: {
-    ...typography.button,
-    color: '#FFFFFF',
-  },
+  // dashboardButton + dashboardButtonText removed (no approved page)
   resubmitButton: {
     borderColor: colors.error.main,
   },
@@ -523,12 +589,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   formContainer: {
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.md,
     width: '100%',
   },
   stepBlock: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   stepTitle: {
     ...typography.body,
@@ -546,6 +612,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBackground,
     minHeight: 48,
   },
+  inputDisabled: {
+    backgroundColor: colors.border,
+    borderColor: colors.border,
+    color: colors.text.primary,
+  },
   secondaryButton: {
     marginTop: spacing.md,
     borderWidth: 1,
@@ -560,9 +631,28 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: colors.primary.main,
   },
+  secondaryButtonTextSuccess: {
+    ...typography.button,
+    color: colors.success.main,
+  },
+  inlineButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   panNameText: {
     ...typography.body,
     color: colors.text.secondary,
+    marginTop: spacing.sm,
+  },
+  verifiedInline: {
+    ...typography.body,
+    color: colors.success.main,
+    marginTop: spacing.sm,
+  },
+  mismatchInline: {
+    ...typography.body,
+    color: colors.error.main,
     marginTop: spacing.sm,
   },
   termsRow: {
@@ -589,6 +679,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.primary,
     flex: 1,
+  },
+  termsLink: {
+    color: colors.primary.main,
+    textDecorationLine: 'underline',
   },
   errorContainer: {
     flexDirection: 'row',

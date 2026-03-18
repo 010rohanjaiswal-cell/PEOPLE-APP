@@ -6,11 +6,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
 
 const TermsAndConditions = ({ onClose }) => {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
@@ -19,7 +20,7 @@ const TermsAndConditions = ({ onClose }) => {
         <View style={styles.backButtonPlaceholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={true}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={true} contentContainerStyle={styles.contentInner}>
         <Text style={styles.lastUpdated}>Last updated: August 2025</Text>
 
         <View style={styles.noticeBox}>
@@ -284,7 +285,7 @@ const TermsAndConditions = ({ onClose }) => {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -317,6 +318,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: spacing.lg,
+  },
+  contentInner: {
+    paddingBottom: spacing.xl,
   },
   lastUpdated: {
     ...typography.small,

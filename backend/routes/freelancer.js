@@ -67,6 +67,41 @@ function digitsOnly(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function last4Digits(value) {
+  const d = digitsOnly(value);
+  return d.length >= 4 ? d.slice(-4) : null;
+}
+
+function normalizeNameTokens(name) {
+  const s = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return [];
+  const stop = new Set(['S', 'O', 'D', 'O', 'W', 'O', 'C', 'O', 'MR', 'MRS', 'MS']);
+  return s
+    .split(' ')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !stop.has(t))
+    .filter((t) => t.length >= 2);
+}
+
+function nameMatchScorePercent(a, b) {
+  const at = normalizeNameTokens(a);
+  const bt = normalizeNameTokens(b);
+  if (!at.length || !bt.length) return 0;
+  const bset = new Set(bt);
+  let hits = 0;
+  for (const t of at) {
+    if (bset.has(t)) hits += 1;
+  }
+  // Intersection over larger set (order independent)
+  const denom = Math.max(at.length, bt.length);
+  return Math.round((hits / denom) * 100);
+}
+
 function buildAddressFromSplitAddress(split = {}) {
   const parts = [
     split.house,
@@ -569,7 +604,7 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
     const resp = await axios.post(
       `${baseUrl}/offline-aadhaar/verify`,
       { otp, ref_id: refId },
-      { headers: getCashfreeVrsHeaders(), timeout: 20000 }
+      { headers: getCashfreeVrsHeaders(), timeout: 35000 }
     );
 
     const data = resp.data || {};
@@ -587,6 +622,31 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
     const address = split ? buildAddressFromSplitAddress(split) : (qr.address || data.address || null);
     const aadhaarLast4 = digitsOnly(qr.aadhaar_last_four_digit || data.aadhaar_last_four_digit || '').slice(-4) || null;
     const aadhaarMasked = aadhaarLast4 ? `XXXXXXXX${aadhaarLast4}` : null;
+
+    // Try to infer Aadhaar-linked mobile (often masked) and compare last-4 with signup phone
+    const signupPhoneLast4 = last4Digits(user.phone);
+    const aadhaarMobileLast4 =
+      last4Digits(qr.mobile) ||
+      last4Digits(qr.mobile_number) ||
+      last4Digits(qr.masked_mobile) ||
+      last4Digits(qr.masked_mobile_number) ||
+      last4Digits(data.mobile) ||
+      last4Digits(data.mobile_number) ||
+      null;
+    const aadhaarMobileHash =
+      (qr.mobile_hash != null ? String(qr.mobile_hash) : null) ||
+      (data.mobile_hash != null ? String(data.mobile_hash) : null) ||
+      null;
+    const aadhaarMobileMatchesSignup =
+      (signupPhoneLast4 && aadhaarMobileLast4) ? (signupPhoneLast4 === aadhaarMobileLast4) : null;
+
+    // If we can determine mismatch, block verification to prevent fraud.
+    if (aadhaarMobileMatchesSignup === false) {
+      return res.status(400).json({
+        success: false,
+        error: 'Entered aadhar details not belongs to your mobile number.',
+      });
+    }
 
     // Photo is base64 in photo_link (per Cashfree response). Upload to Cloudinary.
     let profilePhotoUrl = null;
@@ -615,6 +675,9 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
         profilePhoto: profilePhotoUrl || undefined,
         aadhaarLast4,
         aadhaarMasked: aadhaarMasked || undefined,
+        aadhaarMobileLast4,
+        aadhaarMobileHash,
+        aadhaarMobileMatchesSignup,
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
@@ -636,10 +699,17 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
         address: updated.address || null,
         aadhaarMasked: updated.aadhaarMasked || null,
         profilePhoto: updated.profilePhoto || null,
+        aadhaarMobileMatchesSignup: updated.aadhaarMobileMatchesSignup ?? null,
       },
     });
   } catch (error) {
     console.error('Cashfree Aadhaar verify error:', error?.response?.data || error.message || error);
+    if (error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')) {
+      return res.status(504).json({
+        success: false,
+        error: 'Aadhaar verification is taking longer than usual. Please try again.',
+      });
+    }
     return res.status(500).json({
       success: false,
       error: error?.response?.data?.message || error?.response?.data?.error?.message || error.message || 'Failed to verify Aadhaar OTP',
@@ -677,6 +747,12 @@ router.post('/verification/pan/verify', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: data.message || 'PAN verification failed', details: data });
     }
 
+    const existing = await FreelancerVerification.findOne({ user: user._id }).sort({ createdAt: -1 }).lean();
+    const aadhaarName = existing?.fullName || user.fullName || null;
+    const panName = data.registered_name || data.name_pan_card || null;
+    const score = nameMatchScorePercent(aadhaarName, panName);
+    const ok = score >= 75; // 70-80% threshold target; using 75% default
+
     const updated = await FreelancerVerification.findOneAndUpdate(
       { user: user._id },
       {
@@ -686,6 +762,8 @@ router.post('/verification/pan/verify', authenticate, async (req, res) => {
         panNumber: pan,
         panVerified: true,
         panRegisteredName: data.registered_name || data.name_pan_card || null,
+        panNameMatchScore: score,
+        panNameMatchOk: ok,
         secureIdReferenceId: data.reference_id != null ? String(data.reference_id) : undefined,
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -696,6 +774,8 @@ router.post('/verification/pan/verify', authenticate, async (req, res) => {
       valid: true,
       registeredName: updated.panRegisteredName || null,
       pan: updated.panNumber || pan,
+      nameMatchScore: updated.panNameMatchScore ?? score,
+      nameMatchOk: updated.panNameMatchOk ?? ok,
     });
   } catch (error) {
     console.error('Cashfree PAN verify error:', error?.response?.data || error.message || error);
@@ -734,6 +814,12 @@ router.post('/verification/complete', authenticate, async (req, res) => {
     }
     if (!verification.panVerified) {
       return res.status(400).json({ success: false, error: 'Please verify PAN first.' });
+    }
+    if (verification.panNameMatchOk !== true) {
+      return res.status(400).json({ success: false, error: 'PAN name does not match Aadhaar name.' });
+    }
+    if (verification.aadhaarMobileMatchesSignup !== true) {
+      return res.status(400).json({ success: false, error: 'Entered aadhar details not belongs to your mobile number.' });
     }
 
     verification.termsAccepted = true;

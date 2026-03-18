@@ -92,6 +92,21 @@ const freelancerVerificationSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    aadhaarMobileLast4: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    aadhaarMobileHash: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    aadhaarMobileMatchesSignup: {
+      type: Boolean,
+      default: null,
+      index: true,
+    },
 
     // PAN verification (Cashfree VRS)
     panVerified: {
@@ -103,6 +118,17 @@ const freelancerVerificationSchema = new mongoose.Schema(
       type: String,
       default: null,
       trim: true,
+    },
+    panNameMatchScore: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 100,
+    },
+    panNameMatchOk: {
+      type: Boolean,
+      default: null,
+      index: true,
     },
 
     // UX gating
