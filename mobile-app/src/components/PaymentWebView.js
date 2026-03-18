@@ -18,7 +18,15 @@ import { WebView } from 'react-native-webview';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../theme';
 
-const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => {
+const PaymentWebView = ({
+  visible,
+  paymentUrl = null,
+  paymentSessionId = null,
+  cashfreeMode = 'sandbox',
+  orderId = null,
+  onClose,
+  onPaymentComplete,
+}) => {
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const webViewRef = useRef(null);
@@ -184,17 +192,65 @@ const PaymentWebView = ({ visible, paymentUrl, onClose, onPaymentComplete }) => 
           <View style={styles.placeholder} />
         </View>
 
-        {/* WebView - Only render if paymentUrl is available */}
-        {paymentUrl ? (
+        {/* WebView - Hosted checkout (Cashfree) */}
+        {paymentUrl || paymentSessionId ? (
           <WebView
             ref={webViewRef}
-            source={{ 
-              uri: paymentUrl,
-              headers: {
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-              }
-            }}
+            source={
+              paymentSessionId
+                ? {
+                    html: (() => {
+                      const safeSessionId = String(paymentSessionId).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+                      const safeReturnUrl = orderId
+                        ? `people-app://payment/callback?orderId=${encodeURIComponent(orderId)}`
+                        : 'people-app://payment/callback?orderId=UNKNOWN';
+                      return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cashfree Payment</title>
+  </head>
+  <body>
+    <div id="root" style="font-family: system-ui, -apple-system; padding: 16px; text-align:center;">
+      Redirecting to payment...
+    </div>
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+    <script>
+      (function(){
+        try{
+          var cashfree = Cashfree({ mode: "${cashfreeMode}" });
+          cashfree.checkout({
+            paymentSessionId: "${safeSessionId}",
+            returnUrl: "${safeReturnUrl}"
+          }).then(function(result){
+            // Cashfree redirects automatically on successful payment.
+            // Errors are handled by Cashfree / redirects.
+            console.log('cashfree checkout result', result);
+          }).catch(function(err){
+            console.error('cashfree checkout error', err);
+            var el = document.getElementById('root');
+            if(el){ el.innerText = 'Failed to start payment.'; }
+          });
+        }catch(e){
+          console.error('checkout init error', e);
+          var el2 = document.getElementById('root');
+          if(el2){ el2.innerText = 'Payment init error.'; }
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+                    })(),
+                  }
+                : {
+                    uri: paymentUrl,
+                    headers: {
+                      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                      'Accept-Language': 'en-US,en;q=0.9',
+                    },
+                  }
+            }
             // Remove "; wv" from User-Agent to prevent Cashfree from detecting WebView
             // Cashfree blocks WebView requests even if app is whitelisted
             // This makes it look like a regular browser request

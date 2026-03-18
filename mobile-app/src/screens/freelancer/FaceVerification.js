@@ -4,8 +4,9 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, Alert, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity, Modal } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
@@ -22,11 +23,20 @@ const FaceVerification = ({ navigation }) => {
   const [lastAttemptFailed, setLastAttemptFailed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalTitle, setErrorModalTitle] = useState('Face verification');
+  const [errorModalMessage, setErrorModalMessage] = useState('');
+
+  const showErrorModal = (title, message) => {
+    setErrorModalTitle(title || 'Face verification');
+    setErrorModalMessage(message || 'Something went wrong');
+    setErrorModalVisible(true);
+  };
 
   const takeSelfie = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Camera permission is required to take a selfie.');
+      showErrorModal('Permission required', 'Camera permission is required to take a selfie.');
       return;
     }
 
@@ -38,7 +48,19 @@ const FaceVerification = ({ navigation }) => {
     });
 
     if (!result.canceled && result.assets?.[0]) {
-      setSelfie(result.assets[0]);
+      const asset = result.assets[0];
+      // Front-camera selfies can be saved as mirrored; flip so profile photo looks natural everywhere.
+      const flipped = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ flip: ImageManipulator.FlipType.Horizontal }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setSelfie({
+        ...asset,
+        uri: flipped.uri,
+        mimeType: asset.mimeType || 'image/jpeg',
+        fileName: asset.fileName || 'selfie.jpg',
+      });
       setScore(null);
       setLastAttemptFailed(false);
     }
@@ -66,7 +88,7 @@ const FaceVerification = ({ navigation }) => {
       navigation.replace('FreelancerDashboard');
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message || 'Face verification failed';
-      Alert.alert('Face verification', msg);
+      showErrorModal('Face verification', msg);
       setLastAttemptFailed(true);
     } finally {
       setLoading(false);
@@ -143,6 +165,32 @@ const FaceVerification = ({ navigation }) => {
       <Modal visible={termsVisible} animationType="slide" onRequestClose={() => setTermsVisible(false)}>
         <TermsAndConditions onClose={() => setTermsVisible(false)} />
       </Modal>
+
+      <Modal
+        visible={errorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.errorIconContainer}>
+              <MaterialIcons name="error-outline" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>{errorModalTitle}</Text>
+            <Text style={styles.modalSubtitle}>{errorModalMessage}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
+                onPress={() => setErrorModalVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalSubmitText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -180,6 +228,67 @@ const styles = StyleSheet.create({
   submitButtonDisabled: { opacity: 0.6 },
   submitText: { ...typography.button, color: '#fff' },
   helpText: { ...typography.small, color: colors.text.secondary, marginTop: spacing.md, textAlign: 'center' },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 16,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  errorIconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.error.light,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 22,
+  },
+  modalActions: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  modalButton: {
+    minWidth: 140,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  errorModalButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalSubmitText: {
+    ...typography.button,
+    color: '#FFFFFF',
+  },
 });
 
 export default FaceVerification;

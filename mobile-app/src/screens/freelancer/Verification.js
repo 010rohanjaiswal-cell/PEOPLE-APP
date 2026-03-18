@@ -47,6 +47,7 @@ const Verification = ({ navigation }) => {
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
   const [aadhaarOtpCooldown, setAadhaarOtpCooldown] = useState(0); // seconds
   const [aadhaarMobileMatchesSignup, setAadhaarMobileMatchesSignup] = useState(null);
+  const [isSendingAadhaarOtp, setIsSendingAadhaarOtp] = useState(false);
   const [isVerifyingAadhaar, setIsVerifyingAadhaar] = useState(false);
   const [panNumber, setPanNumber] = useState('');
   const [panRegisteredName, setPanRegisteredName] = useState(null);
@@ -54,6 +55,7 @@ const Verification = ({ navigation }) => {
   const [isVerifyingPan, setIsVerifyingPan] = useState(false);
   const [panNameMatchOk, setPanNameMatchOk] = useState(null);
   const [panNameMatchScore, setPanNameMatchScore] = useState(null);
+  const [step, setStep] = useState(0); // 0 = Aadhaar, 1 = PAN
 
   useEffect(() => {
     checkVerificationStatus();
@@ -81,6 +83,7 @@ const Verification = ({ navigation }) => {
 
   const sendAadhaarOtp = async () => {
     try {
+      setIsSendingAadhaarOtp(true);
       setSubmitting(true);
       setError('');
       setSuccessMessage('');
@@ -99,6 +102,7 @@ const Verification = ({ navigation }) => {
       showErrorModal('Aadhaar OTP', e?.response?.data?.error || e?.message || 'Failed to send OTP');
     } finally {
       setSubmitting(false);
+      setIsSendingAadhaarOtp(false);
     }
   };
 
@@ -224,18 +228,40 @@ const Verification = ({ navigation }) => {
     </View>
   );
 
-  // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
-  const renderVerificationForm = () => (
-    <View style={styles.formContainer}>
-      <View style={styles.headerRow}>
-        <MaterialIcons name="verified-user" size={20} color={colors.primary.main} />
-        <Text style={styles.statusTitleInline}>Verification Required</Text>
+  const canGoNextFromAadhaar = aadhaarVerified === true;
+  const canGoNextFromPan =
+    panVerified === true &&
+    panNameMatchOk !== false &&
+    aadhaarMobileMatchesSignup !== false;
+
+  const renderProgress = () => {
+    const aadhaarDone = aadhaarVerified === true;
+    const panDone = panVerified === true && panNameMatchOk !== false;
+    // Face step is completed on the next screen; we show it as the final step indicator here.
+    return (
+      <View style={styles.progressContainer}>
+        <View style={styles.progressRow}>
+          <View style={[styles.progressDot, (step === 0 || aadhaarDone) && styles.progressDotActive]}>
+            {aadhaarDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>1</Text>}
+          </View>
+          <View style={[styles.progressLine, (aadhaarDone || step > 0) && styles.progressLineActive]} />
+          <View style={[styles.progressDot, (step === 1 || panDone) && styles.progressDotActive]}>
+            {panDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>2</Text>}
+          </View>
+          <View style={[styles.progressLine, panDone && styles.progressLineActive]} />
+          <View style={styles.progressDot}>
+            <Text style={styles.progressDotText}>3</Text>
+          </View>
+        </View>
       </View>
-      <Text style={styles.statusMessage}>
-        {isNewUser
-          ? 'You don’t have an existing account. Verify Aadhaar & PAN to create your account.'
-          : 'Complete Aadhaar & PAN verification to continue.'}
-      </Text>
+    );
+  };
+
+  const renderAadhaarStep = () => (
+    <View>
+      <View style={styles.stepHeaderRow}>
+        <Text style={styles.stepHeaderTitle}>Aadhaar verification</Text>
+      </View>
 
       <View style={styles.stepBlock}>
         <Text style={styles.stepTitle}>Aadhaar number</Text>
@@ -258,10 +284,14 @@ const Verification = ({ navigation }) => {
           ]}
           activeOpacity={0.7}
         >
-          <Text style={styles.secondaryButtonText}>
-            {aadhaarRefId ? 'Resend OTP' : 'Send OTP'}
-            {aadhaarOtpCooldown > 0 ? ` (${aadhaarOtpCooldown}s)` : ''}
-          </Text>
+          {isSendingAadhaarOtp ? (
+            <ActivityIndicator color={colors.primary.main} size="small" />
+          ) : (
+            <Text style={styles.secondaryButtonText}>
+              {aadhaarRefId ? 'Resend OTP' : 'Send OTP'}
+              {aadhaarOtpCooldown > 0 ? ` (${aadhaarOtpCooldown}s)` : ''}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -297,13 +327,22 @@ const Verification = ({ navigation }) => {
           )}
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderPanStep = () => (
+    <View>
+      <View style={styles.stepHeaderRow}>
+        {/* Back handled by bottom-left floating arrow */}
+      </View>
+
+      <Text style={styles.stepHeaderTitle}>PAN Verification</Text>
 
       <View style={styles.stepBlock}>
-        <Text style={styles.stepTitle}>PAN number</Text>
         <TextInput
           value={panNumber}
           onChangeText={(v) => setPanNumber(String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
-          placeholder="ABCDE1234F"
+          placeholder="PAN Number (ABCDE1234F)"
           placeholderTextColor={colors.muted}
           autoCapitalize="characters"
           editable={!panVerified && !submitting}
@@ -339,27 +378,47 @@ const Verification = ({ navigation }) => {
           )}
         </TouchableOpacity>
       </View>
+    </View>
+  );
 
+  // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
+  const renderVerificationForm = () => (
+    <View style={styles.formContainer}>
+      <View style={styles.headerRow}>
+        <MaterialIcons name="verified-user" size={20} color={colors.primary.main} />
+        <Text style={styles.statusTitleInline}>Verification Required</Text>
+      </View>
+      <Text style={styles.statusMessage}>
+        {isNewUser
+          ? 'You don’t have an existing account. Verify Aadhaar & PAN to create your account.'
+          : 'Complete Aadhaar & PAN verification to continue.'}
+      </Text>
+
+      {renderProgress()}
+      {step === 0 ? renderAadhaarStep() : renderPanStep()}
+
+      {/* Bottom-right Next arrow */}
       <TouchableOpacity
-        onPress={() => navigation.navigate('FaceVerification')}
-        disabled={
-          submitting ||
-          !panVerified ||
-          panNameMatchOk === false ||
-          aadhaarMobileMatchesSignup === false
-        }
-        style={[styles.submitButton, (submitting || !panVerified) && styles.submitButtonDisabled]}
-        activeOpacity={0.7}
+        onPress={() => {
+          if (step === 0) setStep(1);
+          else navigation.navigate('FaceVerification');
+        }}
+        disabled={step === 0 ? !canGoNextFromAadhaar : !canGoNextFromPan}
+        style={[
+          styles.floatingArrow,
+          (step === 0 ? !canGoNextFromAadhaar : !canGoNextFromPan) && styles.floatingArrowDisabled,
+        ]}
+        activeOpacity={0.85}
       >
-        {submitting ? (
-          <ActivityIndicator color="#FFFFFF" size="small" />
-        ) : (
-          <>
-            <Text style={styles.submitButtonText}>Next</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-          </>
-        )}
+        <MaterialIcons name="arrow-forward" size={22} color="#fff" />
       </TouchableOpacity>
+
+      {/* Bottom-left Back arrow (PAN -> Aadhaar) */}
+      {step === 1 ? (
+        <TouchableOpacity onPress={() => setStep(0)} style={styles.floatingBack} activeOpacity={0.85}>
+          <MaterialIcons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 
@@ -459,8 +518,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     padding: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   card: {
     width: '100%',
@@ -521,6 +582,90 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     lineHeight: 24,
   },
+  progressContainer: {
+    marginBottom: spacing.lg,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotActive: {
+    backgroundColor: colors.primary.main,
+  },
+  progressDotText: {
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  progressLine: {
+    height: 3,
+    width: 70,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.sm,
+    borderRadius: 2,
+  },
+  progressLineActive: {
+    backgroundColor: colors.primary.main,
+  },
+  stepHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  stepHeaderTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+  },
+  arrowButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
+  },
+  floatingArrow: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingArrowDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
+  },
+  floatingBack: {
+    position: 'absolute',
+    left: spacing.sm,
+    bottom: spacing.sm,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // backPill/backPillText removed; using floatingBack arrow instead
   // refreshButton + refreshButtonText removed (no pending page in new flow)
   // dashboardButton + dashboardButtonText removed (no approved page)
   resubmitButton: {
@@ -553,6 +698,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.md,
     width: '100%',
+    paddingBottom: spacing.xl + 54, // extra space for floating arrow
   },
   stepBlock: {
     marginBottom: spacing.md,
@@ -569,14 +715,14 @@ const styles = StyleSheet.create({
     borderRadius: spacing.borderRadius.input,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    color: colors.text.primary,
+    color: '#000',
     backgroundColor: colors.cardBackground,
     minHeight: 48,
   },
   inputDisabled: {
     backgroundColor: colors.border,
     borderColor: colors.border,
-    color: colors.text.primary,
+    color: '#000',
   },
   secondaryButton: {
     marginTop: spacing.md,
