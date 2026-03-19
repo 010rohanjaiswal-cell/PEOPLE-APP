@@ -337,7 +337,7 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       amount: -amt,
       refType: 'Withdrawal',
       refId: withdrawal._id.toString(),
-      meta: { transferId, beneId },
+      meta: { transferId, beneId: bank?.beneId },
     });
 
     const payouts = await createPayoutsClient();
