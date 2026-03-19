@@ -16,11 +16,6 @@ export const cashfreeWalletAPI = {
     return response.data;
   },
 
-  verifyBankDetails: async ({ bankAccount, ifsc }) => {
-    const response = await apiClient.post('/api/cashfree/vrs/bank-verify', { bankAccount, ifsc });
-    return response.data;
-  },
-
   addBankAccount: async ({ bankAccount, ifsc }) => {
     const response = await apiClient.post('/api/cashfree/payouts/bank-account', { bankAccount, ifsc });
     return response.data;

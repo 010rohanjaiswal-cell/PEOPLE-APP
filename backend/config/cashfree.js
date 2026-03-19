@@ -1,7 +1,17 @@
 const axios = require('axios');
 
+function cleanEnvValue(value) {
+  if (value == null) return '';
+  let v = String(value).trim();
+  // Handle common copy/paste mistakes from dashboards: "value" or 'value'
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 function requiredEnv(name) {
-  const v = process.env[name];
+  const v = cleanEnvValue(process.env[name]);
   if (!v) throw new Error(`Missing env var: ${name}`);
   return v;
 }
@@ -36,17 +46,25 @@ function getPayoutsConfig() {
 }
 
 function getVerificationConfig() {
-  const env = (process.env.CASHFREE_VRS_ENV || process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
+  const envRaw = cleanEnvValue(process.env.CASHFREE_VRS_ENV || process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
+  const env = envRaw === 'production' ? 'production' : 'sandbox';
   const baseURL =
-    process.env.CASHFREE_VRS_BASE_URL ||
+    cleanEnvValue(process.env.CASHFREE_VRS_BASE_URL) ||
     (env === 'production' ? 'https://api.cashfree.com/verification' : 'https://sandbox.cashfree.com/verification');
+  const vrsClientId = cleanEnvValue(process.env.CASHFREE_VRS_CLIENT_ID) || cleanEnvValue(process.env.CASHFREE_CLIENT_ID);
+  const vrsClientSecret =
+    cleanEnvValue(process.env.CASHFREE_VRS_CLIENT_SECRET) || cleanEnvValue(process.env.CASHFREE_CLIENT_SECRET);
+  if (!vrsClientId) throw new Error('Missing env var: CASHFREE_VRS_CLIENT_ID (or CASHFREE_CLIENT_ID)');
+  if (!vrsClientSecret) {
+    throw new Error('Missing env var: CASHFREE_VRS_CLIENT_SECRET (or CASHFREE_CLIENT_SECRET)');
+  }
 
   return {
     env,
     baseURL,
-    apiVersion: process.env.CASHFREE_VRS_API_VERSION || '2023-12-18',
-    clientId: requiredEnv('CASHFREE_CLIENT_ID'),
-    clientSecret: requiredEnv('CASHFREE_CLIENT_SECRET'),
+    apiVersion: cleanEnvValue(process.env.CASHFREE_VRS_API_VERSION) || '2023-12-18',
+    clientId: vrsClientId,
+    clientSecret: vrsClientSecret,
   };
 }
 
