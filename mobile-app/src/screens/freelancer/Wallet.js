@@ -306,7 +306,15 @@ const Wallet = () => {
       setBankIfsc('');
       await loadWallet();
     } catch (e) {
-      setPaymentErrorMessage(e?.response?.data?.error || e?.message || 'Failed to add bank account');
+      const respData = e?.response?.data;
+      const provider = respData?.provider;
+      console.log('Add bank account error response:', respData || e);
+      const msg =
+        respData?.error ||
+        e?.message ||
+        'Failed to add bank account';
+      const providerMsg = provider ? `\n\nCashfree provider:\n${JSON.stringify(provider)}` : '';
+      setPaymentErrorMessage(`${msg}${providerMsg}`);
       setPaymentErrorModalVisible(true);
     } finally {
       setAddingBank(false);
