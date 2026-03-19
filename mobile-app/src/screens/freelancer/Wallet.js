@@ -225,7 +225,14 @@ const Wallet = () => {
           <Text style={styles.noDuesLabel}>Available balance</Text>
           {locked > 0 ? <Text style={styles.noDuesLabel}>Locked: ₹{locked.toFixed(2)}</Text> : null}
           {bankAccount?.added && bankAccount?.nameAtBank ? (
-            <Text style={[styles.noDuesLabel, styles.bankNameOk]}>
+            <Text
+              style={[
+                styles.noDuesLabel,
+                typeof bankAccount.nameMatchScore === 'number' && bankAccount.nameMatchScore >= 50
+                  ? styles.bankNameOk
+                  : styles.bankNameBad,
+              ]}
+            >
               Bank holder: {bankAccount.nameAtBank}
               {typeof bankAccount.nameMatchScore === 'number'
                 ? ` (${bankAccount.nameMatchScore}%)`
@@ -682,7 +689,12 @@ const Wallet = () => {
                   />
 
                   {bankNameAtBank ? (
-                    <Text style={[styles.bankNameInline, styles.bankNameOk]}>
+                    <Text
+                      style={[
+                        styles.bankNameInline,
+                        typeof bankNameScore === 'number' && bankNameScore >= 50 ? styles.bankNameOk : styles.bankNameBad,
+                      ]}
+                    >
                       {bankNameAtBank}
                       {typeof bankNameScore === 'number' ? ` (${bankNameScore}%)` : ''}
                     </Text>
