@@ -91,10 +91,17 @@ async function getPayoutAuthToken() {
     return cachedPayoutAuth.token;
   }
 
+  // Production Payouts expects auth via headers (X-Client-Id / X-Client-Secret), not JSON body.
   const authResp = await axios.post(
     `${cfg.baseURL}/payout/v1/authorize`,
-    { clientId: cfg.clientId, clientSecret: cfg.clientSecret },
-    { timeout: 20000, headers: { 'Content-Type': 'application/json' } }
+    {},
+    {
+      timeout: 20000,
+      headers: {
+        'X-Client-Id': cfg.clientId,
+        'X-Client-Secret': cfg.clientSecret,
+      },
+    }
   );
 
   const token = authResp?.data?.data?.token || authResp?.data?.token || null;
