@@ -9,9 +9,82 @@ const { StandardCheckoutClient, Env, CreateSdkOrderRequest } = require('pg-sdk-n
 const { authenticate } = require('../middleware/auth');
 const CommissionTransaction = require('../models/CommissionTransaction');
 const User = require('../models/User');
+const Job = require('../models/Job');
+const Wallet = require('../models/Wallet');
+const WalletLedger = require('../models/WalletLedger');
+const PhonePeJobPayment = require('../models/PhonePeJobPayment');
 const crypto = require('crypto');
 
 const router = express.Router();
+
+function toRupees(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
+
+async function getOrCreateWallet(userId) {
+  let wallet = await Wallet.findOne({ user: userId });
+  if (!wallet) wallet = await Wallet.create({ user: userId });
+  return wallet;
+}
+
+async function creditFreelancerWalletForJob({ jobPayment, job }) {
+  if (jobPayment.processedToWallet) return { alreadyProcessed: true };
+
+  const amount = toRupees(jobPayment.amount);
+  const platformCommission = toRupees(amount * 0.1);
+  const amountReceived = toRupees(Math.max(0, amount - platformCommission));
+
+  const freelancerId = jobPayment.freelancer;
+  const wallet = await getOrCreateWallet(freelancerId);
+
+  await WalletLedger.create({
+    walletUser: freelancerId,
+    type: 'CREDIT_JOB_PAYMENT',
+    amount: amountReceived,
+    refType: 'PhonePeJobPayment',
+    refId: jobPayment._id.toString(),
+    meta: { jobId: job._id.toString(), merchantOrderId: jobPayment.merchantOrderId },
+  });
+  await WalletLedger.create({
+    walletUser: freelancerId,
+    type: 'DEBIT_COMMISSION',
+    amount: -platformCommission,
+    refType: 'PhonePeJobPayment',
+    refId: jobPayment._id.toString(),
+    meta: { jobId: job._id.toString(), merchantOrderId: jobPayment.merchantOrderId },
+  });
+
+  wallet.availableBalance = toRupees(wallet.availableBalance + amountReceived);
+  wallet.lifetimeEarnings = toRupees(wallet.lifetimeEarnings + amountReceived);
+  await wallet.save();
+
+  await CommissionTransaction.create({
+    freelancer: freelancerId,
+    job: job._id,
+    jobTitle: job.title,
+    clientName: null,
+    clientId: jobPayment.client,
+    jobAmount: amount,
+    platformCommission,
+    amountReceived,
+    duesPaid: true,
+    duesPaidAt: new Date(),
+    duesPaymentOrderId: `PHONEPE_JOB_${jobPayment.merchantOrderId}`,
+  });
+
+  jobPayment.processedToWallet = true;
+  await jobPayment.save();
+
+  // Mark job completed
+  if (job.status === 'work_done') {
+    job.status = 'completed';
+    await job.save();
+  }
+
+  return { alreadyProcessed: false, amountReceived, platformCommission };
+}
 
 // ============================================================================
 // PHONEPE SDK INITIALIZATION
@@ -220,6 +293,135 @@ router.post('/create-dues-order', authenticate, async (req, res) => {
         },
       } : undefined,
     });
+  }
+});
+
+/**
+ * Create PhonePe SDK order for client job payment
+ * POST /api/payment/create-job-order
+ * Requires authentication as client
+ */
+router.post('/create-job-order', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({ success: false, error: 'Only clients can create job payment orders' });
+    }
+
+    const { jobId } = req.body || {};
+    if (!jobId) return res.status(400).json({ success: false, error: 'jobId is required' });
+
+    const job = await Job.findOne({ _id: jobId, client: user._id || user.id }).lean();
+    if (!job) return res.status(404).json({ success: false, error: 'Job not found' });
+    if (job.status !== 'work_done') {
+      return res.status(400).json({ success: false, error: 'Can only pay for jobs with status \"work_done\"' });
+    }
+    if (!job.assignedFreelancer) {
+      return res.status(400).json({ success: false, error: 'Job has no assigned freelancer' });
+    }
+
+    const amount = toRupees(job.budget || 0);
+    if (!(amount > 0)) return res.status(400).json({ success: false, error: 'Invalid amount' });
+
+    const merchantOrderId = `JOB_${job._id.toString().slice(-8)}_${Date.now()}`.substring(0, 63);
+    const client = getPhonePeClient();
+
+    const sdkOrderRequest = CreateSdkOrderRequest.StandardCheckoutBuilder()
+      .merchantOrderId(merchantOrderId)
+      .amount(Math.round(amount * 100)) // paise
+      .expireAfter(3600)
+      .build();
+
+    const sdkOrderResponse = await client.createSdkOrder(sdkOrderRequest);
+
+    await PhonePeJobPayment.create({
+      job: job._id,
+      client: user._id || user.id,
+      freelancer: job.assignedFreelancer,
+      amount,
+      currency: 'INR',
+      merchantOrderId,
+      phonepeOrderId: sdkOrderResponse.orderId || null,
+      status: 'CREATED',
+      providerPayload: sdkOrderResponse || {},
+    });
+
+    // Prepare SDK request body for RN SDK (same format as dues)
+    const sdkRequestBody = {
+      orderId: sdkOrderResponse.orderId,
+      merchantId: process.env.PHONEPE_MERCHANT_ID,
+      token: sdkOrderResponse.token,
+      paymentMode: { type: 'PAY_PAGE' },
+    };
+    const sdkRequestBodyString = JSON.stringify(sdkRequestBody);
+    const saltKey = process.env.PHONEPE_CLIENT_SECRET;
+    const base64RequestBody = Buffer.from(sdkRequestBodyString).toString('base64');
+    const checkSum = crypto.createHash('sha256').update(base64RequestBody + saltKey).digest('hex');
+
+    return res.json({
+      success: true,
+      merchantOrderId,
+      orderId: sdkOrderResponse.orderId,
+      orderToken: sdkOrderResponse.token,
+      merchantId: process.env.PHONEPE_MERCHANT_ID,
+      checkSum,
+      amount,
+    });
+  } catch (error) {
+    console.error('Error creating PhonePe job SDK order:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to create job payment order' });
+  }
+});
+
+/**
+ * Confirm PhonePe job payment and credit freelancer wallet
+ * POST /api/payment/confirm-job-payment
+ * Requires authentication as client
+ */
+router.post('/confirm-job-payment', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({ success: false, error: 'Only clients can confirm job payments' });
+    }
+
+    const { merchantOrderId } = req.body || {};
+    if (!merchantOrderId) return res.status(400).json({ success: false, error: 'merchantOrderId is required' });
+
+    const jobPayment = await PhonePeJobPayment.findOne({ merchantOrderId });
+    if (!jobPayment) return res.status(404).json({ success: false, error: 'Payment record not found' });
+    if (String(jobPayment.client) !== String(user._id || user.id)) {
+      return res.status(403).json({ success: false, error: 'Not your payment' });
+    }
+
+    const client = getPhonePeClient();
+    const statusResponse = await client.getOrderStatus(merchantOrderId);
+
+    const state = statusResponse?.state || statusResponse?.orderStatus || null;
+    const isSuccess = state === 'COMPLETED';
+    const isFailed = state === 'FAILED';
+
+    jobPayment.providerPayload = statusResponse || {};
+    jobPayment.status = isSuccess ? 'COMPLETED' : isFailed ? 'FAILED' : 'PENDING';
+    await jobPayment.save();
+
+    if (!isSuccess) {
+      return res.json({ success: true, paid: false, status: jobPayment.status });
+    }
+
+    const job = await Job.findById(jobPayment.job);
+    const credit = await creditFreelancerWalletForJob({ jobPayment, job });
+
+    return res.json({
+      success: true,
+      paid: true,
+      credited: !credit.alreadyProcessed,
+      amountReceived: credit.amountReceived,
+      platformCommission: credit.platformCommission,
+    });
+  } catch (error) {
+    console.error('Error confirming job payment:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to confirm job payment' });
   }
 });
 

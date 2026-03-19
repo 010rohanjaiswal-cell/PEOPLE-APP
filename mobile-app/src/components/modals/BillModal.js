@@ -18,15 +18,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
-import { clientJobsAPI } from '../../api/clientJobs';
+import { paymentAPI } from '../../api';
+import { startPhonePeTransaction } from '../../config/phonepe';
 
 const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const { t } = useLanguage();
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [merchantOrderId, setMerchantOrderId] = useState(null);
 
   const freelancer = job?.assignedFreelancer || {};
   const amount = job?.budget || 0;
@@ -35,29 +36,59 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const freelancerName = freelancer.verification?.fullName || freelancer.fullName || 'Unknown Freelancer';
   const freelancerPhoto = freelancer.profilePhoto || freelancer.verification?.profilePhoto || null;
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!job?._id) return;
-    setConfirmModalVisible(true);
+    setProcessing(true);
+    setErrorMessage('');
+    try {
+      const resp = await paymentAPI.createJobPaymentOrder(job._id);
+      if (!resp?.success || !resp?.merchantOrderId || !resp?.orderToken || !resp?.orderId || !resp?.merchantId) {
+        throw new Error(resp?.error || 'Failed to create PhonePe order');
+      }
+      setMerchantOrderId(resp.merchantOrderId);
+
+      await startPhonePeTransaction({
+        orderToken: resp.orderToken,
+        orderId: resp.orderId,
+        merchantId: resp.merchantId,
+        checkSum: resp.checkSum,
+        appSchema: 'people-app',
+      });
+
+      // After SDK returns, poll backend to confirm & credit wallet
+      const id = resp.merchantOrderId;
+      if (id) {
+        setMerchantOrderId(id);
+        confirmJobPayment(id);
+      }
+    } catch (e) {
+      setErrorMessage(e?.response?.data?.error || e?.message || 'Failed to start payment');
+      setErrorModalVisible(true);
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const confirmPayment = async () => {
-    setConfirmModalVisible(false);
-    setProcessing(true);
+  const confirmJobPayment = async (merchantOrderIdToCheck) => {
+    const maxRetries = 10;
+    const pollInterval = 3000;
     try {
-      const response = await clientJobsAPI.payJob(job._id);
-      if (response.success) {
-        setProcessing(false);
-        setSuccessModalVisible(true);
-      } else {
-        setProcessing(false);
-        setErrorMessage(response.error || 'Failed to record payment');
-        setErrorModalVisible(true);
+      setProcessing(true);
+      for (let i = 0; i < maxRetries; i++) {
+        const resp = await paymentAPI.confirmJobPayment(merchantOrderIdToCheck);
+        if (resp?.success && resp?.paid) {
+          setSuccessModalVisible(true);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, pollInterval));
       }
-    } catch (err) {
-      console.error('Error recording payment:', err);
-      setProcessing(false);
-      setErrorMessage(err.response?.data?.error || 'Failed to record payment');
+      setErrorMessage(t('wallet.paymentNotCompleted') || 'Payment not completed');
       setErrorModalVisible(true);
+    } catch (e) {
+      setErrorMessage(e?.response?.data?.error || e?.message || 'Failed to confirm payment');
+      setErrorModalVisible(true);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -129,50 +160,15 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
             <Button variant="outline" onPress={onClose} style={styles.cancelButton}>
               Cancel
             </Button>
-            <Button onPress={handlePay} style={styles.payButton}>
-              Paid
+            <Button onPress={handlePay} style={styles.payButton} disabled={processing}>
+              {processing ? <ActivityIndicator color="#fff" size="small" /> : 'Pay'}
             </Button>
           </View>
         </View>
       </View>
     </Modal>
 
-    {/* Payment Confirmation Modal */}
-    <Modal
-      visible={confirmModalVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setConfirmModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('bill.confirmPayment')}</Text>
-          <Text style={styles.modalSubtitle}>
-            {t('bill.confirmPaymentMessage').replace('{amount}', amount)}
-          </Text>
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={() => setConfirmModalVisible(false)}
-              disabled={processing}
-            >
-              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSubmitButton, styles.paymentModalButton]}
-              onPress={confirmPayment}
-              disabled={processing}
-            >
-              {processing ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.modalSubmitText}>{t('bill.paid')}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
+    {/* Cashfree native SDK handles UI */}
 
     {/* Payment Success Modal */}
     <Modal
@@ -229,6 +225,8 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
         </View>
       </View>
     </Modal>
+
+    {/* PhonePe SDK handles checkout UI */}
     </>
   );
 };

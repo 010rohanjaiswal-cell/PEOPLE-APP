@@ -23,6 +23,17 @@ export const paymentAPI = {
     const response = await apiClient.post('/api/cashfree/dues/confirm', { orderId });
     return response.data;
   },
+
+  // PhonePe client -> freelancer job payment
+  createJobPaymentOrder: async (jobId) => {
+    const response = await apiClient.post('/api/payment/create-job-order', { jobId });
+    return response.data;
+  },
+
+  confirmJobPayment: async (merchantOrderId) => {
+    const response = await apiClient.post('/api/payment/confirm-job-payment', { merchantOrderId });
+    return response.data;
+  },
 };
 
 export default paymentAPI;

@@ -129,7 +129,6 @@ setError(response.error || t('wallet.failedLoadWallet'));
           if (resp.wallet) setWallet(resp.wallet);
           await loadWallet();
           setPaymentSuccessModalVisible(true);
-          setPaymentWebViewVisible(false);
           setPaying(false);
           return;
         }
@@ -143,7 +142,6 @@ setError(response.error || t('wallet.failedLoadWallet'));
       setPaymentErrorMessage(err.response?.data?.error || err.message || t('wallet.failedVerifyStatus'));
       setPaymentErrorModalVisible(true);
     } finally {
-      setPaymentWebViewVisible(false);
       setPaying(false);
     }
   };
@@ -460,19 +458,16 @@ setError(response.error || t('wallet.failedLoadWallet'));
         </View>
       </Modal>
 
-      {/* Cashfree Payment WebView */}
       <PaymentWebView
         visible={paymentWebViewVisible}
         paymentSessionId={cashfreePaymentSessionId}
-        cashfreeMode={'sandbox'}
+        cashfreeMode={'production'}
         orderId={cashfreeOrderId}
         onClose={() => {
           setPaymentWebViewVisible(false);
           setPaying(false);
         }}
-        onPaymentComplete={(orderId) => {
-          confirmDuesAfterCallback(orderId);
-        }}
+        onPaymentComplete={(orderId) => confirmDuesAfterCallback(orderId)}
       />
     </>
   );

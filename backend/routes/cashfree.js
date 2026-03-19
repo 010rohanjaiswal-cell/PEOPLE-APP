@@ -79,6 +79,12 @@ async function creditWalletFromJobPayment({ jobPayment, job, clientUser }) {
   jobPayment.processedToWallet = true;
   await jobPayment.save();
 
+  // Payment confirmed -> job completed (replaces old "Paid" manual confirmation)
+  if (job && job.status === 'work_done') {
+    job.status = 'completed';
+    await job.save();
+  }
+
   return { alreadyProcessed: false, amountReceived, platformCommission };
 }
 
