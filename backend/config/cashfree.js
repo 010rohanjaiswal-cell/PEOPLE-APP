@@ -35,6 +35,21 @@ function getPayoutsConfig() {
   };
 }
 
+function getVerificationConfig() {
+  const env = (process.env.CASHFREE_VRS_ENV || process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
+  const baseURL =
+    process.env.CASHFREE_VRS_BASE_URL ||
+    (env === 'production' ? 'https://api.cashfree.com/verification' : 'https://sandbox.cashfree.com/verification');
+
+  return {
+    env,
+    baseURL,
+    apiVersion: process.env.CASHFREE_VRS_API_VERSION || '2023-12-18',
+    clientId: requiredEnv('CASHFREE_CLIENT_ID'),
+    clientSecret: requiredEnv('CASHFREE_CLIENT_SECRET'),
+  };
+}
+
 function createPaymentsClient() {
   const cfg = getPaymentsConfig();
   return axios.create({
@@ -91,10 +106,27 @@ async function createPayoutsClient() {
   });
 }
 
+function createVerificationClient() {
+  const cfg = getVerificationConfig();
+  return axios.create({
+    baseURL: cfg.baseURL,
+    timeout: 35000,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'x-api-version': cfg.apiVersion,
+      'x-client-id': cfg.clientId,
+      'x-client-secret': cfg.clientSecret,
+    },
+  });
+}
+
 module.exports = {
   getPaymentsConfig,
   getPayoutsConfig,
+  getVerificationConfig,
   createPaymentsClient,
   createPayoutsClient,
+  createVerificationClient,
 };
 
