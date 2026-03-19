@@ -11,6 +11,7 @@ const WalletLedger = require('../models/WalletLedger');
 const JobPayment = require('../models/JobPayment');
 const Withdrawal = require('../models/Withdrawal');
 const DuesPayment = require('../models/DuesPayment');
+const FreelancerBankAccount = require('../models/FreelancerBankAccount');
 
 const router = express.Router();
 
@@ -24,6 +25,35 @@ async function getOrCreateWallet(userId) {
   let wallet = await Wallet.findOne({ user: userId });
   if (!wallet) wallet = await Wallet.create({ user: userId });
   return wallet;
+}
+
+function normalizeNameTokens(name) {
+  const s = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return [];
+  const stop = new Set(['S', 'O', 'D', 'O', 'W', 'O', 'C', 'O', 'MR', 'MRS', 'MS']);
+  return s
+    .split(' ')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => !stop.has(t))
+    .filter((t) => t.length >= 2);
+}
+
+function nameMatchScorePercent(a, b) {
+  const at = normalizeNameTokens(a);
+  const bt = normalizeNameTokens(b);
+  if (!at.length || !bt.length) return 0;
+  const bset = new Set(bt);
+  let hits = 0;
+  for (const t of at) {
+    if (bset.has(t)) hits += 1;
+  }
+  const denom = Math.max(at.length, bt.length);
+  return Math.round((hits / denom) * 100);
 }
 
 async function creditWalletFromJobPayment({ jobPayment, job, clientUser }) {
@@ -225,7 +255,20 @@ router.post('/payments/confirm', authenticate, requireRole('client'), async (req
 router.get('/wallet', authenticate, requireRole('freelancer'), async (req, res) => {
   try {
     const wallet = await getOrCreateWallet(req.user._id);
-    res.json({ success: true, wallet });
+    const bank = await FreelancerBankAccount.findOne({ freelancer: req.user._id }).lean();
+    res.json({
+      success: true,
+      wallet,
+      bankAccount: bank
+        ? {
+            added: !!bank.verified,
+            ifsc: bank.ifsc,
+            last4: bank.bankAccountLast4,
+            nameAtBank: bank.nameAtBank || null,
+            nameMatchScore: bank.nameMatchScore ?? null,
+          }
+        : { added: false },
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: e?.message || 'Failed to fetch wallet' });
   }
@@ -254,10 +297,12 @@ router.get('/wallet/ledger', authenticate, requireRole('freelancer'), async (req
  */
 router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async (req, res) => {
   try {
-    const { amount, beneId, beneficiaryName, bankAccount, ifsc } = req.body;
+    const { amount } = req.body;
     const amt = toRupees(amount);
     if (!(amt > 0)) return res.status(400).json({ success: false, error: 'Invalid amount' });
-    if (!beneId) return res.status(400).json({ success: false, error: 'beneId is required' });
+
+    const bank = await FreelancerBankAccount.findOne({ freelancer: req.user._id, verified: true }).lean();
+    if (!bank) return res.status(400).json({ success: false, error: 'Add bank account to withdraw.' });
 
     const wallet = await getOrCreateWallet(req.user._id);
     if (wallet.availableBalance < amt) {
@@ -277,10 +322,10 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       status: 'PROCESSING',
       transferId,
       beneficiary: {
-        beneId,
-        name: beneficiaryName || null,
-        bankAccount: bankAccount || null,
-        ifsc: ifsc || null,
+        beneId: bank.beneId,
+        name: bank.nameAtBank || null,
+        bankAccount: `xxxx${bank.bankAccountLast4}`,
+        ifsc: bank.ifsc,
       },
     });
 
@@ -297,7 +342,7 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
 
     // Standard transfer endpoint (Cashfree Payouts)
     const transferResp = await payouts.post('/payout/v1/requestTransfer', {
-      beneId,
+      beneId: bank.beneId,
       amount: amt,
       transferId,
       // Optional: remarks / purpose
@@ -311,6 +356,115 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
   } catch (e) {
     const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Withdrawal failed';
     res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
+ * Add / verify freelancer bank account and register beneficiary in Cashfree Payouts
+ * POST /api/cashfree/payouts/bank-account
+ */
+router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), async (req, res) => {
+  try {
+    const { bankAccount, ifsc } = req.body || {};
+    const acct = String(bankAccount || '').replace(/\s/g, '');
+    const ifscCode = String(ifsc || '').toUpperCase().trim();
+
+    if (!/^[0-9A-Za-z]{6,40}$/.test(acct)) {
+      return res.status(400).json({ success: false, error: 'Invalid bank account number' });
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+      return res.status(400).json({ success: false, error: 'Invalid IFSC code' });
+    }
+
+    const freelancer = await User.findById(req.user._id).lean();
+    const freelancerName = freelancer?.fullName || '';
+
+    // 1) Start async bank validation (penny drop)
+    const payouts = await createPayoutsClient();
+    const userId = `U_${req.user._id.toString().slice(-10)}`.substring(0, 40);
+
+    const startResp = await payouts.get('/payout/v1/asyncValidation/bankDetails', {
+      params: {
+        name: freelancerName,
+        phone: (freelancer?.phone || '').replace(/\D/g, '').slice(-10) || undefined,
+        bankAccount: acct,
+        ifsc: ifscCode,
+        userId,
+        remarks: 'PeopleApp',
+      },
+    });
+
+    const bvRefId = startResp?.data?.data?.bvRefId || null;
+    if (!bvRefId) {
+      return res.status(500).json({ success: false, error: startResp?.data?.message || 'Bank verification failed' });
+    }
+
+    // 2) Poll status (up to ~20s)
+    let statusData = null;
+    for (let i = 0; i < 6; i++) {
+      const st = await payouts.get('/payout/v1/getValidationStatus/bank', {
+        params: { bvRefId: String(bvRefId), userId },
+      });
+      statusData = st?.data?.data || null;
+      const accountExists = String(statusData?.accountExists || '').toUpperCase();
+      if (accountExists === 'YES' && statusData?.nameAtBank) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+
+    const nameAtBank = statusData?.nameAtBank || null;
+    const providerScore = typeof statusData?.nameMatchScore === 'number' ? statusData.nameMatchScore : null;
+    const computedScore = nameMatchScorePercent(nameAtBank || '', freelancerName);
+    const score = providerScore != null ? providerScore : computedScore;
+    const accountExists = String(statusData?.accountExists || '').toUpperCase() === 'YES';
+
+    if (!accountExists) {
+      return res.status(400).json({ success: false, error: 'Bank account verification failed' });
+    }
+    if (score < 50) {
+      return res.status(400).json({ success: false, error: `Bank name mismatch (score ${score}%).` });
+    }
+
+    // 3) Register beneficiary
+    const beneId = `BENE_${req.user._id.toString().slice(-12)}`.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 50);
+    const addBeneResp = await payouts.post('/payout/v1/addBeneficiary', {
+      beneId,
+      name: nameAtBank || freelancerName,
+      email: freelancer?.email || 'na@example.com',
+      phone: (freelancer?.phone || '').replace(/\D/g, '').slice(-10) || '9999999999',
+      bankAccount: acct,
+      ifsc: ifscCode,
+      address1: 'People App',
+    });
+
+    const ok = String(addBeneResp?.data?.status || '').toUpperCase() === 'SUCCESS' || addBeneResp?.data?.subCode === '200';
+    if (!ok) {
+      return res.status(500).json({ success: false, error: addBeneResp?.data?.message || 'Failed to add beneficiary' });
+    }
+
+    const last4 = acct.slice(-4);
+    await FreelancerBankAccount.findOneAndUpdate(
+      { freelancer: req.user._id },
+      {
+        $set: {
+          bankAccountLast4: last4,
+          ifsc: ifscCode,
+          nameAtBank,
+          nameMatchScore: score,
+          verified: true,
+          beneId,
+          providerPayload: { start: startResp?.data || {}, status: statusData || {}, addBene: addBeneResp?.data || {} },
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    return res.json({
+      success: true,
+      bankAccount: { last4, ifsc: ifscCode, nameAtBank, nameMatchScore: score },
+    });
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to add bank account';
+    return res.status(500).json({ success: false, error: msg });
   }
 });
 
