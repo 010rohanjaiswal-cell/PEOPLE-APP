@@ -15,6 +15,7 @@ import {
   UIManager,
   Platform,
   KeyboardAvoidingView,
+  useWindowDimensions,
   RefreshControl,
   Modal,
   TextInput,
@@ -34,6 +35,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const Wallet = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { height: windowHeight } = useWindowDimensions();
   const [wallet, setWallet] = useState(null); // legacy dues wallet summary
   const [realWallet, setRealWallet] = useState(null); // real earnings wallet
   const [realLedger, setRealLedger] = useState([]);
@@ -61,6 +63,11 @@ const Wallet = () => {
   const [addingBank, setAddingBank] = useState(false);
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [bankIfsc, setBankIfsc] = useState('');
+  const [bankNameAtBank, setBankNameAtBank] = useState(null);
+  const [bankNameScore, setBankNameScore] = useState(null);
+  const [bankVerifiedOk, setBankVerifiedOk] = useState(false);
+  const [bankVerifyInProgress, setBankVerifyInProgress] = useState(false);
+  const [bankVerifyError, setBankVerifyError] = useState('');
 
   const loadWallet = async () => {
     try {
@@ -282,6 +289,11 @@ const Wallet = () => {
       setAddingBank(true);
       const resp = await cashfreeWalletAPI.addBankAccount({ bankAccount: acct, ifsc });
       if (!resp?.success) throw new Error(resp?.error || 'Failed to add bank account');
+      // Bank is verified + saved on backend. Reflect UI state.
+      setBankNameAtBank(resp?.bankAccount?.nameAtBank || null);
+      setBankNameScore(resp?.bankAccount?.nameMatchScore ?? null);
+      setBankVerifiedOk(true);
+      setBankVerifyError('');
       setBankModalVisible(false);
       setBankAccountNumber('');
       setBankIfsc('');
@@ -291,6 +303,39 @@ const Wallet = () => {
       setPaymentErrorModalVisible(true);
     } finally {
       setAddingBank(false);
+    }
+  };
+
+  const verifyBankOnIfscComplete = async (acctRaw, ifscRaw) => {
+    const acct = String(acctRaw || '').trim();
+    const ifsc = String(ifscRaw || '').trim().toUpperCase();
+    if (acct.length < 6 || ifsc.length !== 11) return;
+    if (bankVerifyInProgress) return;
+
+    setBankVerifyInProgress(true);
+    setBankVerifyError('');
+    setBankNameAtBank(null);
+    setBankNameScore(null);
+    setBankVerifiedOk(false);
+    try {
+      const resp = await cashfreeWalletAPI.verifyBankDetails({ bankAccount: acct, ifsc });
+      if (!resp?.success) throw new Error(resp?.error || 'Bank verification failed');
+
+      const name = resp?.bankAccount?.nameAtBank || null;
+      const score = resp?.bankAccount?.nameMatchScore ?? null;
+      setBankNameAtBank(name);
+      setBankNameScore(score);
+      const ok = typeof score === 'number' ? score >= 50 : false;
+      setBankVerifiedOk(ok);
+      if (!ok) {
+        setBankVerifyError(`Name mismatch (${score ?? 0}%)`);
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || 'Bank verification failed';
+      setBankVerifyError(msg);
+      setBankVerifiedOk(false);
+    } finally {
+      setBankVerifyInProgress(false);
     }
   };
 
@@ -604,14 +649,21 @@ const Wallet = () => {
         animationType="fade"
         onRequestClose={() => setBankModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            styles.modalOverlayTop,
+            { paddingTop: Math.max(spacing.lg, windowHeight * 0.2) },
+          ]}
+        >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-            style={styles.kbAvoid}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 16}
+            style={styles.kbAvoidTop}
           >
             <ScrollView
-              contentContainerStyle={styles.modalScrollContent}
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContentTop}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
@@ -624,7 +676,14 @@ const Wallet = () => {
                 <View style={{ gap: spacing.sm }}>
                   <TextInput
                     value={bankAccountNumber}
-                    onChangeText={setBankAccountNumber}
+                    onChangeText={(v) => {
+                      setBankAccountNumber(v);
+                      // reset verification on any change
+                      setBankVerifiedOk(false);
+                      setBankNameAtBank(null);
+                      setBankNameScore(null);
+                      setBankVerifyError('');
+                    }}
                     placeholder="Bank account number"
                     keyboardType="default"
                     placeholderTextColor={colors.text.secondary}
@@ -632,26 +691,63 @@ const Wallet = () => {
                   />
                   <TextInput
                     value={bankIfsc}
-                    onChangeText={setBankIfsc}
+                    onChangeText={(v) => {
+                      const next = String(v || '')
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, '')
+                        .slice(0, 11);
+                      setBankIfsc(next);
+                      if (next.length === 11) {
+                        verifyBankOnIfscComplete(bankAccountNumber, next);
+                      } else {
+                        setBankVerifiedOk(false);
+                        setBankNameAtBank(null);
+                        setBankNameScore(null);
+                        setBankVerifyError('');
+                      }
+                    }}
                     placeholder="IFSC code"
                     autoCapitalize="characters"
                     placeholderTextColor={colors.text.secondary}
                     style={styles.textInput}
                   />
+
+                  {bankVerifyInProgress ? (
+                    <View style={styles.inlineRow}>
+                      <ActivityIndicator size="small" color={colors.primary.main} />
+                      <Text style={styles.inlineHint}>Verifying bank details…</Text>
+                    </View>
+                  ) : bankNameAtBank ? (
+                    <Text
+                      style={[
+                        styles.bankNameInline,
+                        bankVerifiedOk ? styles.bankNameOk : styles.bankNameBad,
+                      ]}
+                    >
+                      {bankNameAtBank}
+                      {typeof bankNameScore === 'number' ? ` (${bankNameScore}%)` : ''}
+                    </Text>
+                  ) : bankVerifyError ? (
+                    <Text style={[styles.bankNameInline, styles.bankNameBad]}>{bankVerifyError}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.modalCancelButton]}
                     onPress={() => setBankModalVisible(false)}
-                    disabled={addingBank}
+                    disabled={addingBank || bankVerifyInProgress}
                   >
                     <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalButton, styles.modalSubmitButton]}
+                    style={[
+                      styles.modalButton,
+                      styles.modalSubmitButton,
+                      (!bankVerifiedOk || addingBank) && styles.modalSubmitButtonDisabled,
+                    ]}
                     onPress={submitBankAccount}
-                    disabled={addingBank}
+                    disabled={addingBank || !bankVerifiedOk}
                   >
                     {addingBank ? (
                       <ActivityIndicator color="#FFFFFF" size="small" />
@@ -808,6 +904,26 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: 'center',
   },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  bankNameInline: {
+    ...typography.small,
+    marginTop: spacing.xs,
+    fontWeight: '600',
+  },
+  bankNameOk: {
+    color: colors.success.main,
+  },
+  bankNameBad: {
+    color: colors.error.main,
+  },
+  modalSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
   textInput: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -960,14 +1076,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalOverlayTop: {
+    justifyContent: 'flex-start',
+  },
   kbAvoid: {
     width: '100%',
+  },
+  kbAvoidCentered: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  kbAvoidTop: {
+    flex: 1,
+    width: '100%',
+  },
+  modalSheetWrap: {
+    width: '100%',
+    paddingBottom: spacing.lg,
   },
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.lg,
+  },
+  modalScroll: {
+    width: '100%',
+  },
+  modalScrollContentCentered: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  modalScrollContentTop: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    // keep modal stable during keyboard resize (avoid flexGrow/center)
+    alignItems: 'center',
   },
   modalContent: {
     width: '90%',

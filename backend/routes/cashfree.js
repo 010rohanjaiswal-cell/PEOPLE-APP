@@ -292,6 +292,90 @@ router.get('/wallet/ledger', authenticate, requireRole('freelancer'), async (req
 // ============================================================================
 
 /**
+ * SecureID/VRS-only bank verification (nameAtBank + match score).
+ * Does NOT create beneficiary or require payouts token success beyond VRS.
+ *
+ * POST /api/cashfree/vrs/bank-verify
+ */
+router.post('/vrs/bank-verify', authenticate, requireRole('freelancer'), async (req, res) => {
+  try {
+    const { bankAccount, ifsc } = req.body || {};
+    const acct = String(bankAccount || '').replace(/\s/g, '');
+    const ifscCode = String(ifsc || '').toUpperCase().trim();
+
+    if (!/^[0-9A-Za-z]{6,40}$/.test(acct)) {
+      return res.status(400).json({ success: false, error: 'Invalid bank account number' });
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+      return res.status(400).json({ success: false, error: 'Invalid IFSC code' });
+    }
+
+    const freelancer = await User.findById(req.user._id).lean();
+    const freelancerName = freelancer?.fullName || '';
+
+    const payouts = await createPayoutsClient();
+    const userId = `U_${req.user._id.toString().slice(-10)}`.substring(0, 40);
+
+    const startResp = await payouts.get('/payout/v1/asyncValidation/bankDetails', {
+      params: {
+        name: freelancerName,
+        phone: (freelancer?.phone || '').replace(/\D/g, '').slice(-10) || undefined,
+        bankAccount: acct,
+        ifsc: ifscCode,
+        userId,
+        remarks: 'PeopleApp',
+      },
+    });
+
+    const bvRefId = startResp?.data?.data?.bvRefId || null;
+    if (!bvRefId) {
+      return res
+        .status(500)
+        .json({ success: false, error: startResp?.data?.message || 'Bank verification failed' });
+    }
+
+    let statusData = null;
+    for (let i = 0; i < 6; i++) {
+      const st = await payouts.get('/payout/v1/getValidationStatus/bank', {
+        params: { bvRefId: String(bvRefId), userId },
+      });
+      statusData = st?.data?.data || null;
+      const accountExists = String(statusData?.accountExists || '').toUpperCase();
+      if (accountExists === 'YES' && statusData?.nameAtBank) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+
+    const nameAtBank = statusData?.nameAtBank || null;
+    const providerScore = typeof statusData?.nameMatchScore === 'number' ? statusData.nameMatchScore : null;
+    const computedScore = nameMatchScorePercent(nameAtBank || '', freelancerName);
+    const score = providerScore != null ? providerScore : computedScore;
+    const accountExists = String(statusData?.accountExists || '').toUpperCase() === 'YES';
+
+    if (!accountExists) {
+      return res.status(400).json({ success: false, error: 'Bank account verification failed' });
+    }
+
+    return res.json({
+      success: true,
+      bankAccount: {
+        ifsc: ifscCode,
+        last4: acct.slice(-4),
+        nameAtBank,
+        nameMatchScore: score,
+      },
+      ok: score >= 50,
+    });
+  } catch (e) {
+    const msg =
+      e?.response?.data?.message ||
+      e?.response?.data?.error ||
+      e?.message ||
+      'Failed to verify bank details';
+    return res.status(500).json({ success: false, error: msg });
+  }
+});
+
+/**
  * Create a payout transfer to a beneficiary (beneId must exist in your Cashfree payouts account)
  * POST /api/cashfree/payouts/withdraw
  */
@@ -379,7 +463,8 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
     const freelancer = await User.findById(req.user._id).lean();
     const freelancerName = freelancer?.fullName || '';
 
-    // 1) Start async bank validation (penny drop)
+    // 1) VRS validation (name + match score) should have been done on the client before enabling Save.
+    // Re-check here for safety (and to avoid saving unverified accounts).
     const payouts = await createPayoutsClient();
     const userId = `U_${req.user._id.toString().slice(-10)}`.substring(0, 40);
 
@@ -399,7 +484,6 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       return res.status(500).json({ success: false, error: startResp?.data?.message || 'Bank verification failed' });
     }
 
-    // 2) Poll status (up to ~20s)
     let statusData = null;
     for (let i = 0; i < 6; i++) {
       const st = await payouts.get('/payout/v1/getValidationStatus/bank', {
@@ -424,7 +508,7 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       return res.status(400).json({ success: false, error: `Bank name mismatch (score ${score}%).` });
     }
 
-    // 3) Register beneficiary
+    // 2) Register beneficiary (requires payouts auth token)
     const beneId = `BENE_${req.user._id.toString().slice(-12)}`.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 50);
     const addBeneResp = await payouts.post('/payout/v1/addBeneficiary', {
       beneId,
