@@ -39,10 +39,13 @@ app.use(cors({
   ],
 }));
 
-// Cashfree Payouts webhooks need raw JSON body for HMAC verification (must be before express.json)
+// Cashfree Payouts webhooks need raw JSON body for HMAC verification (must be before express.json).
+// IMPORTANT: do not restrict type to 'application/json' only — if Content-Type does not match,
+// body-parser skips reading the body and req.body is undefined; we would then verify the wrong
+// payload (see Cashfree docs: "Parsed payload is being used" → signature mismatch / 401).
 app.post(
   '/api/cashfree/webhooks/payout',
-  express.raw({ type: 'application/json' }),
+  express.raw({ type: () => true, limit: '2mb' }),
   cashfreePayoutWebhook
 );
 // Dashboard "test webhook" often uses GET/HEAD — without this, verification returns 404

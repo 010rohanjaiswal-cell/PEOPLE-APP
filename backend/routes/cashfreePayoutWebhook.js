@@ -45,6 +45,36 @@ function getHeader(req, name) {
   return req.headers[lower] ?? req.headers[name];
 }
 
+function normalizeSignatureHeader(sigHeader) {
+  let received = String(sigHeader).trim();
+  if (/^sha256=/i.test(received)) received = received.replace(/^sha256=/i, '').trim();
+  if (/^v1=/i.test(received)) received = received.replace(/^v1=/i, '').trim();
+  // Some proxies send multiple values; Cashfree sends one base64 blob
+  if (received.includes(',')) received = received.split(',')[0].trim();
+  return received;
+}
+
+/** Base64 (standard) compare; optional base64url (replace - _ and pad) */
+function signaturesEqual(expectedB64, received) {
+  if (expectedB64 === received) return true;
+  try {
+    const a = Buffer.from(expectedB64, 'utf8');
+    const b = Buffer.from(received, 'utf8');
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  } catch {
+    /* length mismatch */
+  }
+  const urlNorm = received.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = urlNorm.length % 4;
+  const padded = pad ? urlNorm + '='.repeat(4 - pad) : urlNorm;
+  if (expectedB64 === padded) return true;
+  return false;
+}
+
+/**
+ * Cashfree signs: HMAC-SHA256(secret, UTF8(timestamp) + rawBodyBytes).
+ * Use timestamp + raw buffer (not re-stringified JSON) so bytes match exactly.
+ */
 function verifySignature(req, rawBuffer) {
   const secrets = collectWebhookSecrets();
   const ts = getHeader(req, 'x-webhook-timestamp');
@@ -57,22 +87,20 @@ function verifySignature(req, rawBuffer) {
     console.warn('Cashfree webhook: missing x-webhook-timestamp or x-webhook-signature');
     return false;
   }
-  const payload = rawBuffer.toString('utf8');
-  const signedContent = `${String(ts).trim()}${payload}`;
-  let received = String(sigHeader).trim();
-  if (/^sha256=/i.test(received)) received = received.replace(/^sha256=/i, '').trim();
-  if (/^v1=/i.test(received)) received = received.replace(/^v1=/i, '').trim();
+  if (!Buffer.isBuffer(rawBuffer)) {
+    console.warn('Cashfree webhook: body was not raw Buffer (middleware order / type mismatch?)');
+    return false;
+  }
+
+  const tsStr = String(ts).trim();
+  const received = normalizeSignatureHeader(sigHeader);
 
   for (const secret of secrets) {
-    const expected = crypto.createHmac('sha256', secret).update(signedContent).digest('base64');
-    if (expected === received) return true;
-    try {
-      const a = Buffer.from(expected, 'utf8');
-      const b = Buffer.from(received, 'utf8');
-      if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
-    } catch {
-      /* length mismatch */
-    }
+    const expectedB64 = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('base64');
+    if (signaturesEqual(expectedB64, received)) return true;
+
+    const expectedHex = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('hex');
+    if (expectedHex.toLowerCase() === received.toLowerCase()) return true;
   }
   return false;
 }
@@ -206,7 +234,29 @@ function nestedMessage(body) {
 module.exports = async function cashfreePayoutWebhook(req, res) {
   try {
     const skipVerify = cleanEnv(process.env.CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY) === '1';
-    const rawBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
+    const debug = cleanEnv(process.env.CASHFREE_PAYOUT_WEBHOOK_DEBUG) === '1';
+
+    // Never use JSON.stringify(parsed body) for verification — breaks HMAC vs Cashfree (raw payload).
+    const rawBuffer = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!rawBuffer) {
+      console.warn('Cashfree payout webhook: body is not a Buffer — express.raw may not have run for this route');
+      return res.status(400).json({
+        success: false,
+        error: 'Expected raw body',
+        hint: 'Server must register express.raw() before this handler for POST /api/cashfree/webhooks/payout',
+      });
+    }
+
+    if (debug) {
+      const ct = req.headers['content-type'] || '';
+      console.info(
+        '[Cashfree webhook debug] content-type=%s bodyLen=%s hasTs=%s hasSig=%s',
+        ct,
+        rawBuffer.length,
+        Boolean(getHeader(req, 'x-webhook-timestamp')),
+        Boolean(getHeader(req, 'x-webhook-signature'))
+      );
+    }
 
     if (!skipVerify && !verifySignature(req, rawBuffer)) {
       console.warn('Cashfree payout webhook: signature verification failed (see docs: use oldest active Payouts client secret)');

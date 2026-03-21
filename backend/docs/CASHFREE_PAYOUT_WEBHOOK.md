@@ -37,7 +37,46 @@ The handler verifies `x-webhook-signature` and `x-webhook-timestamp` using:
 1. In Render, `CASHFREE_PAYOUTS_CLIENT_SECRET` must be **exactly** the **Payouts (Global Payouts)** client secret — not the PG / SecureID secret unless they are the same app.
 2. Copy the secret again from **Payouts → Developers / Credentials** (no spaces/quotes).
 3. If you **rotated** the secret, try the **previous / oldest** active secret (Cashfree docs).
-4. Temporarily set `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1`, redeploy, run **Test** again. If it succeeds, the URL is fine and only HMAC secret was wrong — remove skip verify after fixing the secret.
+4. **Raw body**: Cashfree signs the **exact raw HTTP body**. If your server parses JSON first and re-stringifies it, or if `express.raw` never reads the body (wrong `Content-Type` match), verification **always** fails. This backend uses `express.raw({ type: () => true })` for the webhook route so **any** Content-Type still captures bytes.
+5. Temporarily set `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1`, redeploy, run **Test** again. If it succeeds, the URL is fine and only HMAC / raw-body path was wrong — remove skip verify after fixing.
+6. Optional: set `CASHFREE_PAYOUT_WEBHOOK_DEBUG=1` to log body length and headers (no secrets) in server logs.
+
+### Webhook **401** vs Payouts API **401** (different checks)
+
+| What fails | Meaning |
+|------------|---------|
+| **Dashboard “Test & Add Webhook” → 401** | Your server rejected the request: **HMAC** on `x-webhook-signature` does not match. Fix `CASHFREE_PAYOUTS_CLIENT_SECRET` (same as Payouts app, **oldest active** secret). Authorize curl can still be **200**. |
+| **`/payout/v1/authorize` → 401** | **Client ID / Secret** are wrong **or** you’re calling the **wrong host** (e.g. sandbox keys against production URL). Fix keys or `CASHFREE_PAYOUTS_ENV` + URL. |
+
+### Verify Payouts API keys with **curl** (same flow as this backend)
+
+The app calls **`POST /payout/v1/authorize`** with empty JSON body and headers `X-Client-Id` / `X-Client-Secret`. If this succeeds (**HTTP 200** and a `token` in the JSON), your **Payouts** keys and **environment URL** match.
+
+**Production** (`CASHFREE_PAYOUTS_ENV=production`):
+
+```bash
+curl -sS -w "\nHTTP_CODE:%{http_code}\n" \
+  -X POST "https://payout-api.cashfree.com/payout/v1/authorize" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: YOUR_PAYOUTS_CLIENT_ID" \
+  -H "X-Client-Secret: YOUR_PAYOUTS_CLIENT_SECRET" \
+  -d '{}'
+```
+
+**Sandbox / test** (`CASHFREE_PAYOUTS_ENV=test` or not production):
+
+```bash
+curl -sS -w "\nHTTP_CODE:%{http_code}\n" \
+  -X POST "https://payout-gamma.cashfree.com/payout/v1/authorize" \
+  -H "Content-Type: application/json" \
+  -H "X-Client-Id: YOUR_PAYOUTS_CLIENT_ID" \
+  -H "X-Client-Secret: YOUR_PAYOUTS_CLIENT_SECRET" \
+  -d '{}'
+```
+
+- **200** + `data.token` (or `token` in body) → keys work for that host.  
+- **401** → wrong ID/secret or **mismatched env** (use gamma URL for sandbox keys, `payout-api.cashfree.com` for production keys).  
+- Webhook signature still uses the **same** client secret string; if authorize works but webhook test fails, focus on **oldest active secret**, no body parsing before HMAC, and deployed env value.
 
 ## 4. Behaviour in this app
 
