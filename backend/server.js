@@ -45,6 +45,16 @@ app.post(
   express.raw({ type: 'application/json' }),
   cashfreePayoutWebhook
 );
+// Dashboard "test webhook" often uses GET/HEAD — without this, verification returns 404
+app.get('/api/cashfree/webhooks/payout', (req, res) => {
+  res.status(200).json({
+    ok: true,
+    message: 'Cashfree payout webhook URL is valid. Events are delivered via POST with JSON body.',
+  });
+});
+app.head('/api/cashfree/webhooks/payout', (req, res) => {
+  res.status(200).end();
+});
 
 // Body parsing middleware
 app.use(express.json());

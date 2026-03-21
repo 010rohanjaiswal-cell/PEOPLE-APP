@@ -2,7 +2,8 @@
 
 Your backend exposes:
 
-`POST https://YOUR_PUBLIC_BACKEND_URL/api/cashfree/webhooks/payout`
+- **`POST`** `https://YOUR_PUBLIC_BACKEND_URL/api/cashfree/webhooks/payout` — real events from Cashfree (JSON body + signatures).
+- **`GET`** / **`HEAD`** same URL — returns **200** so the Cashfree dashboard “test URL” / verification does not get **404** (only POST was registered before; dashboard checks often use GET).
 
 ## 1. Cashfree Dashboard
 
