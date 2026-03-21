@@ -15,6 +15,9 @@ const FreelancerBankAccount = require('../models/FreelancerBankAccount');
 
 const router = express.Router();
 
+/** Bank holder vs profile name; score stored in DB but not exposed in API responses. */
+const MIN_BANK_NAME_MATCH_PERCENT = 80;
+
 function toRupees(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
@@ -333,8 +336,8 @@ router.get('/wallet', authenticate, requireRole('freelancer'), async (req, res) 
             added: !!bank.verified,
             ifsc: bank.ifsc,
             last4: bank.bankAccountLast4,
-            nameAtBank: bank.nameAtBank || null,
-            nameMatchScore: bank.nameMatchScore ?? null,
+            nameMatchOk:
+              typeof bank.nameMatchScore === 'number' && bank.nameMatchScore >= MIN_BANK_NAME_MATCH_PERCENT,
           }
         : { added: false },
     });
@@ -359,8 +362,6 @@ router.get('/wallet/ledger', authenticate, requireRole('freelancer'), async (req
 // ============================================================================
 // PAYOUTS (Cashfree Transfers)
 // ============================================================================
-
-const MIN_BANK_NAME_MATCH_PERCENT = 80;
 
 /**
  * SecureID / VRS: verify bank account (sync) — preview in app before Save
@@ -400,13 +401,9 @@ router.post('/vrs/bank-verify', authenticate, requireRole('freelancer'), async (
       });
     }
 
-    // Account is valid; name match may still be low — UI shows red until profile name aligns with bank.
+    // Account is valid; do not expose match % or bank name in JSON (fraud prevention).
     return res.json({
       success: true,
-      nameAtBank: v.nameAtBank,
-      nameMatchScore: v.nameMatchScore,
-      bankName: v.bankName,
-      referenceId: v.referenceId,
       nameMatchOk: v.nameMatchScore >= MIN_BANK_NAME_MATCH_PERCENT,
     });
   } catch (e) {
@@ -543,7 +540,7 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       if (score < MIN_BANK_NAME_MATCH_PERCENT) {
         return res.status(400).json({
           success: false,
-          error: `Bank holder name must match your profile (minimum ${MIN_BANK_NAME_MATCH_PERCENT}% match; current ${score}%). Name at bank: ${nameAtBank || 'unknown'}`,
+          error: 'Account holder name does not match your profile. Update your profile or use a bank account in your name.',
           provider: v.body || null,
         });
       }
@@ -601,7 +598,7 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
 
     return res.json({
       success: true,
-      bankAccount: { last4, ifsc: ifscCode, nameAtBank, nameMatchScore: score },
+      bankAccount: { last4, ifsc: ifscCode },
       verificationMethod: 'vrs_sync',
     });
   } catch (e) {

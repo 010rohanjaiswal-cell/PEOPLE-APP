@@ -32,9 +32,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-/** Must match backend MIN_BANK_NAME_MATCH_PERCENT in routes/cashfree.js */
-const MIN_BANK_NAME_MATCH_PERCENT = 80;
-
 const Wallet = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -66,8 +63,8 @@ const Wallet = () => {
   const [addingBank, setAddingBank] = useState(false);
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [bankIfsc, setBankIfsc] = useState('');
-  const [bankNameAtBank, setBankNameAtBank] = useState(null);
-  const [bankNameScore, setBankNameScore] = useState(null);
+  /** null = not verified yet; true/false from API (no score shown in UI). */
+  const [bankNameMatchOk, setBankNameMatchOk] = useState(null);
   const [bankVerifyLoading, setBankVerifyLoading] = useState(false);
   const [bankVerifyError, setBankVerifyError] = useState('');
   const bankVerifySeq = useRef(0);
@@ -87,9 +84,6 @@ const Wallet = () => {
         setRealWallet(realResp.wallet);
         const bankData = realResp.bankAccount || { added: false };
         setBankAccount(bankData);
-        // hydrate local name state so we can show it in UI
-        setBankNameAtBank(bankData.nameAtBank || null);
-        setBankNameScore(bankData.nameMatchScore ?? null);
       }
       if (ledgerResp?.success && Array.isArray(ledgerResp.ledger)) setRealLedger(ledgerResp.ledger);
 
@@ -117,8 +111,7 @@ const Wallet = () => {
     const ifsc = bankIfsc.trim().toUpperCase();
 
     if (ifsc.length !== 11 || acct.length < 6) {
-      setBankNameAtBank(null);
-      setBankNameScore(null);
+      setBankNameMatchOk(null);
       setBankVerifyError('');
       return undefined;
     }
@@ -132,13 +125,11 @@ const Wallet = () => {
           const r = await cashfreeWalletAPI.verifyBankAccount({ bankAccount: acct, ifsc });
           if (seq !== bankVerifySeq.current) return;
           if (r?.success) {
-            setBankNameAtBank(r.nameAtBank || null);
-            setBankNameScore(typeof r.nameMatchScore === 'number' ? r.nameMatchScore : null);
+            setBankNameMatchOk(Boolean(r.nameMatchOk));
           }
         } catch (e) {
           if (seq !== bankVerifySeq.current) return;
-          setBankNameAtBank(null);
-          setBankNameScore(null);
+          setBankNameMatchOk(null);
           const msg = e?.response?.data?.error || e?.message || 'Verification failed';
           setBankVerifyError(typeof msg === 'string' ? msg : 'Verification failed');
         } finally {
@@ -228,7 +219,6 @@ const Wallet = () => {
 
   const renderWalletBalanceCard = () => {
     const available = Number(realWallet?.availableBalance || 0);
-    const locked = Number(realWallet?.lockedBalance || 0);
     const bankAdded = bankAccount?.added === true;
 
     return (
@@ -252,12 +242,11 @@ const Wallet = () => {
               onPress={() => {
                 setBankAccountNumber('');
                 setBankIfsc('');
-                setBankNameAtBank(null);
-                setBankNameScore(null);
+                setBankNameMatchOk(null);
                 setBankVerifyError('');
                 setBankModalVisible(true);
               }}
-              style={[styles.iconButton, styles.bankButton]}
+              style={[styles.iconButton, bankAdded ? styles.bankPencilTouch : styles.bankButton]}
               activeOpacity={0.8}
             >
               {bankAdded ? (
@@ -277,23 +266,6 @@ const Wallet = () => {
         <View style={styles.amountRow}>
           <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
           <Text style={styles.noDuesLabel}>Available balance</Text>
-          {locked > 0 ? <Text style={styles.noDuesLabel}>Locked: ₹{locked.toFixed(2)}</Text> : null}
-          {bankAccount?.added && bankAccount?.nameAtBank ? (
-            <Text
-              style={[
-                styles.noDuesLabel,
-                typeof bankAccount.nameMatchScore === 'number' &&
-                bankAccount.nameMatchScore >= MIN_BANK_NAME_MATCH_PERCENT
-                  ? styles.bankNameOk
-                  : styles.bankNameBad,
-              ]}
-            >
-              Bank holder: {bankAccount.nameAtBank}
-              {typeof bankAccount.nameMatchScore === 'number'
-                ? ` (${bankAccount.nameMatchScore}%)`
-                : ''}
-            </Text>
-          ) : null}
         </View>
 
         <TouchableOpacity
@@ -303,7 +275,7 @@ const Wallet = () => {
             (!bankAdded || withdrawing || available <= 0) && { opacity: 0.5 },
           ]}
           onPress={() => setWithdrawModalVisible(true)}
-          disabled={withdrawing || available <= 0 || !bankAdded}
+          disabled={!bankAdded || withdrawing || available <= 0}
         >
           {withdrawing ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
@@ -357,9 +329,9 @@ const Wallet = () => {
         setPaymentErrorModalVisible(true);
         return;
       }
-      if (typeof bankNameScore === 'number' && bankNameScore < MIN_BANK_NAME_MATCH_PERCENT && bankNameAtBank) {
+      if (bankNameMatchOk === false) {
         setPaymentErrorMessage(
-          `Name on bank must match your profile name (at least ${MIN_BANK_NAME_MATCH_PERCENT}% match; yours is ${bankNameScore}%). Update your profile or use a bank account in your name.`
+          'Account holder name does not match your profile. Update your profile name or use a bank account registered in your name.'
         );
         setPaymentErrorModalVisible(true);
         return;
@@ -367,9 +339,6 @@ const Wallet = () => {
       setAddingBank(true);
       const resp = await cashfreeWalletAPI.addBankAccount({ bankAccount: acct, ifsc });
       if (!resp?.success) throw new Error(resp?.error || 'Failed to add bank account');
-      // Bank is verified + saved on backend. Reflect UI state.
-      setBankNameAtBank(resp?.bankAccount?.nameAtBank || null);
-      setBankNameScore(resp?.bankAccount?.nameMatchScore ?? null);
       setBankModalVisible(false);
       setBankAccountNumber('');
       setBankIfsc('');
@@ -722,8 +691,7 @@ const Wallet = () => {
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Add Bank Account</Text>
                 <Text style={styles.modalSubtitle}>
-                  Enter your bank details. The account holder name must match your profile name (at least{' '}
-                  {MIN_BANK_NAME_MATCH_PERCENT}%).
+                  Enter your bank details. The account holder name must match your profile name.
                 </Text>
 
                 <View style={{ gap: spacing.sm }}>
@@ -761,17 +729,14 @@ const Wallet = () => {
                     </View>
                   ) : null}
                   {bankVerifyError ? <Text style={styles.bankVerifyErr}>{bankVerifyError}</Text> : null}
-                  {bankNameAtBank ? (
+                  {bankNameMatchOk !== null ? (
                     <Text
                       style={[
                         styles.bankNameInline,
-                        typeof bankNameScore === 'number' && bankNameScore >= MIN_BANK_NAME_MATCH_PERCENT
-                          ? styles.bankNameOk
-                          : styles.bankNameBad,
+                        bankNameMatchOk ? styles.bankNameOk : styles.bankNameBad,
                       ]}
                     >
-                      {bankNameAtBank}
-                      {typeof bankNameScore === 'number' ? ` (${bankNameScore}%)` : ''}
+                      {bankNameMatchOk ? 'Name matches your profile' : 'Name does not match your profile'}
                     </Text>
                   ) : null}
                 </View>
@@ -791,9 +756,7 @@ const Wallet = () => {
                       (addingBank ||
                         !bankAccountNumber ||
                         bankIfsc.length !== 11 ||
-                        (typeof bankNameScore === 'number' &&
-                          bankNameScore < MIN_BANK_NAME_MATCH_PERCENT &&
-                          bankNameAtBank)) &&
+                        bankNameMatchOk === false) &&
                         styles.modalSubmitButtonDisabled,
                     ]}
                     onPress={submitBankAccount}
@@ -801,9 +764,7 @@ const Wallet = () => {
                       addingBank ||
                       !bankAccountNumber ||
                       bankIfsc.length !== 11 ||
-                      (typeof bankNameScore === 'number' &&
-                        bankNameScore < MIN_BANK_NAME_MATCH_PERCENT &&
-                        !!bankNameAtBank)
+                      bankNameMatchOk === false
                     }
                   >
                     {addingBank ? (
@@ -905,12 +866,17 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: spacing.xs,
   },
+  /** Outlined pill for “Add Bank Account” only — edit uses pencilBox only (single border). */
   bankButton: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: spacing.sm,
     borderWidth: 1,
     borderColor: colors.primary.main,
+  },
+  bankPencilTouch: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   bankButtonText: {
     ...typography.small,
@@ -929,7 +895,7 @@ const styles = StyleSheet.create({
   },
   amountRow: {
     alignItems: 'flex-start',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   duesAmount: {
     fontSize: 28,
