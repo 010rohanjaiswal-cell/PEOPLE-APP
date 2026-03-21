@@ -38,8 +38,10 @@ The handler verifies `x-webhook-signature` and `x-webhook-timestamp` using:
 2. Copy the secret again from **Payouts → Developers / Credentials** (no spaces/quotes).
 3. If you **rotated** the secret, try the **previous / oldest** active secret (Cashfree docs).
 4. **Raw body**: Cashfree signs the **exact raw HTTP body**. If your server parses JSON first and re-stringifies it, or if `express.raw` never reads the body (wrong `Content-Type` match), verification **always** fails. This backend uses `express.raw({ type: () => true })` for the webhook route so **any** Content-Type still captures bytes.
-5. Temporarily set `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1`, redeploy, run **Test** again. If it succeeds, the URL is fine and only HMAC / raw-body path was wrong — remove skip verify after fixing.
-6. Optional: set `CASHFREE_PAYOUT_WEBHOOK_DEBUG=1` to log body length and headers (no secrets) in server logs.
+5. **Signature header shape**: Some Cashfree requests send `x-webhook-signature` as `t=<epoch>,v1=<base64>`. Parsing must **not** treat the first comma-separated segment as the signature (that is only the timestamp). This server extracts `v1=` when present.
+6. **Webhook V1 vs V2 in the dashboard**: **V2** uses header HMAC (`timestamp + raw body`). **V1** uses a `signature` field **inside the JSON** and a different algorithm (sorted key values). If the dashboard is set to **V1**, this server also verifies body `signature` (fallback before header HMAC).
+7. Temporarily set `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1`, redeploy, run **Test** again. If it succeeds, the URL is fine and only HMAC / raw-body path was wrong — remove skip verify after fixing.
+8. Optional: set `CASHFREE_PAYOUT_WEBHOOK_DEBUG=1` to log body length and headers (no secrets) in server logs.
 
 ### Webhook **401** vs Payouts API **401** (different checks)
 

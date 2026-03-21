@@ -45,13 +45,32 @@ function getHeader(req, name) {
   return req.headers[lower] ?? req.headers[name];
 }
 
-function normalizeSignatureHeader(sigHeader) {
-  let received = String(sigHeader).trim();
-  if (/^sha256=/i.test(received)) received = received.replace(/^sha256=/i, '').trim();
-  if (/^v1=/i.test(received)) received = received.replace(/^v1=/i, '').trim();
-  // Some proxies send multiple values; Cashfree sends one base64 blob
-  if (received.includes(',')) received = received.split(',')[0].trim();
-  return received;
+/**
+ * Cashfree may send `x-webhook-signature` as plain base64 OR compound e.g. `t=169...,v1=base64...`.
+ * Never split on commas naively — that leaves only `t=...` and breaks verification (constant 401).
+ */
+function extractSignatureAndTimestampCandidates(headerTs, sigHeader) {
+  const raw = String(sigHeader || '').trim();
+  const tsList = [];
+
+  const h = headerTs != null ? String(headerTs).trim() : '';
+  if (h) tsList.push(h);
+
+  const tInline = raw.match(/(?:^|[\s,])t=(\d+)/i);
+  if (tInline && tInline[1] && !tsList.includes(tInline[1])) tsList.push(tInline[1]);
+
+  let signature = null;
+  const v1 = raw.match(/(?:^|[\s,])v1=([^,\s]+)/i);
+  if (v1 && v1[1]) {
+    signature = v1[1].trim();
+  } else {
+    let s = raw.replace(/^sha256=/i, '').trim();
+    s = s.replace(/(?:^|[\s,])t=\d+\s*,?\s*/gi, '').trim();
+    if (/^v1=/i.test(s)) s = s.replace(/^v1=/i, '').trim();
+    signature = s || raw;
+  }
+
+  return { signature, tsCandidates: tsList.length ? tsList : tInline ? [tInline[1]] : [] };
 }
 
 /** Base64 (standard) compare; optional base64url (replace - _ and pad) */
@@ -72,19 +91,46 @@ function signaturesEqual(expectedB64, received) {
 }
 
 /**
- * Cashfree signs: HMAC-SHA256(secret, UTF8(timestamp) + rawBodyBytes).
- * Use timestamp + raw buffer (not re-stringified JSON) so bytes match exactly.
+ * Payouts Webhook V1 (dashboard option "V1"): signature is inside JSON body; HMAC over
+ * sorted keys' values concatenated (see Cashfree webhooks-v1 doc). Not timestamp+rawBody.
+ */
+function verifyV1BodySignature(rawBuffer, secrets) {
+  let obj;
+  try {
+    obj = JSON.parse(rawBuffer.toString('utf8'));
+  } catch {
+    return false;
+  }
+  if (obj == null || typeof obj !== 'object' || obj.signature == null || String(obj.signature).trim() === '') {
+    return false;
+  }
+  const received = String(obj.signature).trim();
+  const clone = { ...obj };
+  delete clone.signature;
+  const keys = Object.keys(clone).sort();
+  let postData = '';
+  for (const k of keys) {
+    const v = clone[k];
+    if (v == null) continue;
+    const part = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (part.length > 0) postData += part;
+  }
+  for (const secret of secrets) {
+    const expectedB64 = crypto.createHmac('sha256', secret).update(postData, 'utf8').digest('base64');
+    if (signaturesEqual(expectedB64, received)) return true;
+    const expectedHex = crypto.createHmac('sha256', secret).update(postData, 'utf8').digest('hex');
+    if (expectedHex.toLowerCase() === received.toLowerCase()) return true;
+  }
+  return false;
+}
+
+/**
+ * Payouts Webhook V2: HMAC-SHA256(secret, UTF8(timestamp) + rawBodyBytes) → base64.
  */
 function verifySignature(req, rawBuffer) {
   const secrets = collectWebhookSecrets();
-  const ts = getHeader(req, 'x-webhook-timestamp');
-  const sigHeader = getHeader(req, 'x-webhook-signature');
   if (!secrets.length) {
     console.warn('Cashfree webhook: no CASHFREE_PAYOUTS_CLIENT_SECRET / CASHFREE_PAYOUT_WEBHOOK_SECRET set');
-    return false;
-  }
-  if (!ts || !sigHeader) {
-    console.warn('Cashfree webhook: missing x-webhook-timestamp or x-webhook-signature');
     return false;
   }
   if (!Buffer.isBuffer(rawBuffer)) {
@@ -92,15 +138,35 @@ function verifySignature(req, rawBuffer) {
     return false;
   }
 
-  const tsStr = String(ts).trim();
-  const received = normalizeSignatureHeader(sigHeader);
+  if (verifyV1BodySignature(rawBuffer, secrets)) return true;
 
-  for (const secret of secrets) {
-    const expectedB64 = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('base64');
-    if (signaturesEqual(expectedB64, received)) return true;
+  const headerTs = getHeader(req, 'x-webhook-timestamp');
+  const sigHeader = getHeader(req, 'x-webhook-signature');
+  if (!sigHeader) {
+    console.warn('Cashfree webhook: missing x-webhook-signature (and no JSON body.signature for V1)');
+    return false;
+  }
 
-    const expectedHex = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('hex');
-    if (expectedHex.toLowerCase() === received.toLowerCase()) return true;
+  const { signature: received, tsCandidates } = extractSignatureAndTimestampCandidates(headerTs, sigHeader);
+  if (!received) return false;
+
+  if (tsCandidates.length === 0) {
+    console.warn('Cashfree webhook: missing timestamp (x-webhook-timestamp or t= in signature header)');
+    return false;
+  }
+
+  for (const tsStr of tsCandidates) {
+    for (const secret of secrets) {
+      const expectedB64 = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('base64');
+      if (signaturesEqual(expectedB64, received)) return true;
+
+      const expectedHex = crypto.createHmac('sha256', secret).update(tsStr, 'utf8').update(rawBuffer).digest('hex');
+      if (expectedHex.toLowerCase() === received.toLowerCase()) return true;
+
+      // Rare alternate (some gateways): HMAC(body + timestamp)
+      const altB64 = crypto.createHmac('sha256', secret).update(rawBuffer).update(tsStr, 'utf8').digest('base64');
+      if (signaturesEqual(altB64, received)) return true;
+    }
   }
   return false;
 }
