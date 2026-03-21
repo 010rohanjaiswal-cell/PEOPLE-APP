@@ -11,8 +11,11 @@ Your backend exposes:
 2. Open **Developers** / **Webhooks** (wording may vary by dashboard version).
 3. **Add webhook URL** (production):  
    `https://<your-render-or-domain>/api/cashfree/webhooks/payout`
-4. Subscribe to **transfer** / **payout** events (success, failed, reversed — enable all transfer lifecycle events you are offered).
-5. Save. Use the **same** **Client ID / Client Secret** as `CASHFREE_PAYOUTS_CLIENT_ID` / `CASHFREE_PAYOUTS_CLIENT_SECRET` — the webhook HMAC uses the **Payouts** client secret.
+4. In the **Add Webhook** dialog, set **Webhook version** to **V2** (you only receive V2 payloads when this is selected; this backend expects V2-style `type` + `data` payloads).
+5. Subscribe to **transfer** / **payout** events (success, failed, reversed — enable all transfer lifecycle events you are offered).
+6. Save. Use the **same** **Client ID / Client Secret** as `CASHFREE_PAYOUTS_CLIENT_ID` / `CASHFREE_PAYOUTS_CLIENT_SECRET` — the webhook HMAC uses the **Payouts** client secret (**oldest active** secret if keys were rotated).
+
+Official reference: [Cashfree docs index](https://www.cashfree.com/docs/llms.txt) → Webhooks V2 for Payouts (signature: `timestamp + rawBody`, HMAC-SHA256 → base64).
 
 ## 2. How verification works
 
@@ -38,9 +41,15 @@ The handler verifies `x-webhook-signature` and `x-webhook-timestamp` using:
 
 ## 4. Behaviour in this app
 
-- On **transfer success**: withdrawal status → `PAID`, **locked** balance reduced (funds left the wallet).
-- On **transfer failed / reversed**: withdrawal status → `FAILED`, **locked** refunded to **available**, optional failure reason stored.
+Cashfree’s docs state a transfer is **fully successful** when `status` is `SUCCESS` and `status_code` is `COMPLETED`. In practice you may also get **`TRANSFER_SUCCESS`** with other `status_code` values (e.g. `SENT_TO_BENEFICIARY` in samples). This app marks **`PAID`** when:
+
+- **`TRANSFER_SUCCESS`** and `status` is `SUCCESS`, or  
+- **`TRANSFER_ACKNOWLEDGED`** with `SUCCESS` + **`COMPLETED`** (matches the acknowledged sample in V2 docs).
+
+- On **transfer failed / reversed / rejected**: withdrawal status → `FAILED`, **locked** refunded to **available**, optional failure reason stored.
 - The app shows **Processing** until the webhook updates the row (pull to refresh on Wallet).
+
+If your firewall requires IP allowlists, Cashfree publishes **UAT** and **Prod** webhook sender IPs in their Webhooks V2 documentation — allow **HTTPS (443)** from those IPs only if your infra requires it.
 
 ## 5. Local testing
 

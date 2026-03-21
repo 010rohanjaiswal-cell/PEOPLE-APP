@@ -2,9 +2,10 @@
  * Cashfree Payouts — transfer status webhooks.
  * Must be registered in server.js BEFORE express.json() so the raw body is available for signature verification.
  *
- * Dashboard: Cashfree Payouts → Developers → Webhooks → add URL:
+ * Dashboard: Payouts → Developers → Webhooks → Add Webhook URL → select **Webhook version V2**
  *   https://YOUR_BACKEND/api/cashfree/webhooks/payout
- * Events: transfer-related (success / failed / reversed as offered by Cashfree).
+ * Signature: same as Cashfree docs — HMAC-SHA256(clientSecret, timestamp + rawBody).digest('base64')
+ * Use the **oldest active** client secret if you rotated keys.
  */
 
 const crypto = require('crypto');
@@ -93,27 +94,30 @@ function parseWebhookPayload(body) {
     data?.transfer_id ||
     body.transferId;
   const statusRaw = String(nested?.status || data?.status || body.status || '').toUpperCase();
+  const statusCode = String(nested?.status_code || data?.status_code || body.status_code || '').toUpperCase();
   const referenceId =
     nested?.referenceId ||
     nested?.reference_id ||
     data?.referenceId ||
     data?.cf_transfer_id ||
     nested?.cf_transfer_id;
-  return { type, transferId, statusRaw, referenceId, data: body };
+  return { type, transferId, statusRaw, statusCode, referenceId, data: body };
 }
 
-/** V2: final credit to beneficiary = TRANSFER_SUCCESS; ACKNOWLEDGED is earlier in pipeline */
-function inferOutcome({ type, statusRaw }) {
+/**
+ * Cashfree Webhooks V2 — see docs (transfer_id in data, type at root).
+ * Docs note: transfer is considered successful when status is SUCCESS and status_code is COMPLETED.
+ * TRANSFER_SUCCESS also indicates beneficiary credit (sample may use status_code e.g. SENT_TO_BENEFICIARY).
+ */
+function inferOutcome({ type, statusRaw, statusCode }) {
   const t = String(type || '').toUpperCase();
   const s = String(statusRaw || '').toUpperCase();
+  const sc = String(statusCode || '').toUpperCase();
 
-  if (t === 'TRANSFER_ACKNOWLEDGED' || t === 'CREDIT_CONFIRMATION' || t === 'LOW_BALANCE_ALERT' || t === 'BENEFICIARY_INCIDENT') {
+  if (t === 'CREDIT_CONFIRMATION' || t === 'LOW_BALANCE_ALERT' || t === 'BENEFICIARY_INCIDENT') {
     return null;
   }
 
-  if (t === 'TRANSFER_SUCCESS') {
-    return 'PAID';
-  }
   if (
     t === 'TRANSFER_FAILED' ||
     t === 'TRANSFER_REJECTED' ||
@@ -122,12 +126,22 @@ function inferOutcome({ type, statusRaw }) {
   ) {
     return 'FAILED';
   }
-  if (t.includes('FAILED') || t.includes('REJECTED') || t.includes('REVERSED')) {
-    return 'FAILED';
-  }
   if (s === 'FAILED' || s === 'REVERSED' || s === 'REJECTED') {
     return 'FAILED';
   }
+
+  const strictComplete = s === 'SUCCESS' && sc === 'COMPLETED';
+
+  // ACK sample: SUCCESS + COMPLETED — end-to-end credited (docs table)
+  if (t === 'TRANSFER_ACKNOWLEDGED' && strictComplete) {
+    return 'PAID';
+  }
+
+  // SUCCESS event: amount deposited to beneficiary (per event description)
+  if (t === 'TRANSFER_SUCCESS' && s === 'SUCCESS') {
+    return 'PAID';
+  }
+
   return null;
 }
 
@@ -211,8 +225,8 @@ module.exports = async function cashfreePayoutWebhook(req, res) {
       return res.status(400).json({ success: false, error: 'Invalid JSON' });
     }
 
-    const { type, transferId, statusRaw, referenceId, data: fullBody } = parseWebhookPayload(body);
-    const outcome = inferOutcome({ type, statusRaw });
+    const { type, transferId, statusRaw, statusCode, referenceId, data: fullBody } = parseWebhookPayload(body);
+    const outcome = inferOutcome({ type, statusRaw, statusCode });
     if (!transferId) {
       console.log('Cashfree payout webhook: no transferId in payload', JSON.stringify(body).slice(0, 500));
       return res.json({ success: true, ignored: true });
