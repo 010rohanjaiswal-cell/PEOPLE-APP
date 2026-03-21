@@ -32,6 +32,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+/** Must match backend MIN_BANK_NAME_MATCH_PERCENT in routes/cashfree.js */
+const MIN_BANK_NAME_MATCH_PERCENT = 80;
+
 const Wallet = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -279,7 +282,8 @@ const Wallet = () => {
             <Text
               style={[
                 styles.noDuesLabel,
-                typeof bankAccount.nameMatchScore === 'number' && bankAccount.nameMatchScore >= 50
+                typeof bankAccount.nameMatchScore === 'number' &&
+                bankAccount.nameMatchScore >= MIN_BANK_NAME_MATCH_PERCENT
                   ? styles.bankNameOk
                   : styles.bankNameBad,
               ]}
@@ -353,9 +357,9 @@ const Wallet = () => {
         setPaymentErrorModalVisible(true);
         return;
       }
-      if (typeof bankNameScore === 'number' && bankNameScore < 50 && bankNameAtBank) {
+      if (typeof bankNameScore === 'number' && bankNameScore < MIN_BANK_NAME_MATCH_PERCENT && bankNameAtBank) {
         setPaymentErrorMessage(
-          `Name on bank doesn’t match your profile (${bankNameScore}%). Update your profile name or use the matching bank account.`
+          `Name on bank must match your profile name (at least ${MIN_BANK_NAME_MATCH_PERCENT}% match; yours is ${bankNameScore}%). Update your profile or use a bank account in your name.`
         );
         setPaymentErrorModalVisible(true);
         return;
@@ -718,7 +722,8 @@ const Wallet = () => {
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Add Bank Account</Text>
                 <Text style={styles.modalSubtitle}>
-                  Enter your bank details. Name will be verified via SecureID.
+                  Enter your bank details. The account holder name must match your profile name (at least{' '}
+                  {MIN_BANK_NAME_MATCH_PERCENT}%).
                 </Text>
 
                 <View style={{ gap: spacing.sm }}>
@@ -760,7 +765,9 @@ const Wallet = () => {
                     <Text
                       style={[
                         styles.bankNameInline,
-                        typeof bankNameScore === 'number' && bankNameScore >= 50 ? styles.bankNameOk : styles.bankNameBad,
+                        typeof bankNameScore === 'number' && bankNameScore >= MIN_BANK_NAME_MATCH_PERCENT
+                          ? styles.bankNameOk
+                          : styles.bankNameBad,
                       ]}
                     >
                       {bankNameAtBank}
@@ -784,7 +791,9 @@ const Wallet = () => {
                       (addingBank ||
                         !bankAccountNumber ||
                         bankIfsc.length !== 11 ||
-                        (typeof bankNameScore === 'number' && bankNameScore < 50 && bankNameAtBank)) &&
+                        (typeof bankNameScore === 'number' &&
+                          bankNameScore < MIN_BANK_NAME_MATCH_PERCENT &&
+                          bankNameAtBank)) &&
                         styles.modalSubmitButtonDisabled,
                     ]}
                     onPress={submitBankAccount}
@@ -792,7 +801,9 @@ const Wallet = () => {
                       addingBank ||
                       !bankAccountNumber ||
                       bankIfsc.length !== 11 ||
-                      (typeof bankNameScore === 'number' && bankNameScore < 50 && !!bankNameAtBank)
+                      (typeof bankNameScore === 'number' &&
+                        bankNameScore < MIN_BANK_NAME_MATCH_PERCENT &&
+                        !!bankNameAtBank)
                     }
                   >
                     {addingBank ? (

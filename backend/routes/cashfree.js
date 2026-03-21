@@ -77,6 +77,19 @@ function isVrsAccountValid(body) {
   return false;
 }
 
+/**
+ * Cashfree may return HTTP 401 for bad client id/secret. Our API must NOT forward that as 401,
+ * or the mobile app treats it as an invalid JWT and logs the user out.
+ */
+function httpStatusForCashfreeUpstreamError(err) {
+  const s = err?.response?.status;
+  if (s == null || Number.isNaN(s)) return 500;
+  if (s === 401 || s === 403) return 400;
+  if (s >= 400 && s < 500) return 400;
+  if (s >= 500) return 502;
+  return 500;
+}
+
 async function verifyBankWithVrs({ bankAccount, ifsc, fullName, phone }) {
   const vrs = createVerificationClient();
   const phone10 = String(phone || '').replace(/\D/g, '').slice(-10) || '9999999999';
@@ -347,7 +360,7 @@ router.get('/wallet/ledger', authenticate, requireRole('freelancer'), async (req
 // PAYOUTS (Cashfree Transfers)
 // ============================================================================
 
-const MIN_BANK_NAME_MATCH_PERCENT = 50;
+const MIN_BANK_NAME_MATCH_PERCENT = 80;
 
 /**
  * SecureID / VRS: verify bank account (sync) — preview in app before Save
@@ -401,10 +414,12 @@ router.post('/vrs/bank-verify', authenticate, requireRole('freelancer'), async (
     console.error('Cashfree VRS bank-verify error:', raw || e?.message);
     const msg =
       raw?.message || raw?.error || e?.message || 'Bank verification failed';
-    return res.status(e?.response?.status && e.response.status < 500 ? e.response.status : 500).json({
+    const status = httpStatusForCashfreeUpstreamError(e);
+    return res.status(status).json({
       success: false,
       error: typeof msg === 'string' ? msg : JSON.stringify(msg),
       provider: raw || null,
+      code: 'CASHFREE_UPSTREAM',
     });
   }
 });
@@ -528,7 +543,7 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       if (score < MIN_BANK_NAME_MATCH_PERCENT) {
         return res.status(400).json({
           success: false,
-          error: `Bank name mismatch (score ${score}%). Name at bank: ${nameAtBank || 'unknown'}`,
+          error: `Bank holder name must match your profile (minimum ${MIN_BANK_NAME_MATCH_PERCENT}% match; current ${score}%). Name at bank: ${nameAtBank || 'unknown'}`,
           provider: v.body || null,
         });
       }
@@ -536,10 +551,12 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       const raw = err?.response?.data;
       console.error('Cashfree VRS bank-account sync failed:', raw || err?.message);
       const msg = raw?.message || raw?.error || err?.message || 'Bank verification failed';
-      return res.status(err?.response?.status === 400 ? 400 : 500).json({
+      const status = httpStatusForCashfreeUpstreamError(err);
+      return res.status(status).json({
         success: false,
         error: typeof msg === 'string' ? msg : JSON.stringify(msg),
         provider: raw || null,
+        code: 'CASHFREE_UPSTREAM',
       });
     }
 

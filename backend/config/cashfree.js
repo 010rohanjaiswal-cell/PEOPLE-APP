@@ -46,7 +46,21 @@ function getPayoutsConfig() {
 }
 
 function getVerificationConfig() {
-  const envRaw = cleanEnvValue(process.env.CASHFREE_VRS_ENV || process.env.CASHFREE_ENV || 'sandbox').toLowerCase();
+  // IMPORTANT: Do not default to sandbox when NODE_ENV is production — prod client id/secret only work
+  // against https://api.cashfree.com/verification. Hitting sandbox with prod keys → 401 invalid credentials.
+  const explicitVrs = cleanEnvValue(process.env.CASHFREE_VRS_ENV);
+  const explicitCf = cleanEnvValue(process.env.CASHFREE_ENV);
+  const payoutsEnv = cleanEnvValue(process.env.CASHFREE_PAYOUTS_ENV || '').toLowerCase();
+  const nodeEnv = cleanEnvValue(process.env.NODE_ENV || '').toLowerCase();
+
+  const envRaw = (
+    explicitVrs ||
+    explicitCf ||
+    (payoutsEnv === 'production' ? 'production' : '') ||
+    (nodeEnv === 'production' ? 'production' : '') ||
+    'sandbox'
+  ).toLowerCase();
+
   const env = envRaw === 'production' ? 'production' : 'sandbox';
   const baseURL =
     cleanEnvValue(process.env.CASHFREE_VRS_BASE_URL) ||

@@ -96,14 +96,24 @@ apiClient.interceptors.response.use(
     }
 
     // Handle 401 Unauthorized - Token expired, invalid, or logged in elsewhere
+    // Do NOT logout when 401 comes from upstream Cashfree (wrong VRS keys) — our backend now maps those to 400,
+    // but guard anyway so a proxy 401 never clears the session.
     if (error.response?.status === 401) {
-      try {
-        await AsyncStorage.removeItem('authToken');
-        await AsyncStorage.removeItem('userData');
-        const cb = getUnauthorizedCallback();
-        if (typeof cb === 'function') cb();
-      } catch (storageError) {
-        console.error('Error clearing storage:', storageError);
+      const data = error.response?.data;
+      const url = String(error.config?.url || '');
+      const isCashfreeUpstreamAuth =
+        data?.code === 'CASHFREE_UPSTREAM' ||
+        (url.includes('/api/cashfree/') &&
+          data?.provider?.type === 'authentication_error');
+      if (!isCashfreeUpstreamAuth) {
+        try {
+          await AsyncStorage.removeItem('authToken');
+          await AsyncStorage.removeItem('userData');
+          const cb = getUnauthorizedCallback();
+          if (typeof cb === 'function') cb();
+        } catch (storageError) {
+          console.error('Error clearing storage:', storageError);
+        }
       }
     }
 
