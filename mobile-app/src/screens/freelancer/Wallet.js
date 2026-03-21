@@ -3,7 +3,7 @@
  * Implements commission/dues wallet as per APP_COMPLETE_DOCUMENTATION.md
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -65,6 +65,9 @@ const Wallet = () => {
   const [bankIfsc, setBankIfsc] = useState('');
   const [bankNameAtBank, setBankNameAtBank] = useState(null);
   const [bankNameScore, setBankNameScore] = useState(null);
+  const [bankVerifyLoading, setBankVerifyLoading] = useState(false);
+  const [bankVerifyError, setBankVerifyError] = useState('');
+  const bankVerifySeq = useRef(0);
 
   const loadWallet = async () => {
     try {
@@ -102,6 +105,47 @@ const Wallet = () => {
   useEffect(() => {
     loadWallet();
   }, []);
+
+  // Debounced SecureID verify when modal open + account + IFSC look complete
+  useEffect(() => {
+    if (!bankModalVisible) return undefined;
+
+    const acct = bankAccountNumber.trim().replace(/\s/g, '');
+    const ifsc = bankIfsc.trim().toUpperCase();
+
+    if (ifsc.length !== 11 || acct.length < 6) {
+      setBankNameAtBank(null);
+      setBankNameScore(null);
+      setBankVerifyError('');
+      return undefined;
+    }
+
+    const delay = setTimeout(() => {
+      const seq = ++bankVerifySeq.current;
+      (async () => {
+        setBankVerifyLoading(true);
+        setBankVerifyError('');
+        try {
+          const r = await cashfreeWalletAPI.verifyBankAccount({ bankAccount: acct, ifsc });
+          if (seq !== bankVerifySeq.current) return;
+          if (r?.success) {
+            setBankNameAtBank(r.nameAtBank || null);
+            setBankNameScore(typeof r.nameMatchScore === 'number' ? r.nameMatchScore : null);
+          }
+        } catch (e) {
+          if (seq !== bankVerifySeq.current) return;
+          setBankNameAtBank(null);
+          setBankNameScore(null);
+          const msg = e?.response?.data?.error || e?.message || 'Verification failed';
+          setBankVerifyError(typeof msg === 'string' ? msg : 'Verification failed');
+        } finally {
+          if (seq === bankVerifySeq.current) setBankVerifyLoading(false);
+        }
+      })();
+    }, 550);
+
+    return () => clearTimeout(delay);
+  }, [bankModalVisible, bankAccountNumber, bankIfsc]);
 
   // Reset pagination to page 1 when payment transactions change
   useEffect(() => {
@@ -202,7 +246,14 @@ const Wallet = () => {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <TouchableOpacity
-              onPress={() => setBankModalVisible(true)}
+              onPress={() => {
+                setBankAccountNumber('');
+                setBankIfsc('');
+                setBankNameAtBank(null);
+                setBankNameScore(null);
+                setBankVerifyError('');
+                setBankModalVisible(true);
+              }}
               style={[styles.iconButton, styles.bankButton]}
               activeOpacity={0.8}
             >
@@ -302,6 +353,13 @@ const Wallet = () => {
         setPaymentErrorModalVisible(true);
         return;
       }
+      if (typeof bankNameScore === 'number' && bankNameScore < 50 && bankNameAtBank) {
+        setPaymentErrorMessage(
+          `Name on bank doesn’t match your profile (${bankNameScore}%). Update your profile name or use the matching bank account.`
+        );
+        setPaymentErrorModalVisible(true);
+        return;
+      }
       setAddingBank(true);
       const resp = await cashfreeWalletAPI.addBankAccount({ bankAccount: acct, ifsc });
       if (!resp?.success) throw new Error(resp?.error || 'Failed to add bank account');
@@ -311,6 +369,7 @@ const Wallet = () => {
       setBankModalVisible(false);
       setBankAccountNumber('');
       setBankIfsc('');
+      setBankVerifyError('');
       await loadWallet();
     } catch (e) {
       const respData = e?.response?.data;
@@ -667,6 +726,7 @@ const Wallet = () => {
                     value={bankAccountNumber}
                     onChangeText={(v) => {
                       setBankAccountNumber(v);
+                      setBankVerifyError('');
                     }}
                     placeholder="Bank account number"
                     keyboardType="default"
@@ -681,6 +741,7 @@ const Wallet = () => {
                         .replace(/[^A-Z0-9]/g, '')
                         .slice(0, 11);
                       setBankIfsc(next);
+                      setBankVerifyError('');
                     }}
                     placeholder="IFSC code"
                     autoCapitalize="characters"
@@ -688,6 +749,13 @@ const Wallet = () => {
                     style={styles.textInput}
                   />
 
+                  {bankVerifyLoading ? (
+                    <View style={styles.bankVerifyRow}>
+                      <ActivityIndicator size="small" color={colors.primary.main} />
+                      <Text style={styles.bankVerifyHint}>Verifying with bank…</Text>
+                    </View>
+                  ) : null}
+                  {bankVerifyError ? <Text style={styles.bankVerifyErr}>{bankVerifyError}</Text> : null}
                   {bankNameAtBank ? (
                     <Text
                       style={[
@@ -713,11 +781,19 @@ const Wallet = () => {
                     style={[
                       styles.modalButton,
                       styles.modalSubmitButton,
-                      (addingBank || !bankAccountNumber || bankIfsc.length !== 11) &&
+                      (addingBank ||
+                        !bankAccountNumber ||
+                        bankIfsc.length !== 11 ||
+                        (typeof bankNameScore === 'number' && bankNameScore < 50 && bankNameAtBank)) &&
                         styles.modalSubmitButtonDisabled,
                     ]}
                     onPress={submitBankAccount}
-                    disabled={addingBank || !bankAccountNumber || bankIfsc.length !== 11}
+                    disabled={
+                      addingBank ||
+                      !bankAccountNumber ||
+                      bankIfsc.length !== 11 ||
+                      (typeof bankNameScore === 'number' && bankNameScore < 50 && !!bankNameAtBank)
+                    }
                   >
                     {addingBank ? (
                       <ActivityIndicator color="#FFFFFF" size="small" />
@@ -884,6 +960,21 @@ const styles = StyleSheet.create({
   },
   bankNameBad: {
     color: colors.error.main,
+  },
+  bankVerifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  bankVerifyHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  bankVerifyErr: {
+    ...typography.small,
+    color: colors.error.main,
+    marginTop: spacing.xs,
   },
   modalSubmitButtonDisabled: {
     opacity: 0.5,
