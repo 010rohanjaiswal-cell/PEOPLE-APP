@@ -195,7 +195,12 @@ function parseWebhookPayload(body) {
     data?.referenceId ||
     data?.cf_transfer_id ||
     nested?.cf_transfer_id;
-  return { type, transferId, statusRaw, statusCode, referenceId, data: body };
+  const statusDescription =
+    nested?.status_description ||
+    data?.status_description ||
+    body.status_description ||
+    null;
+  return { type, transferId, statusRaw, statusCode, referenceId, statusDescription, data: body };
 }
 
 /**
@@ -341,7 +346,15 @@ module.exports = async function cashfreePayoutWebhook(req, res) {
       return res.status(400).json({ success: false, error: 'Invalid JSON' });
     }
 
-    const { type, transferId, statusRaw, statusCode, referenceId, data: fullBody } = parseWebhookPayload(body);
+    const {
+      type,
+      transferId,
+      statusRaw,
+      statusCode,
+      referenceId,
+      statusDescription,
+      data: fullBody,
+    } = parseWebhookPayload(body);
     const outcome = inferOutcome({ type, statusRaw, statusCode });
     if (!transferId) {
       console.log('Cashfree payout webhook: no transferId in payload', JSON.stringify(body).slice(0, 500));
@@ -365,10 +378,15 @@ module.exports = async function cashfreePayoutWebhook(req, res) {
       return res.json({ success: true, pending: true });
     }
 
+    const failReason =
+      outcome === 'FAILED'
+        ? String(statusDescription || nestedMessage(body) || body.message || 'Transfer failed').slice(0, 500)
+        : null;
+
     await applyPayoutOutcome(withdrawal, outcome, {
       referenceId,
       raw: fullBody,
-      reason: body.message || nestedMessage(body),
+      reason: failReason || body.message || nestedMessage(body),
     });
 
     return res.json({ success: true });

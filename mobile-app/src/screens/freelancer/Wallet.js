@@ -266,6 +266,11 @@ const Wallet = () => {
         <View style={styles.amountRow}>
           <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
           <Text style={styles.noDuesLabel}>Available balance</Text>
+          {Number(realWallet?.lockedBalance || 0) > 0 ? (
+            <Text style={styles.lockedBalanceHint}>
+              ₹{Number(realWallet?.lockedBalance || 0).toFixed(2)} processing (withdrawal in progress)
+            </Text>
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -296,8 +301,14 @@ const Wallet = () => {
   const submitWithdraw = async () => {
     const amt = Number(withdrawAmount);
     const maxAvail = Number(realWallet?.availableBalance ?? 0);
+    const MIN_WITHDRAW = 100;
     if (!amt || amt <= 0) {
       setPaymentErrorMessage('Enter a valid amount');
+      setPaymentErrorModalVisible(true);
+      return;
+    }
+    if (amt < MIN_WITHDRAW) {
+      setPaymentErrorMessage(`Minimum withdrawal is ₹${MIN_WITHDRAW} per transfer (Cashfree payout rule).`);
       setPaymentErrorModalVisible(true);
       return;
     }
@@ -369,6 +380,78 @@ const Wallet = () => {
     } finally {
       setAddingBank(false);
     }
+  };
+
+  const renderWalletActivity = () => {
+    const formatDate = (date) => {
+      if (!date) return '—';
+      const d = new Date(date);
+      return d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    };
+
+    const labelForType = (type) => {
+      switch (type) {
+        case 'CREDIT_JOB_PAYMENT':
+          return 'Earnings credited';
+        case 'DEBIT_COMMISSION':
+          return 'Platform commission';
+        case 'WITHDRAW_REQUESTED':
+          return 'Withdrawal requested';
+        case 'WITHDRAW_PAID':
+          return 'Payout sent to bank';
+        case 'WITHDRAW_FAILED_REVERSAL':
+          return 'Withdrawal failed — refunded';
+        default:
+          return type || 'Activity';
+      }
+    };
+
+    const signedAmount = (row) => {
+      const n = Number(row.amount);
+      if (Number.isNaN(n)) return '—';
+      const sign = n >= 0 ? '+' : '−';
+      return `${sign}₹${Math.abs(n).toFixed(2)}`;
+    };
+
+    return (
+      <View style={[styles.card, styles.activityCard]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <MaterialIcons name="receipt-long" size={22} color={colors.text.primary} />
+            <Text style={styles.cardTitle}>Wallet activity</Text>
+          </View>
+        </View>
+        <Text style={styles.withdrawalsHint}>
+          Credits from completed jobs and withdrawals. Pull to refresh.
+        </Text>
+        {realLedger.length === 0 ? (
+          <Text style={styles.emptyWithdrawalsText}>No activity yet.</Text>
+        ) : (
+          realLedger.map((row) => (
+            <View key={String(row._id)} style={styles.wdRow}>
+              <View style={styles.wdLeft}>
+                <Text style={styles.wdLedgerTitle}>{labelForType(row.type)}</Text>
+                <Text style={styles.wdDate}>{formatDate(row.createdAt)}</Text>
+              </View>
+              <Text
+                style={[
+                  styles.wdLedgerAmount,
+                  Number(row.amount) >= 0 ? styles.wdLedgerCredit : styles.wdLedgerDebit,
+                ]}
+              >
+                {signedAmount(row)}
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+    );
   };
 
   const renderWithdrawalHistory = () => {
@@ -568,6 +651,7 @@ const Wallet = () => {
       ) : null}
 
       {renderWalletBalanceCard()}
+      {renderWalletActivity()}
       {renderWithdrawalHistory()}
       {renderCommissionLedger()}
     </ScrollView>
@@ -728,7 +812,8 @@ const Wallet = () => {
                 <View style={styles.modalContent}>
                   <Text style={styles.modalTitle}>Withdraw</Text>
                   <Text style={styles.modalSubtitle}>
-                    Withdraw available balance to your saved bank account. You can change the amount below.
+                    Withdraw available balance to your saved bank account (minimum ₹100 per transfer). You can
+                    change the amount below.
                   </Text>
 
                   <View style={{ gap: spacing.sm }}>
@@ -1054,6 +1139,30 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.primary.main,
     fontWeight: '600',
+  },
+  activityCard: {
+    marginBottom: 0,
+  },
+  wdLedgerTitle: {
+    ...typography.small,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  wdLedgerAmount: {
+    ...typography.small,
+    fontWeight: '700',
+    alignSelf: 'center',
+  },
+  wdLedgerCredit: {
+    color: colors.success.dark,
+  },
+  wdLedgerDebit: {
+    color: colors.error.main,
+  },
+  lockedBalanceHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
   },
   withdrawalsCard: {
     marginBottom: 0,

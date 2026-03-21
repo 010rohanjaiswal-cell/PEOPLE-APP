@@ -452,6 +452,10 @@ router.post('/vrs/bank-verify', authenticate, requireRole('freelancer'), async (
  * Create a payout transfer to a beneficiary (beneId must exist in your Cashfree payouts account)
  * POST /api/cashfree/payouts/withdraw
  */
+/** Cashfree Standard Transfer async — min/max per typical account limits (see payout docs). */
+const PAYOUT_MIN_INR = Number(process.env.CASHFREE_PAYOUT_MIN_INR) || 100;
+const PAYOUT_MAX_INR = Number(process.env.CASHFREE_PAYOUT_MAX_INR) || 100000;
+
 router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async (req, res) => {
   const { amount } = req.body;
   const amt = toRupees(amount);
@@ -460,6 +464,18 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
 
   try {
     if (!(amt > 0)) return res.status(400).json({ success: false, error: 'Invalid amount' });
+    if (amt < PAYOUT_MIN_INR) {
+      return res.status(400).json({
+        success: false,
+        error: `Minimum withdrawal is ₹${PAYOUT_MIN_INR} (Cashfree payout limit).`,
+      });
+    }
+    if (amt > PAYOUT_MAX_INR) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum withdrawal per transfer is ₹${PAYOUT_MAX_INR}.`,
+      });
+    }
 
     const bank = await FreelancerBankAccount.findOne({ freelancer: req.user._id, verified: true }).lean();
     if (!bank) return res.status(400).json({ success: false, error: 'Add bank account to withdraw.' });
@@ -473,6 +489,7 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
     wallet.availableBalance = toRupees(wallet.availableBalance - amt);
     wallet.lockedBalance = toRupees(wallet.lockedBalance + amt);
     await wallet.save();
+    walletDebited = true;
 
     const transferId = `W_${req.user._id.toString().slice(-6)}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
@@ -500,11 +517,14 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
 
     const payouts = await createPayoutsClient();
 
-    // Cashfree routes settlement (often IMPS/NEFT per their rules); 200 = transfer accepted for processing.
-    const transferResp = await payouts.post('/payout/v1/requestTransfer', {
+    // Standard Transfer Async — beneId + transferId (see /payout/v1/requestAsyncTransfer)
+    const transferMode =
+      String(process.env.CASHFREE_PAYOUTS_TRANSFER_MODE || 'banktransfer').toLowerCase() || 'banktransfer';
+    const transferResp = await payouts.post('/payout/v1/requestAsyncTransfer', {
       beneId: bank.beneId,
       amount: amt,
       transferId,
+      transferMode,
       remarks: 'PeopleApp wallet',
     });
 
@@ -514,6 +534,7 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
     const payload = transferResp?.data || {};
     const inner = payload?.data ?? payload;
     const st = String(inner?.status ?? payload?.status ?? '').toUpperCase();
+    // Async: ACCEPTED; sync/direct: SUCCESS / PENDING — only treat explicit ERROR/FAILED as failure
     if (st === 'ERROR' || st === 'FAILED') {
       throw new Error(inner?.message || payload?.message || 'Transfer rejected by Cashfree');
     }
@@ -553,12 +574,15 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       console.error('Withdraw rollback failed:', rollbackErr);
     }
 
+    const rawData = e?.response?.data;
     const msg =
-      e?.response?.data?.message ||
-      e?.response?.data?.error ||
+      rawData?.message ||
+      rawData?.data?.message ||
+      rawData?.error ||
       e?.message ||
       'Withdrawal failed';
-    const status = e?.response?.status >= 400 && e?.response?.status < 500 ? e.response.status : 500;
+    let status = e?.response?.status >= 400 && e?.response?.status < 500 ? e.response.status : 500;
+    if (status === 401 || status === 403) status = 400;
     return res.status(status).json({ success: false, error: typeof msg === 'string' ? msg : String(msg) });
   }
 });

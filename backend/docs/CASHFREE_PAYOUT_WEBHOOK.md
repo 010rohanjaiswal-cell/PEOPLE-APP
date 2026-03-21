@@ -99,5 +99,5 @@ Or use `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1` and POST a JSON body that include
 
 ## 6. Limitations
 
-- HTTP **200** from `requestTransfer` only means Cashfree **accepted** the request; final settlement is confirmed via **webhook** (or manual reconciliation in Cashfree dashboard).
+- HTTP **200** from `requestAsyncTransfer` only means Cashfree **accepted** the request; final settlement is confirmed via **webhook** (or manual reconciliation in Cashfree dashboard).
 - If webhooks are missed, you can add a **cron** to poll Cashfree transfer status API — not implemented here.
