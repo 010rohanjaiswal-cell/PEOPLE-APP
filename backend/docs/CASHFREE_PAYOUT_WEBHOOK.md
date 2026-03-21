@@ -24,8 +24,17 @@ The handler verifies `x-webhook-signature` and `x-webhook-timestamp` using:
 
 | Variable | Purpose |
 |----------|---------|
-| `CASHFREE_PAYOUTS_CLIENT_SECRET` | Used for HMAC verification (required in production). |
-| `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY` | Set to `1` **only** for local debugging without valid signatures. **Never** in production. |
+| `CASHFREE_PAYOUTS_CLIENT_SECRET` | **Must** match the **Payouts** app client secret in Cashfree. If you rotated secrets, Cashfree signs webhooks with the **oldest active** secret — use that value or verification returns **401**. |
+| `CASHFREE_PAYOUT_WEBHOOK_SECRET` | Optional. If set, tried **first** for HMAC (useful if you store a dedicated value). |
+| `CASHFREE_CLIENT_SECRET` | Fallback only if the above are wrong — same as Payments app secret in some setups. |
+| `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY` | Set to `1` **only** to confirm the dashboard “test” path; **never** in production. |
+
+### Webhook test returns **401 Invalid signature**
+
+1. In Render, `CASHFREE_PAYOUTS_CLIENT_SECRET` must be **exactly** the **Payouts (Global Payouts)** client secret — not the PG / SecureID secret unless they are the same app.
+2. Copy the secret again from **Payouts → Developers / Credentials** (no spaces/quotes).
+3. If you **rotated** the secret, try the **previous / oldest** active secret (Cashfree docs).
+4. Temporarily set `CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1`, redeploy, run **Test** again. If it succeeds, the URL is fine and only HMAC secret was wrong — remove skip verify after fixing the secret.
 
 ## 4. Behaviour in this app
 

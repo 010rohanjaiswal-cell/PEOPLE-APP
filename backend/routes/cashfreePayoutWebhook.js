@@ -21,22 +21,59 @@ function cleanEnv(v) {
   return s;
 }
 
+/**
+ * Cashfree Payouts V2: HMAC-SHA256(secret, timestamp + rawBody) → base64
+ * Docs: use the *oldest active* client secret if you have rotated secrets.
+ * Optional: CASHFREE_PAYOUT_WEBHOOK_SECRET overrides CASHFREE_PAYOUTS_CLIENT_SECRET.
+ */
+function collectWebhookSecrets() {
+  const keys = [
+    cleanEnv(process.env.CASHFREE_PAYOUT_WEBHOOK_SECRET),
+    cleanEnv(process.env.CASHFREE_PAYOUTS_CLIENT_SECRET),
+    cleanEnv(process.env.CASHFREE_CLIENT_SECRET),
+  ].filter(Boolean);
+  return [...new Set(keys)];
+}
+
+function getHeader(req, name) {
+  const lower = name.toLowerCase();
+  if (typeof req.get === 'function') {
+    const v = req.get(name);
+    if (v != null && v !== '') return v;
+  }
+  return req.headers[lower] ?? req.headers[name];
+}
+
 function verifySignature(req, rawBuffer) {
-  const secret = cleanEnv(process.env.CASHFREE_PAYOUTS_CLIENT_SECRET);
-  const ts = req.headers['x-webhook-timestamp'] || req.headers['x-webhook-timestamp'.toLowerCase()];
-  const sigHeader = req.headers['x-webhook-signature'] || req.headers['x-webhook-signature'.toLowerCase()];
-  if (!secret || !ts || !sigHeader) return false;
-  const payload = rawBuffer.toString('utf8');
-  const signedContent = `${ts}${payload}`;
-  const expected = crypto.createHmac('sha256', secret).update(signedContent).digest('base64');
-  try {
-    const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(String(sigHeader).trim(), 'utf8');
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
-  } catch {
+  const secrets = collectWebhookSecrets();
+  const ts = getHeader(req, 'x-webhook-timestamp');
+  const sigHeader = getHeader(req, 'x-webhook-signature');
+  if (!secrets.length) {
+    console.warn('Cashfree webhook: no CASHFREE_PAYOUTS_CLIENT_SECRET / CASHFREE_PAYOUT_WEBHOOK_SECRET set');
     return false;
   }
+  if (!ts || !sigHeader) {
+    console.warn('Cashfree webhook: missing x-webhook-timestamp or x-webhook-signature');
+    return false;
+  }
+  const payload = rawBuffer.toString('utf8');
+  const signedContent = `${String(ts).trim()}${payload}`;
+  let received = String(sigHeader).trim();
+  if (/^sha256=/i.test(received)) received = received.replace(/^sha256=/i, '').trim();
+  if (/^v1=/i.test(received)) received = received.replace(/^v1=/i, '').trim();
+
+  for (const secret of secrets) {
+    const expected = crypto.createHmac('sha256', secret).update(signedContent).digest('base64');
+    if (expected === received) return true;
+    try {
+      const a = Buffer.from(expected, 'utf8');
+      const b = Buffer.from(received, 'utf8');
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+    } catch {
+      /* length mismatch */
+    }
+  }
+  return false;
 }
 
 function toRupees(n) {
@@ -56,35 +93,39 @@ function parseWebhookPayload(body) {
     data?.transfer_id ||
     body.transferId;
   const statusRaw = String(nested?.status || data?.status || body.status || '').toUpperCase();
-  const referenceId = nested?.referenceId || nested?.reference_id || data?.referenceId;
+  const referenceId =
+    nested?.referenceId ||
+    nested?.reference_id ||
+    data?.referenceId ||
+    data?.cf_transfer_id ||
+    nested?.cf_transfer_id;
   return { type, transferId, statusRaw, referenceId, data: body };
 }
 
+/** V2: final credit to beneficiary = TRANSFER_SUCCESS; ACKNOWLEDGED is earlier in pipeline */
 function inferOutcome({ type, statusRaw }) {
-  const t = type;
-  const s = statusRaw;
-  if (
-    t.includes('SUCCESS') ||
-    t.includes('COMPLETED') ||
-    t.includes('APPROVED') ||
-    t === 'TRANSFER_SUCCESS' ||
-    s === 'SUCCESS' ||
-    s === 'COMPLETED' ||
-    s === 'PAID' ||
-    s === 'TRANSFER_SUCCESS'
-  ) {
+  const t = String(type || '').toUpperCase();
+  const s = String(statusRaw || '').toUpperCase();
+
+  if (t === 'TRANSFER_ACKNOWLEDGED' || t === 'CREDIT_CONFIRMATION' || t === 'LOW_BALANCE_ALERT' || t === 'BENEFICIARY_INCIDENT') {
+    return null;
+  }
+
+  if (t === 'TRANSFER_SUCCESS') {
     return 'PAID';
   }
   if (
-    t.includes('FAILED') ||
-    t.includes('REVERSED') ||
-    t.includes('REJECTED') ||
     t === 'TRANSFER_FAILED' ||
-    s === 'FAILED' ||
-    s === 'REVERSED' ||
-    s === 'REJECTED' ||
-    s === 'CANCELLED'
+    t === 'TRANSFER_REJECTED' ||
+    t === 'TRANSFER_REVERSED' ||
+    t === 'BULK_TRANSFER_REJECTED'
   ) {
+    return 'FAILED';
+  }
+  if (t.includes('FAILED') || t.includes('REJECTED') || t.includes('REVERSED')) {
+    return 'FAILED';
+  }
+  if (s === 'FAILED' || s === 'REVERSED' || s === 'REJECTED') {
     return 'FAILED';
   }
   return null;
@@ -154,8 +195,13 @@ module.exports = async function cashfreePayoutWebhook(req, res) {
     const rawBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
 
     if (!skipVerify && !verifySignature(req, rawBuffer)) {
-      console.warn('Cashfree payout webhook: signature verification failed');
-      return res.status(401).json({ success: false, error: 'Invalid signature' });
+      console.warn('Cashfree payout webhook: signature verification failed (see docs: use oldest active Payouts client secret)');
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid signature',
+        hint:
+          'Set CASHFREE_PAYOUTS_CLIENT_SECRET to the same Payouts Client Secret as in Cashfree (oldest active secret if you rotated). Optional override: CASHFREE_PAYOUT_WEBHOOK_SECRET. Dev only: CASHFREE_PAYOUT_WEBHOOK_SKIP_VERIFY=1',
+      });
     }
 
     let body;
