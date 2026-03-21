@@ -359,6 +359,31 @@ router.get('/wallet/ledger', authenticate, requireRole('freelancer'), async (req
   }
 });
 
+/**
+ * Withdrawal history (status updated via Cashfree payout webhook)
+ * GET /api/cashfree/wallet/withdrawals
+ */
+router.get('/wallet/withdrawals', authenticate, requireRole('freelancer'), async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit || 25)));
+    const rows = await Withdrawal.find({ freelancer: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    const withdrawals = rows.map((w) => ({
+      id: w._id.toString(),
+      amount: w.amount,
+      status: w.status,
+      transferId: w.transferId,
+      createdAt: w.createdAt,
+      failureReason: w.failureReason || null,
+    }));
+    res.json({ success: true, withdrawals });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e?.message || 'Failed to fetch withdrawals' });
+  }
+});
+
 // ============================================================================
 // PAYOUTS (Cashfree Transfers)
 // ============================================================================
@@ -428,9 +453,12 @@ router.post('/vrs/bank-verify', authenticate, requireRole('freelancer'), async (
  * POST /api/cashfree/payouts/withdraw
  */
 router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async (req, res) => {
+  const { amount } = req.body;
+  const amt = toRupees(amount);
+  let withdrawalDoc = null;
+  let walletDebited = false;
+
   try {
-    const { amount } = req.body;
-    const amt = toRupees(amount);
     if (!(amt > 0)) return res.status(400).json({ success: false, error: 'Invalid amount' });
 
     const bank = await FreelancerBankAccount.findOne({ freelancer: req.user._id, verified: true }).lean();
@@ -441,14 +469,14 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       return res.status(400).json({ success: false, error: 'Insufficient wallet balance' });
     }
 
-    // Move available -> locked for processing
+    // Move available -> locked until Cashfree accepts the transfer (rollback on failure)
     wallet.availableBalance = toRupees(wallet.availableBalance - amt);
     wallet.lockedBalance = toRupees(wallet.lockedBalance + amt);
     await wallet.save();
 
     const transferId = `W_${req.user._id.toString().slice(-6)}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
 
-    const withdrawal = await Withdrawal.create({
+    withdrawalDoc = await Withdrawal.create({
       freelancer: req.user._id,
       amount: amt,
       status: 'PROCESSING',
@@ -466,28 +494,72 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       type: 'WITHDRAW_REQUESTED',
       amount: -amt,
       refType: 'Withdrawal',
-      refId: withdrawal._id.toString(),
+      refId: withdrawalDoc._id.toString(),
       meta: { transferId, beneId: bank?.beneId },
     });
 
     const payouts = await createPayoutsClient();
 
-    // Standard transfer endpoint (Cashfree Payouts)
+    // Cashfree routes settlement (often IMPS/NEFT per their rules); 200 = transfer accepted for processing.
     const transferResp = await payouts.post('/payout/v1/requestTransfer', {
       beneId: bank.beneId,
       amount: amt,
       transferId,
-      // Optional: remarks / purpose
+      remarks: 'PeopleApp wallet',
     });
 
-    withdrawal.providerPayload = transferResp.data || {};
-    withdrawal.cfReferenceId = transferResp?.data?.data?.referenceId || transferResp?.data?.referenceId || null;
-    await withdrawal.save();
+    if (transferResp.status !== 200) {
+      throw new Error('Cashfree did not accept the transfer');
+    }
+    const payload = transferResp?.data || {};
+    const inner = payload?.data ?? payload;
+    const st = String(inner?.status ?? payload?.status ?? '').toUpperCase();
+    if (st === 'ERROR' || st === 'FAILED') {
+      throw new Error(inner?.message || payload?.message || 'Transfer rejected by Cashfree');
+    }
 
-    res.json({ success: true, withdrawalId: withdrawal._id.toString(), transferId });
+    withdrawalDoc.providerPayload = payload;
+    withdrawalDoc.cfReferenceId = inner?.referenceId ?? payload?.referenceId ?? null;
+    await withdrawalDoc.save();
+
+    return res.json({
+      success: true,
+      withdrawalId: withdrawalDoc._id.toString(),
+      transferId,
+      amount: amt,
+      status: 'PROCESSING',
+    });
   } catch (e) {
-    const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Withdrawal failed';
-    res.status(500).json({ success: false, error: msg });
+    // Roll back wallet + remove pending withdrawal rows if Cashfree failed
+    try {
+      if (walletDebited && amt > 0) {
+        const w = await Wallet.findOne({ user: req.user._id });
+        if (w) {
+          w.availableBalance = toRupees(w.availableBalance + amt);
+          w.lockedBalance = toRupees(Math.max(0, w.lockedBalance - amt));
+          await w.save();
+        }
+      }
+      if (withdrawalDoc?._id) {
+        await WalletLedger.deleteOne({
+          walletUser: req.user._id,
+          refType: 'Withdrawal',
+          refId: withdrawalDoc._id.toString(),
+          type: 'WITHDRAW_REQUESTED',
+        });
+        await Withdrawal.deleteOne({ _id: withdrawalDoc._id });
+      }
+    } catch (rollbackErr) {
+      console.error('Withdraw rollback failed:', rollbackErr);
+    }
+
+    const msg =
+      e?.response?.data?.message ||
+      e?.response?.data?.error ||
+      e?.message ||
+      'Withdrawal failed';
+    const status = e?.response?.status >= 400 && e?.response?.status < 500 ? e.response.status : 500;
+    return res.status(status).json({ success: false, error: typeof msg === 'string' ? msg : String(msg) });
   }
 });
 

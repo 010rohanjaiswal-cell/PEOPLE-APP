@@ -39,6 +39,7 @@ const Wallet = () => {
   const [wallet, setWallet] = useState(null); // legacy dues wallet summary
   const [realWallet, setRealWallet] = useState(null); // real earnings wallet
   const [realLedger, setRealLedger] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -54,9 +55,9 @@ const Wallet = () => {
   const itemsPerPage = 5;
 
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
+  /** amount → loading (API) → submitted (confirmation) */
+  const [withdrawPhase, setWithdrawPhase] = useState('amount');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawSuccessVisible, setWithdrawSuccessVisible] = useState(false);
 
   const [bankAccount, setBankAccount] = useState(null);
   const [bankModalVisible, setBankModalVisible] = useState(false);
@@ -73,10 +74,11 @@ const Wallet = () => {
     try {
       if (!refreshing) setLoading(true);
       setError('');
-      const [duesResp, realResp, ledgerResp] = await Promise.all([
+      const [duesResp, realResp, ledgerResp, wdResp] = await Promise.all([
         walletAPI.getWallet(),
         cashfreeWalletAPI.getWallet(),
         cashfreeWalletAPI.getLedger(50),
+        cashfreeWalletAPI.getWithdrawals(25).catch(() => ({ success: true, withdrawals: [] })),
       ]);
 
       if (duesResp?.success) setWallet(duesResp.wallet);
@@ -86,6 +88,7 @@ const Wallet = () => {
         setBankAccount(bankData);
       }
       if (ledgerResp?.success && Array.isArray(ledgerResp.ledger)) setRealLedger(ledgerResp.ledger);
+      if (wdResp?.success && Array.isArray(wdResp.withdrawals)) setWithdrawals(wdResp.withdrawals);
 
       if (!duesResp?.success && !realResp?.success) {
         setError((duesResp?.error || realResp?.error) ?? t('wallet.failedLoadWallet'));
@@ -257,9 +260,6 @@ const Wallet = () => {
                 <Text style={styles.bankButtonText}>Add Bank Account</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleRefresh} style={styles.iconButton}>
-              <MaterialIcons name="refresh" size={20} color={colors.primary.main} />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -272,19 +272,20 @@ const Wallet = () => {
           style={[
             styles.payDuesButton,
             { backgroundColor: colors.primary.main },
-            (!bankAdded || withdrawing || available <= 0) && { opacity: 0.5 },
+            (!bankAdded || available <= 0) && { opacity: 0.5 },
           ]}
-          onPress={() => setWithdrawModalVisible(true)}
-          disabled={!bankAdded || withdrawing || available <= 0}
+          onPress={() => {
+            setWithdrawPhase('amount');
+            const a = Number(realWallet?.availableBalance ?? 0);
+            setWithdrawAmount(a > 0 ? a.toFixed(2) : '');
+            setWithdrawModalVisible(true);
+          }}
+          disabled={!bankAdded || available <= 0}
         >
-          {withdrawing ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <MaterialIcons name="north-east" size={20} color="#FFFFFF" />
-              <Text style={styles.payDuesButtonText}>Withdraw</Text>
-            </>
-          )}
+          <>
+            <MaterialIcons name="north-east" size={20} color="#FFFFFF" />
+            <Text style={styles.payDuesButtonText}>Withdraw</Text>
+          </>
         </TouchableOpacity>
 
         {!bankAdded ? <Text style={styles.inlineHint}>Add bank account to withdraw</Text> : null}
@@ -293,26 +294,36 @@ const Wallet = () => {
   };
 
   const submitWithdraw = async () => {
+    const amt = Number(withdrawAmount);
+    const maxAvail = Number(realWallet?.availableBalance ?? 0);
+    if (!amt || amt <= 0) {
+      setPaymentErrorMessage('Enter a valid amount');
+      setPaymentErrorModalVisible(true);
+      return;
+    }
+    if (amt > maxAvail + 0.001) {
+      setPaymentErrorMessage('Amount cannot exceed your available balance.');
+      setPaymentErrorModalVisible(true);
+      return;
+    }
+    setWithdrawPhase('loading');
     try {
-      const amt = Number(withdrawAmount);
-      if (!amt || amt <= 0) {
-        setPaymentErrorMessage('Enter a valid amount');
-        setPaymentErrorModalVisible(true);
-        return;
-      }
-      setWithdrawing(true);
       const resp = await cashfreeWalletAPI.withdraw({ amount: amt });
       if (!resp?.success) throw new Error(resp?.error || 'Withdrawal failed');
-      setWithdrawModalVisible(false);
-      setWithdrawAmount('');
-      setWithdrawSuccessVisible(true);
+      setWithdrawPhase('submitted');
       await loadWallet();
     } catch (e) {
+      setWithdrawPhase('amount');
       setPaymentErrorMessage(e?.response?.data?.error || e?.message || 'Withdrawal failed');
       setPaymentErrorModalVisible(true);
-    } finally {
-      setWithdrawing(false);
     }
+  };
+
+  const closeWithdrawModal = () => {
+    if (withdrawPhase === 'loading') return;
+    setWithdrawModalVisible(false);
+    setWithdrawPhase('amount');
+    setWithdrawAmount('');
   };
 
   const submitBankAccount = async () => {
@@ -360,6 +371,67 @@ const Wallet = () => {
     }
   };
 
+  const renderWithdrawalHistory = () => {
+    const formatDate = (date) => {
+      if (!date) return '—';
+      const d = new Date(date);
+      return d.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    };
+
+    const badgeStyle = (status) => {
+      if (status === 'PAID') return [styles.wdBadge, styles.wdBadgePaid];
+      if (status === 'FAILED') return [styles.wdBadge, styles.wdBadgeFailed];
+      if (status === 'REQUESTED' || status === 'PROCESSING') return [styles.wdBadge, styles.wdBadgeProcessing];
+      return [styles.wdBadge, styles.wdBadgeProcessing];
+    };
+
+    const label = (status) => {
+      if (status === 'PAID') return 'Paid';
+      if (status === 'FAILED') return 'Failed';
+      if (status === 'REQUESTED' || status === 'PROCESSING') return 'Processing';
+      return 'Processing';
+    };
+
+    return (
+      <View style={[styles.card, styles.withdrawalsCard]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <MaterialIcons name="swap-horiz" size={22} color={colors.text.primary} />
+            <Text style={styles.cardTitle}>Withdrawal history</Text>
+          </View>
+        </View>
+        <Text style={styles.withdrawalsHint}>
+          Status updates when Cashfree confirms the transfer (webhook). Pull to refresh.
+        </Text>
+        {withdrawals.length === 0 ? (
+          <Text style={styles.emptyWithdrawalsText}>No withdrawals yet.</Text>
+        ) : (
+          withdrawals.map((w) => (
+            <View key={w.id} style={styles.wdRow}>
+              <View style={styles.wdLeft}>
+                <Text style={styles.wdAmount}>₹{Number(w.amount).toFixed(2)}</Text>
+                <Text style={styles.wdDate}>{formatDate(w.createdAt)}</Text>
+                {w.status === 'FAILED' && w.failureReason ? (
+                  <Text style={styles.wdFailReason} numberOfLines={2}>
+                    {w.failureReason}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={badgeStyle(w.status)}>
+                <Text style={styles.wdBadgeText}>{label(w.status)}</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
 
   const renderCommissionLedger = () => {
     const paymentTransactions = wallet?.paymentTransactions || [];
@@ -496,6 +568,7 @@ const Wallet = () => {
       ) : null}
 
       {renderWalletBalanceCard()}
+      {renderWithdrawalHistory()}
       {renderCommissionLedger()}
     </ScrollView>
 
@@ -604,62 +677,99 @@ const Wallet = () => {
         onPaymentComplete={(orderId) => confirmDuesAfterCallback(orderId)}
       />
 
-      {/* Withdraw Modal */}
+      {/* Withdraw: amount → loading (API) → submitted */}
       <Modal
         visible={withdrawModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setWithdrawModalVisible(false)}
+        onRequestClose={closeWithdrawModal}
       >
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-            style={styles.kbAvoid}
-          >
-            <ScrollView
-              contentContainerStyle={styles.modalScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Withdraw</Text>
-                <Text style={styles.modalSubtitle}>Enter amount to withdraw.</Text>
-
-                <View style={{ gap: spacing.sm }}>
-                  <TextInput
-                    value={withdrawAmount}
-                    onChangeText={setWithdrawAmount}
-                    placeholder="Amount"
-                    keyboardType="numeric"
-                    placeholderTextColor={colors.text.secondary}
-                    style={styles.textInput}
-                  />
-                </View>
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalCancelButton]}
-                    onPress={() => setWithdrawModalVisible(false)}
-                    disabled={withdrawing}
-                  >
-                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalSubmitButton]}
-                    onPress={submitWithdraw}
-                    disabled={withdrawing}
-                  >
-                    {withdrawing ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                      <Text style={styles.modalSubmitText}>Withdraw</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
+          {withdrawPhase === 'loading' ? (
+            <View style={[styles.modalContent, styles.withdrawProcessingBox]}>
+              <ActivityIndicator size="large" color={colors.primary.main} />
+              <Text style={[styles.modalTitle, styles.withdrawProcessingTitle]}>Submitting request…</Text>
+              <Text style={styles.modalSubtitle}>Connecting to payout service.</Text>
+            </View>
+          ) : withdrawPhase === 'submitted' ? (
+            <View style={styles.modalContent}>
+              <View style={styles.successIconContainer}>
+                <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
               </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
+              <Text style={styles.modalTitle}>Withdrawal request submitted</Text>
+              <Text style={styles.modalSubtitle}>
+                Your request is in progress. Track status under Withdrawal history — it will show Paid when
+                the bank transfer completes.
+              </Text>
+              <View style={[styles.modalActions, styles.modalActionsCentered]}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
+                  onPress={() => {
+                    setWithdrawModalVisible(false);
+                    setWithdrawPhase('amount');
+                    setWithdrawAmount('');
+                  }}
+                >
+                  <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+              style={styles.kbAvoid}
+            >
+              <ScrollView
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Withdraw</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Withdraw available balance to your saved bank account. You can change the amount below.
+                  </Text>
+
+                  <View style={{ gap: spacing.sm }}>
+                    <TextInput
+                      value={withdrawAmount}
+                      onChangeText={setWithdrawAmount}
+                      placeholder="Amount (₹)"
+                      keyboardType="decimal-pad"
+                      placeholderTextColor={colors.text.secondary}
+                      style={styles.textInput}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        const a = Number(realWallet?.availableBalance ?? 0);
+                        if (a > 0) setWithdrawAmount(a.toFixed(2));
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.withdrawFullBalanceLink}>Use full balance</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.modalCancelButton]}
+                      onPress={closeWithdrawModal}
+                    >
+                      <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.modalSubmitButton]}
+                      onPress={submitWithdraw}
+                      disabled={withdrawPhase === 'loading'}
+                    >
+                      <Text style={styles.modalSubmitText}>Withdraw</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          )}
         </View>
       </Modal>
 
@@ -780,30 +890,6 @@ const Wallet = () => {
         </View>
       </Modal>
 
-      <Modal
-        visible={withdrawSuccessVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setWithdrawSuccessVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.successIconContainer}>
-              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
-            </View>
-            <Text style={styles.modalTitle}>Withdrawal requested</Text>
-            <Text style={styles.modalSubtitle}>Your withdrawal is being processed.</Text>
-            <View style={[styles.modalActions, styles.modalActionsCentered]}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
-                onPress={() => setWithdrawSuccessVisible(false)}
-              >
-                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 };
@@ -955,6 +1041,80 @@ const styles = StyleSheet.create({
   },
   modalSubmitButtonDisabled: {
     opacity: 0.5,
+  },
+  withdrawProcessingBox: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  withdrawProcessingTitle: {
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  withdrawFullBalanceLink: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  withdrawalsCard: {
+    marginBottom: 0,
+  },
+  withdrawalsHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  emptyWithdrawalsText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  wdRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  wdLeft: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  wdAmount: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  wdDate: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  wdFailReason: {
+    ...typography.small,
+    color: colors.error.main,
+    marginTop: spacing.xs,
+  },
+  wdBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  wdBadgeProcessing: {
+    backgroundColor: colors.pending.light,
+  },
+  wdBadgePaid: {
+    backgroundColor: colors.success.light,
+  },
+  wdBadgeFailed: {
+    backgroundColor: colors.error.light,
+  },
+  wdBadgeText: {
+    ...typography.small,
+    fontWeight: '700',
+    color: colors.text.primary,
   },
   textInput: {
     borderWidth: 1,

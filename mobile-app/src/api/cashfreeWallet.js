@@ -11,6 +11,11 @@ export const cashfreeWalletAPI = {
     return response.data;
   },
 
+  getWithdrawals: async (limit = 25) => {
+    const response = await apiClient.get(`/api/cashfree/wallet/withdrawals?limit=${limit}`);
+    return response.data;
+  },
+
   withdraw: async ({ amount, beneId, beneficiaryName, bankAccount, ifsc }) => {
     const response = await apiClient.post('/api/cashfree/payouts/withdraw', { amount });
     return response.data;

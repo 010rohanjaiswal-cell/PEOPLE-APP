@@ -17,6 +17,7 @@ const clientRoutes = require('./routes/client');
 const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
 const cashfreeRoutes = require('./routes/cashfree');
+const cashfreePayoutWebhook = require('./routes/cashfreePayoutWebhook');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications');
 
@@ -29,12 +30,23 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'x-webhook-signature',
+    'x-webhook-timestamp',
+  ],
 }));
 
+// Cashfree Payouts webhooks need raw JSON body for HMAC verification (must be before express.json)
+app.post(
+  '/api/cashfree/webhooks/payout',
+  express.raw({ type: 'application/json' }),
+  cashfreePayoutWebhook
+);
+
 // Body parsing middleware
-// Use standard JSON parsing - this fixes the "stream is not readable" error
-// For webhook routes, rawBody will be reconstructed from req.body if needed
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
