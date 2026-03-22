@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { View, TextInput, Text, StyleSheet } from 'react-native';
+import { View, TextInput, Text, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, typography } from '../../theme';
 
 const Input = ({
@@ -21,12 +21,21 @@ const Input = ({
   rightIcon,
   style,
   inputStyle,
+  /** Soft 3D look: shadow, no hard border (auth screens). */
+  elevated = false,
   ...props
 }) => {
   return (
     <View style={[styles.container, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputContainer, error && styles.inputError, disabled && styles.inputDisabled]}>
+      <View
+        style={[
+          styles.inputContainer,
+          elevated && styles.inputContainerElevated,
+          error && styles.inputError,
+          disabled && styles.inputDisabled,
+        ]}
+      >
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
         <TextInput
           style={[
@@ -72,6 +81,22 @@ const styles = StyleSheet.create({
     borderRadius: spacing.borderRadius.input,
     backgroundColor: colors.background,
   },
+  inputContainerElevated: {
+    borderWidth: 0,
+    backgroundColor: colors.cardBackground,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+      default: {},
+    }),
+  },
   input: {
     flex: 1,
     fontSize: typography.body.fontSize,
@@ -91,6 +116,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   inputError: {
+    borderWidth: 1,
     borderColor: colors.error.main,
   },
   inputDisabled: {

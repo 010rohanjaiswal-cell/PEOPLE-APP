@@ -185,10 +185,10 @@ const OTP = ({ navigation, route }) => {
             </Text>
           </View>
 
-          {/* Card */}
-          <Card style={styles.card}>
+          {/* Card — elevated panel, no harsh outline */}
+          <Card style={styles.authCard}>
             <CardContent>
-              {/* OTP Input */}
+              {/* OTP Input — 3D lifted field */}
               <View style={styles.otpContainer}>
                 <TextInput
                   ref={otpInputRef}
@@ -196,7 +196,7 @@ const OTP = ({ navigation, route }) => {
                   value={otp}
                   onChangeText={handleOTPChange}
                   placeholder="000000"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.text.muted}
                   keyboardType="number-pad"
                   maxLength={6}
                   autoFocus
@@ -294,6 +294,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1e3a8a',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 8,
+      },
+      default: {},
+    }),
   },
   title: {
     ...typography.h1,
@@ -306,12 +319,42 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
-  card: {
+  authCard: {
     width: '100%',
+    borderWidth: 0,
+    backgroundColor: colors.cardBackground,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.14,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 10,
+      },
+      default: {},
+    }),
   },
   otpContainer: {
     alignItems: 'center',
     marginBottom: spacing.lg,
+    width: '100%',
+    borderRadius: spacing.md,
+    backgroundColor: colors.cardBackground,
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+      default: {},
+    }),
   },
   otpInput: {
     width: '100%',
@@ -320,11 +363,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     letterSpacing: 8,
-    borderWidth: 2,
-    borderColor: colors.border,
+    borderWidth: 0,
     borderRadius: spacing.md,
-    backgroundColor: colors.card,
-    color: '#000000', // Explicit black color for visibility
+    backgroundColor: colors.cardBackground,
+    color: colors.text.primary,
     paddingHorizontal: spacing.md,
   },
   submitButton: {
@@ -337,6 +379,19 @@ const styles = StyleSheet.create({
     borderRadius: spacing.borderRadius.button,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1e40af',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 6,
+      },
+      default: {},
+    }),
   },
   submitButtonDisabled: {
     backgroundColor: colors.text.muted,
@@ -399,12 +454,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.md,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.cardBackground,
     borderRadius: spacing.borderRadius.button,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.primary.main,
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+      default: {},
+    }),
   },
   backButtonContent: {
     flexDirection: 'row',

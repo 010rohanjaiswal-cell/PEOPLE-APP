@@ -3,18 +3,37 @@
  * Reusable bottom-sheet style modal to show basic user info
  */
 
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, Linking, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  Image,
+  Linking,
+  Alert,
+  ScrollView,
+  Pressable,
+  Dimensions,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import ChatModal from './ChatModal';
 
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
 const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   const { t } = useLanguage();
   const [chatModalVisible, setChatModalVisible] = useState(false);
-  
+  const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
+
+  useEffect(() => {
+    if (!visible) setPhotoPreviewVisible(false);
+  }, [visible]);
+
   if (!visible || !user) return null;
 
   // Helper function to calculate age
@@ -82,6 +101,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
@@ -95,7 +115,15 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             <View style={styles.profileHeader}>
               {profilePhoto ? (
-                <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setPhotoPreviewVisible(true)}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={t('common.viewPhoto') || 'View profile photo'}
+                >
+                  <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
+                  <Text style={styles.tapToEnlargeHint}>Tap to view</Text>
+                </TouchableOpacity>
               ) : (
                 <View style={[styles.profilePhoto, styles.profilePhotoPlaceholder]}>
                   <MaterialIcons name="person" size={40} color={colors.text.secondary} />
@@ -177,6 +205,26 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
         onClose={() => setChatModalVisible(false)}
       />
     </Modal>
+
+    {/* Sibling modal avoids nested-Modal issues on some devices */}
+    <Modal
+      visible={photoPreviewVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setPhotoPreviewVisible(false)}
+    >
+      <Pressable style={styles.photoPreviewOverlay} onPress={() => setPhotoPreviewVisible(false)}>
+        <View style={styles.photoPreviewInner} pointerEvents="box-none">
+          <Image
+            source={{ uri: profilePhoto }}
+            style={styles.photoPreviewImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.photoPreviewHint}>Tap anywhere to close</Text>
+        </View>
+      </Pressable>
+    </Modal>
+    </>
   );
 };
 
@@ -221,7 +269,36 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  tapToEnlargeHint: {
+    ...typography.small,
+    fontSize: 11,
+    color: colors.text.muted,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  photoPreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  photoPreviewInner: {
+    width: SCREEN_W,
+    maxHeight: SCREEN_H * 0.88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoPreviewImage: {
+    width: SCREEN_W - spacing.lg * 2,
+    height: SCREEN_H * 0.7,
+  },
+  photoPreviewHint: {
+    marginTop: spacing.lg,
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
   },
   profilePhotoPlaceholder: {
     backgroundColor: colors.border,

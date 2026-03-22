@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -17,9 +17,17 @@ import LanguageSelector from '../../components/common/LanguageSelector';
 import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import { useLocation } from '../../context/LocationContext';
+import { clientJobsAPI } from '../../api/clientJobs';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
+
+function parseActiveJobsResponse(response) {
+  if (response?.success && Array.isArray(response.jobs)) return response.jobs;
+  if (Array.isArray(response?.jobs)) return response.jobs;
+  if (Array.isArray(response)) return response;
+  return [];
+}
 
 // Tab Screens
 import PostJobScreen from './PostJob';
@@ -42,6 +50,29 @@ const ClientDashboard = () => {
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
   const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
+
+  /** When returning to main tabs: My Jobs if any active job, else Post Job. */
+  const goToMainTabPreferringMyJobs = useCallback(async () => {
+    try {
+      const response = await clientJobsAPI.getActiveJobs();
+      const list = parseActiveJobsResponse(response);
+      setActiveTab(list.length > 0 ? 'MyJobs' : 'PostJob');
+    } catch (e) {
+      console.warn('ClientDashboard: active jobs check failed', e?.message);
+      setActiveTab('PostJob');
+    }
+  }, []);
+
+  /** If client has any active job, switch to My Jobs (does not force Post Job — for focus / resume). */
+  const switchToMyJobsIfActiveJobs = useCallback(async () => {
+    try {
+      const response = await clientJobsAPI.getActiveJobs();
+      const list = parseActiveJobsResponse(response);
+      if (list.length > 0) setActiveTab('MyJobs');
+    } catch (e) {
+      console.warn('ClientDashboard: active jobs check failed', e?.message);
+    }
+  }, []);
 
   // Top tabs - only Post Job and My Jobs
   const tabs = [
@@ -72,6 +103,21 @@ const ClientDashboard = () => {
     }, 600);
     return () => clearTimeout(t);
   }, [requestPermission]);
+
+  useFocusEffect(
+    useCallback(() => {
+      switchToMyJobsIfActiveJobs();
+    }, [switchToMyJobsIfActiveJobs])
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        switchToMyJobsIfActiveJobs();
+      }
+    });
+    return () => sub.remove();
+  }, [switchToMyJobsIfActiveJobs]);
 
 
   // Swipe gesture to switch between Post Job and My Jobs
@@ -141,7 +187,9 @@ const ClientDashboard = () => {
         if (drawerScreenStackRef.current.length > 0) {
           setDrawerScreenStack(s => {
             const next = s.slice(0, -1);
-            if (next.length === 0) setActiveTab('PostJob');
+            if (next.length === 0) {
+              goToMainTabPreferringMyJobs();
+            }
             return next;
           });
           return true;
@@ -150,7 +198,7 @@ const ClientDashboard = () => {
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
-    }, [])
+    }, [goToMainTabPreferringMyJobs])
   );
 
   const handleLogout = () => {
@@ -294,8 +342,8 @@ const ClientDashboard = () => {
                 <TouchableOpacity 
                   onPress={() => {
                     setDrawerScreenStack([]);
-                    setActiveTab('PostJob');
                     closeDrawer();
+                    goToMainTabPreferringMyJobs();
                   }} 
                   style={styles.drawerMenuItem}
                 >

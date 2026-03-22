@@ -515,17 +515,19 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
       meta: { transferId, beneId: bank?.beneId },
     });
 
-    const payouts = await createPayoutsClient();
+    const payouts = createPayoutsClient();
 
-    // Standard Transfer Async — beneId + transferId (see /payout/v1/requestAsyncTransfer)
+    // Standard Transfer V2 — POST /transfers (replaces deprecated /payout/v1/requestAsyncTransfer)
     const transferMode =
       String(process.env.CASHFREE_PAYOUTS_TRANSFER_MODE || 'banktransfer').toLowerCase() || 'banktransfer';
-    const transferResp = await payouts.post('/payout/v1/requestAsyncTransfer', {
-      beneId: bank.beneId,
-      amount: amt,
-      transferId,
-      transferMode,
-      remarks: 'PeopleApp wallet',
+    const transferResp = await payouts.post('/transfers', {
+      transfer_id: transferId,
+      transfer_amount: amt,
+      beneficiary_details: {
+        beneficiary_id: bank.beneId,
+      },
+      transfer_mode: transferMode,
+      transfer_remarks: 'PeopleApp wallet',
     });
 
     if (transferResp.status !== 200) {
@@ -534,13 +536,18 @@ router.post('/payouts/withdraw', authenticate, requireRole('freelancer'), async 
     const payload = transferResp?.data || {};
     const inner = payload?.data ?? payload;
     const st = String(inner?.status ?? payload?.status ?? '').toUpperCase();
-    // Async: ACCEPTED; sync/direct: SUCCESS / PENDING — only treat explicit ERROR/FAILED as failure
+    // Async: accepted for processing — only treat explicit ERROR/FAILED as failure
     if (st === 'ERROR' || st === 'FAILED') {
       throw new Error(inner?.message || payload?.message || 'Transfer rejected by Cashfree');
     }
 
     withdrawalDoc.providerPayload = payload;
-    withdrawalDoc.cfReferenceId = inner?.referenceId ?? payload?.referenceId ?? null;
+    withdrawalDoc.cfReferenceId =
+      inner?.cf_transfer_id ??
+      inner?.referenceId ??
+      payload?.cf_transfer_id ??
+      payload?.referenceId ??
+      null;
     await withdrawalDoc.save();
 
     return res.json({
@@ -653,23 +660,44 @@ router.post('/payouts/bank-account', authenticate, requireRole('freelancer'), as
       });
     }
 
-    const payouts = await createPayoutsClient();
+    const payouts = createPayoutsClient();
 
-    // 2) Register beneficiary (Payouts API)
+    // 2) Register beneficiary — Payouts V2 POST /beneficiary (replaces /payout/v1/addBeneficiary)
     const beneId = `BENE_${req.user._id.toString().slice(-12)}`.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 50);
-    const addBeneResp = await payouts.post('/payout/v1/addBeneficiary', {
-      beneId,
-      name: nameAtBank || freelancerName,
-      email: freelancer?.email || 'na@example.com',
-      phone: (freelancer?.phone || '').replace(/\D/g, '').slice(-10) || '9999999999',
-      bankAccount: acct,
-      ifsc: ifscCode,
-      address1: 'People App',
+    const phoneDigits = (freelancer?.phone || '').replace(/\D/g, '').slice(-10) || '9999999999';
+    const addBeneResp = await payouts.post('/beneficiary', {
+      beneficiary_id: beneId,
+      beneficiary_name: nameAtBank || freelancerName,
+      beneficiary_instrument_details: {
+        bank_account_number: acct,
+        bank_ifsc: ifscCode,
+      },
+      beneficiary_contact_details: {
+        beneficiary_email: freelancer?.email || 'na@example.com',
+        beneficiary_phone: phoneDigits,
+        beneficiary_country_code: '+91',
+        beneficiary_address: 'People App',
+        beneficiary_city: 'Bengaluru',
+        beneficiary_state: 'KA',
+        beneficiary_postal_code: '560001',
+      },
     });
 
-    const ok = String(addBeneResp?.data?.status || '').toUpperCase() === 'SUCCESS' || addBeneResp?.data?.subCode === '200';
+    const raw = addBeneResp?.data ?? {};
+    const beneData = raw.data ?? raw;
+    const httpOk = addBeneResp.status >= 200 && addBeneResp.status < 300;
+    const topStatus = String(raw.status || beneData.status || '').toUpperCase();
+    const ok =
+      httpOk &&
+      topStatus !== 'ERROR' &&
+      (beneData.beneficiary_status === 'VERIFIED' ||
+        topStatus === 'SUCCESS' ||
+        (beneData.beneficiary_id && topStatus !== 'FAILED'));
     if (!ok) {
-      return res.status(500).json({ success: false, error: addBeneResp?.data?.message || 'Failed to add beneficiary' });
+      return res.status(500).json({
+        success: false,
+        error: beneData.message || raw.message || 'Failed to add beneficiary',
+      });
     }
 
     const last4 = acct.slice(-4);

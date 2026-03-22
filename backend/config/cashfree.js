@@ -33,13 +33,19 @@ function getPaymentsConfig() {
 
 function getPayoutsConfig() {
   const env = (process.env.CASHFREE_PAYOUTS_ENV || 'test').toLowerCase();
+  /**
+   * Payouts V2 unified host (replaces payout-api.cashfree.com + /payout/v1/* deprecated APIs).
+   * @see https://www.cashfree.com/docs/api-reference/payouts/v2/payouts-api-v2-new
+   */
   const baseURL =
     process.env.CASHFREE_PAYOUTS_BASE_URL ||
-    (env === 'production' ? 'https://payout-api.cashfree.com' : 'https://payout-gamma.cashfree.com');
+    (env === 'production' ? 'https://api.cashfree.com/payout' : 'https://sandbox.cashfree.com/payout');
 
   return {
     env,
     baseURL,
+    /** Required for V2 (transfers, beneficiary). Override if Cashfree updates the version. */
+    apiVersion: cleanEnvValue(process.env.CASHFREE_PAYOUTS_API_VERSION) || '2024-01-01',
     clientId: requiredEnv('CASHFREE_PAYOUTS_CLIENT_ID'),
     clientSecret: requiredEnv('CASHFREE_PAYOUTS_CLIENT_SECRET'),
   };
@@ -96,51 +102,20 @@ function createPaymentsClient() {
   });
 }
 
-let cachedPayoutAuth = { token: null, expiresAt: 0 };
-
-async function getPayoutAuthToken() {
+/**
+ * Payouts V2: authenticate each request with x-client-id + x-client-secret + x-api-version
+ * (no /payout/v1/authorize bearer flow — v1 transfer/beneficiary endpoints are deprecated).
+ */
+function createPayoutsClient() {
   const cfg = getPayoutsConfig();
-  const now = Date.now();
-  if (cachedPayoutAuth.token && cachedPayoutAuth.expiresAt - now > 60_000) {
-    return cachedPayoutAuth.token;
-  }
-
-  // Production Payouts expects auth via headers (X-Client-Id / X-Client-Secret), not JSON body.
-  const authResp = await axios.post(
-    `${cfg.baseURL}/payout/v1/authorize`,
-    {},
-    {
-      timeout: 20000,
-      headers: {
-        'X-Client-Id': cfg.clientId,
-        'X-Client-Secret': cfg.clientSecret,
-      },
-    }
-  );
-
-  const token = authResp?.data?.data?.token || authResp?.data?.token || null;
-  const expiry = authResp?.data?.data?.expiry || authResp?.data?.expiry || null;
-  if (!token) throw new Error('Cashfree Payouts authorize failed (no token)');
-
-  // expiry can be epoch seconds or ms depending on API; fall back to 55 minutes.
-  let expiresAt = now + 55 * 60_000;
-  if (typeof expiry === 'number') {
-    expiresAt = expiry > 10_000_000_000 ? expiry : expiry * 1000;
-  }
-
-  cachedPayoutAuth = { token, expiresAt };
-  return token;
-}
-
-async function createPayoutsClient() {
-  const cfg = getPayoutsConfig();
-  const token = await getPayoutAuthToken();
   return axios.create({
     baseURL: cfg.baseURL,
     timeout: 35000,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      'x-api-version': cfg.apiVersion,
+      'x-client-id': cfg.clientId,
+      'x-client-secret': cfg.clientSecret,
     },
   });
 }

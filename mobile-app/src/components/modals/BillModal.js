@@ -157,10 +157,10 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose} style={styles.cancelButton}>
+            <Button variant="outline" onPress={onClose} style={styles.cancelButton} size="lg" textStyle={styles.footerButtonText}>
               Cancel
             </Button>
-            <Button onPress={handlePay} style={styles.payButton} disabled={processing}>
+            <Button onPress={handlePay} style={styles.payButton} disabled={processing} size="lg" textStyle={styles.footerButtonText}>
               {processing ? <ActivityIndicator color="#fff" size="small" /> : 'Pay'}
             </Button>
           </View>
@@ -361,16 +361,27 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: spacing.md,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    alignItems: 'stretch',
   },
+  /** Taller tap targets; avoids label clipping on Android (font padding). */
   cancelButton: {
     flex: 1,
+    minHeight: 52,
+    height: 52,
   },
   payButton: {
     flex: 1,
+    minHeight: 52,
+    height: 52,
     backgroundColor: colors.success.main,
+  },
+  footerButtonText: {
+    lineHeight: 22,
   },
   modalOverlay: {
     flex: 1,
@@ -399,7 +410,8 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: spacing.sm,
     marginTop: spacing.md,
   },
