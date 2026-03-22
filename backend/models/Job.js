@@ -68,6 +68,11 @@ const jobSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    /** When category is Delivery: pickup / drop details (legacy `address`/`pincode` mirror route for filters). */
+    deliveryFromAddress: { type: String, default: null, trim: true },
+    deliveryFromPincode: { type: String, default: null, trim: true },
+    deliveryToAddress: { type: String, default: null, trim: true },
+    deliveryToPincode: { type: String, default: null, trim: true },
     status: {
       type: String,
       enum: ['open', 'assigned', 'work_done', 'completed', 'cancelled'],

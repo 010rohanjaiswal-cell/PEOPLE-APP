@@ -27,6 +27,7 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.company.people",
       "googleServicesFile": "./google-services.json",
       "versionCode": 5,

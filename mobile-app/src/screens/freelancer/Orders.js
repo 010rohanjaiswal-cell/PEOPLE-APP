@@ -19,6 +19,8 @@ import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
+import { isDeliveryJob } from '../../utils/jobDisplay';
+import { JobLocationBlock } from '../../components/job/JobLocationBlock';
 
 const Orders = () => {
   const { t } = useLanguage();
@@ -133,6 +135,7 @@ const Orders = () => {
 
   const renderOrderItem = ({ item }) => {
     const client = item.client || {};
+    const delivery = isDeliveryJob(item);
 
     return (
       <View style={styles.orderCard}>
@@ -147,19 +150,26 @@ const Orders = () => {
         </View>
 
         <Text style={styles.orderCategory}>{item.category}</Text>
-        <Text style={styles.orderAddress}>
-          {item.address}, {item.pincode}
-        </Text>
+        <JobLocationBlock job={item} t={t} />
 
         <View style={styles.orderMetaRow}>
           <View style={styles.orderMeta}>
             <MaterialIcons name="currency-rupee" size={16} color={colors.text.secondary} />
             <Text style={styles.orderMetaText}>₹{item.budget}</Text>
           </View>
-          <View style={styles.orderMeta}>
-            <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-            <Text style={styles.orderMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
-          </View>
+          {delivery ? (
+            <View style={styles.orderMeta}>
+              <MaterialIcons name="local-shipping" size={16} color={colors.text.secondary} />
+              <Text style={styles.orderMetaText}>
+                {item.deliveryFromPincode || '—'} → {item.deliveryToPincode || '—'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.orderMeta}>
+              <MaterialIcons name="person" size={16} color={colors.text.secondary} />
+              <Text style={styles.orderMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.orderDate}>
@@ -363,11 +373,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.secondary,
     marginBottom: spacing.xs,
-  },
-  orderAddress: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
   },
   orderMetaRow: {
     flexDirection: 'row',

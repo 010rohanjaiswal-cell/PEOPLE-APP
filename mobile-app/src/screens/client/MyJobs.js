@@ -26,6 +26,8 @@ import EditJobModal from '../../components/modals/EditJobModal';
 import OffersModal from '../../components/modals/OffersModal';
 import BillModal from '../../components/modals/BillModal';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
+import { isDeliveryJob } from '../../utils/jobDisplay';
+import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -88,7 +90,21 @@ const MyJobs = () => {
           const translated = await translateJobToHindi(job);
           if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
         } catch (e) {
-          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: { title: job.title, description: job.description || '', address: job.address || '', pincode: job.pincode || '' } }));
+          if (!cancelled) {
+            setTranslatedJobs((prev) => ({
+              ...prev,
+              [id]: {
+                title: job.title,
+                description: job.description || '',
+                address: job.address || '',
+                pincode: job.pincode || '',
+                deliveryFromAddress: job.deliveryFromAddress || '',
+                deliveryFromPincode: job.deliveryFromPincode || '',
+                deliveryToAddress: job.deliveryToAddress || '',
+                deliveryToPincode: job.deliveryToPincode || '',
+              },
+            }));
+          }
         }
       }
     };
@@ -249,15 +265,21 @@ const MyJobs = () => {
     const title = tr ? tr.title : item.title;
     const description = tr ? tr.description : (item.description || '');
     const address = tr ? tr.address : (item.address || '');
-    const pincode = tr ? tr.pincode : (item.pincode || '');
+    const delivery = isDeliveryJob(item);
+    const dFromA = tr?.deliveryFromAddress ?? item.deliveryFromAddress;
+    const dToA = tr?.deliveryToAddress ?? item.deliveryToAddress;
 
     const statusStyle = getStatusBadgeStyle(item.status);
     const offersCount = getOffersCount(item);
     const showEditDelete = canEditOrDelete(item);
     // Default to expanded (true) unless explicitly set to false
     const isExpanded = expandedJobs[jobId] !== false;
-    const hasDetails = item.description || item.address || item.gender || item.pincode ||
-      ((item.status === 'assigned' || item.status === 'work_done' || item.status === 'completed') && item.assignedFreelancer);
+    const hasDetails =
+      (delivery
+        ? Boolean(dFromA || dToA || address)
+        : Boolean(item.description || item.address || item.gender || item.pincode)) ||
+      ((item.status === 'assigned' || item.status === 'work_done' || item.status === 'completed') &&
+        item.assignedFreelancer);
 
     return (
       <TouchableOpacity
@@ -305,26 +327,14 @@ const MyJobs = () => {
 
         {isExpanded && (
           <>
-            {description ? (
+            {!delivery && description ? (
               <Text style={styles.jobDescription} numberOfLines={2}>
                 {description}
               </Text>
             ) : null}
-            <View style={styles.jobAddressRow}>
-              <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-              <Text style={styles.jobAddress}>{address}</Text>
-            </View>
+            <JobLocationBlock job={item} translated={tr} t={t} />
             <View style={styles.jobMetaRow}>
-              <View style={styles.jobMetaLeft}>
-                <View style={styles.jobMeta}>
-                  <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-                  <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
-                </View>
-                <View style={styles.jobMeta}>
-                  <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-                  <Text style={styles.jobMetaText}>{pincode}</Text>
-                </View>
-              </View>
+              <JobMetaGenderOrDeliveryPins job={item} translated={tr} t={t} />
               {(item.status === 'assigned' ||
                 item.status === 'work_done' ||
                 item.status === 'completed') &&

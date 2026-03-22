@@ -6,6 +6,7 @@
  */
 
 import Sanscript from '@indic-transliteration/sanscript';
+import { isDeliveryJob } from './jobDisplay';
 
 const CACHE = {};
 const TRANS_LANG_PAIR = 'en|hi';
@@ -153,8 +154,8 @@ export async function translateJobFieldToHindi(text) {
 
 /**
  * Translate job fields to Hindi. Title, description, address support Hinglish; pincode is translation only.
- * @param {{ title?: string, description?: string, address?: string, pincode?: string }} job
- * @returns {Promise<{ title: string, description: string, address: string, pincode: string }>}
+ * @param {object} job
+ * @returns {Promise<object>}
  */
 export async function translateJobToHindi(job) {
   const [title, description, address, pincode] = await Promise.all([
@@ -163,7 +164,31 @@ export async function translateJobToHindi(job) {
     job.address ? translateJobFieldToHindi(String(job.address)) : Promise.resolve(job.address || ''),
     job.pincode ? translateToHindi(String(job.pincode)) : Promise.resolve(job.pincode || ''),
   ]);
-  return { title, description, address, pincode };
+  const out = { title, description, address, pincode };
+  if (
+    isDeliveryJob(job) &&
+    (job.deliveryFromAddress || job.deliveryToAddress || job.deliveryFromPincode || job.deliveryToPincode)
+  ) {
+    const [df, dfp, dt, dtp] = await Promise.all([
+      job.deliveryFromAddress
+        ? translateJobFieldToHindi(String(job.deliveryFromAddress))
+        : Promise.resolve(job.deliveryFromAddress || ''),
+      job.deliveryFromPincode
+        ? translateToHindi(String(job.deliveryFromPincode))
+        : Promise.resolve(job.deliveryFromPincode || ''),
+      job.deliveryToAddress
+        ? translateJobFieldToHindi(String(job.deliveryToAddress))
+        : Promise.resolve(job.deliveryToAddress || ''),
+      job.deliveryToPincode
+        ? translateToHindi(String(job.deliveryToPincode))
+        : Promise.resolve(job.deliveryToPincode || ''),
+    ]);
+    out.deliveryFromAddress = df;
+    out.deliveryFromPincode = dfp;
+    out.deliveryToAddress = dt;
+    out.deliveryToPincode = dtp;
+  }
+  return out;
 }
 
 /**

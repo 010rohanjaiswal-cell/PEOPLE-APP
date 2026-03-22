@@ -24,6 +24,8 @@ import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
+import { isDeliveryJob } from '../../utils/jobDisplay';
+import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -168,6 +170,7 @@ const MyJobs = () => {
   const renderJobItem = ({ item }) => {
     const jobId = item._id || item.id;
     const statusInfo = getStatusBadgeStyle(item.status);
+    const delivery = isDeliveryJob(item);
 
     return (
       <View style={styles.jobCard}>
@@ -185,7 +188,7 @@ const MyJobs = () => {
           </View>
         </View>
 
-        {item.description ? (
+        {!delivery && item.description ? (
           <View style={styles.descriptionBlock}>
             <Text style={styles.jobDescription} numberOfLines={expandedDescriptionIds[jobId] ? undefined : 2}>
               {item.description}
@@ -206,21 +209,9 @@ const MyJobs = () => {
             ) : null}
           </View>
         ) : null}
-        <View style={styles.jobAddressRow}>
-          <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobAddress}>{item.address}</Text>
-        </View>
+        <JobLocationBlock job={item} t={t} />
         <View style={styles.jobMetaRow}>
-          <View style={styles.jobMetaLeft}>
-            <View style={styles.jobMeta}>
-              <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-              <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
-            </View>
-            <View style={styles.jobMeta}>
-              <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-              <Text style={styles.jobMetaText}>{item.pincode}</Text>
-            </View>
-          </View>
+          <JobMetaGenderOrDeliveryPins job={item} t={t} />
           {(item.status === 'assigned' ||
             item.status === 'work_done' ||
             item.status === 'completed') && (

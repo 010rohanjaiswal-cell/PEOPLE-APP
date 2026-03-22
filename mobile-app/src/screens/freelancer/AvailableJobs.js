@@ -27,6 +27,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useLocation } from '../../context/LocationContext';
 import { translateJobToHindi } from '../../utils/translate';
+import { isDeliveryJob } from '../../utils/jobDisplay';
+import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -209,7 +211,21 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           const translated = await translateJobToHindi(job);
           if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
         } catch (e) {
-          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: { title: job.title, description: job.description || '', address: job.address || '', pincode: job.pincode || '' } }));
+          if (!cancelled) {
+            setTranslatedJobs((prev) => ({
+              ...prev,
+              [id]: {
+                title: job.title,
+                description: job.description || '',
+                address: job.address || '',
+                pincode: job.pincode || '',
+                deliveryFromAddress: job.deliveryFromAddress || '',
+                deliveryFromPincode: job.deliveryFromPincode || '',
+                deliveryToAddress: job.deliveryToAddress || '',
+                deliveryToPincode: job.deliveryToPincode || '',
+              },
+            }));
+          }
         }
       }
     };
@@ -391,9 +407,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     const jobId = item._id || item.id;
     const tr = locale === 'hi' && translatedJobs[jobId];
     const title = tr ? tr.title : item.title;
+    const delivery = isDeliveryJob(item);
     const description = tr ? tr.description : (item.description || '');
-    const address = tr ? tr.address : (item.address || '');
-    const pincode = tr ? tr.pincode : (item.pincode || '');
     
     // Debug log for first job only to avoid spam
     if (item._id === jobs[0]?._id || item.id === jobs[0]?.id) {
@@ -406,7 +421,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         <Text style={styles.jobTitle}>{title}</Text>
         <Text style={styles.jobBudget}>₹{item.budget}</Text>
       </View>
-      {description ? (
+      {!delivery && description ? (
         <View style={styles.descriptionBlock}>
           <Text style={styles.jobDescription} numberOfLines={expandedDescriptionIds[jobId] ? undefined : 2}>
             {description}
@@ -427,19 +442,9 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           ) : null}
         </View>
       ) : null}
-      <View style={styles.jobAddressRow}>
-        <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-        <Text style={styles.jobAddress}>{address}</Text>
-      </View>
+      <JobLocationBlock job={item} translated={tr} t={t} />
       <View style={styles.jobMetaRow}>
-        <View style={styles.jobMeta}>
-          <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{t('gender.' + (item.gender || 'any'))}</Text>
-        </View>
-        <View style={styles.jobMeta}>
-          <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-          <Text style={styles.jobMetaText}>{pincode}</Text>
-        </View>
+        <JobMetaGenderOrDeliveryPins job={item} translated={tr} t={t} />
         {item.distanceKm != null && (
           <View style={styles.jobMeta}>
             <MaterialIcons name="near-me" size={16} color={colors.text.secondary} />

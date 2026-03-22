@@ -3,8 +3,23 @@
  * Form to create a new job posting
  */
 
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Animated, Alert } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+  Alert,
+  Keyboard,
+  Dimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { Button, Input, Card, CardContent } from '../../components/common';
@@ -28,16 +43,70 @@ const CATEGORY_KEYS = {
   'Other': 'Other',
 };
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const PostJob = ({ onJobPosted }) => {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const { gpsEnabled, gpsDenied } = useLocation();
   const scrollViewRef = useRef(null);
-  const descriptionInputRef = useRef(null);
+  const [keyboardPad, setKeyboardPad] = useState(0);
+
+  /** Offset from screen top → Post Job KeyboardAvoidingView (header + tab strip + safe area). */
+  const keyboardVerticalOffset =
+    Platform.OS === 'ios' ? insets.top + 120 : Math.max(insets.top, 12);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardPad(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardPad(0)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  /** Scroll so the focused field stays above the keyboard (same idea as budget’s scrollToEnd). */
+  const scrollInputIntoView = (scrollY) => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, scrollY),
+          animated: true,
+        });
+      }, Platform.OS === 'ios' ? 60 : 80);
+    });
+  };
+
+  const scrollToEndDelayed = () => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, Platform.OS === 'ios' ? 100 : 160);
+    });
+  };
+
+  const scrollToStart = () => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 80);
+    });
+  };
   const [formData, setFormData] = useState({
     title: '',
     category: '',
     address: '',
     pincode: '',
+    deliveryFromAddress: '',
+    deliveryFromPincode: '',
+    deliveryToAddress: '',
+    deliveryToPincode: '',
     budget: '',
     gender: '',
     description: '',
@@ -50,7 +119,22 @@ const PostJob = ({ onJobPosted }) => {
   const pincodeBorderOpacity = useRef(new Animated.Value(0)).current;
   const budgetBorderOpacity = useRef(new Animated.Value(0)).current;
   const genderBorderOpacity = useRef(new Animated.Value(0)).current;
-  const borderOpacity = { title: titleBorderOpacity, category: categoryBorderOpacity, address: addressBorderOpacity, pincode: pincodeBorderOpacity, budget: budgetBorderOpacity, gender: genderBorderOpacity };
+  const fromAddrBorderOpacity = useRef(new Animated.Value(0)).current;
+  const fromPinBorderOpacity = useRef(new Animated.Value(0)).current;
+  const toAddrBorderOpacity = useRef(new Animated.Value(0)).current;
+  const toPinBorderOpacity = useRef(new Animated.Value(0)).current;
+  const borderOpacity = {
+    title: titleBorderOpacity,
+    category: categoryBorderOpacity,
+    address: addressBorderOpacity,
+    pincode: pincodeBorderOpacity,
+    budget: budgetBorderOpacity,
+    gender: genderBorderOpacity,
+    fromAddr: fromAddrBorderOpacity,
+    fromPin: fromPinBorderOpacity,
+    toAddr: toAddrBorderOpacity,
+    toPin: toPinBorderOpacity,
+  };
 
   const categories = [
     'Delivery',
@@ -85,6 +169,8 @@ const PostJob = ({ onJobPosted }) => {
     ]).start();
   };
 
+  const isDelivery = String(formData.category || '').trim().toLowerCase() === 'delivery';
+
   const handleSubmit = async () => {
     if (gpsDenied || !gpsEnabled) {
       runErrorBorderAnimation(borderOpacity.title);
@@ -98,35 +184,70 @@ const PostJob = ({ onJobPosted }) => {
       runErrorBorderAnimation(borderOpacity.category);
       return;
     }
-    if (!validateRequired(formData.address)) {
-      runErrorBorderAnimation(borderOpacity.address);
-      return;
+
+    if (isDelivery) {
+      if (!validateRequired(formData.deliveryFromAddress)) {
+        runErrorBorderAnimation(borderOpacity.fromAddr);
+        return;
+      }
+      if (!validatePincode(formData.deliveryFromPincode)) {
+        runErrorBorderAnimation(borderOpacity.fromPin);
+        return;
+      }
+      if (!validateRequired(formData.deliveryToAddress)) {
+        runErrorBorderAnimation(borderOpacity.toAddr);
+        return;
+      }
+      if (!validatePincode(formData.deliveryToPincode)) {
+        runErrorBorderAnimation(borderOpacity.toPin);
+        return;
+      }
+    } else {
+      if (!validateRequired(formData.address)) {
+        runErrorBorderAnimation(borderOpacity.address);
+        return;
+      }
+      if (!validatePincode(formData.pincode)) {
+        runErrorBorderAnimation(borderOpacity.pincode);
+        return;
+      }
+      if (!formData.gender) {
+        runErrorBorderAnimation(borderOpacity.gender);
+        return;
+      }
     }
-    if (!validatePincode(formData.pincode)) {
-      runErrorBorderAnimation(borderOpacity.pincode);
-      return;
-    }
-    if (!formData.budget || parseFloat(formData.budget) < 10) {
+
+    const budgetNum = parseFloat(String(formData.budget || '').replace(/,/g, ''));
+    if (!Number.isFinite(budgetNum) || budgetNum < 10) {
       runErrorBorderAnimation(borderOpacity.budget);
-      return;
-    }
-    if (!formData.gender) {
-      runErrorBorderAnimation(borderOpacity.gender);
       return;
     }
 
     setLoading(true);
 
     try {
-      const jobData = {
-        title: formData.title,
-        category: formData.category,
-        address: formData.address,
-        pincode: formData.pincode,
-        budget: parseFloat(formData.budget),
-        gender: formData.gender.toLowerCase(),
-        description: formData.description || null,
+      const categoryTrimmed = String(formData.category || '').trim();
+      const base = {
+        title: String(formData.title || '').trim(),
+        category: categoryTrimmed,
+        budget: budgetNum,
       };
+      const jobData = isDelivery
+        ? {
+            ...base,
+            category: categoryTrimmed || 'Delivery',
+            deliveryFromAddress: formData.deliveryFromAddress.trim(),
+            deliveryFromPincode: formData.deliveryFromPincode.trim(),
+            deliveryToAddress: formData.deliveryToAddress.trim(),
+            deliveryToPincode: formData.deliveryToPincode.trim(),
+          }
+        : {
+            ...base,
+            address: formData.address,
+            pincode: formData.pincode,
+            gender: formData.gender.toLowerCase(),
+            description: formData.description || null,
+          };
 
       const result = await clientJobsAPI.postJob(jobData);
 
@@ -145,20 +266,23 @@ const PostJob = ({ onJobPosted }) => {
     }
   };
 
+  const contentPaddingBottom = (spacing.xxl || 120) + keyboardPad + (Platform.OS === 'android' ? insets.bottom : 0);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
+      behavior="padding"
+      keyboardVerticalOffset={keyboardVerticalOffset}
     >
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: contentPaddingBottom }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         nestedScrollEnabled={true}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
         {gpsDenied && (
           <View style={styles.gpsMessageBox}>
@@ -177,6 +301,7 @@ const PostJob = ({ onJobPosted }) => {
               value={formData.title}
               onChangeText={(value) => handleChange('title', value)}
               style={styles.inputField}
+              onFocus={scrollToStart}
             />
           </View>
 
@@ -201,31 +326,120 @@ const PostJob = ({ onJobPosted }) => {
             </View>
           </View>
 
-          {/* Address */}
-          <View style={styles.fieldWithErrorWrap}>
-            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
-            <Input
-              label={t('postJob.address')}
-              placeholder={t('postJob.enterAddress')}
-              value={formData.address}
-              onChangeText={(value) => handleChange('address', value)}
-              style={styles.inputField}
-            />
-          </View>
+          {isDelivery ? (
+            <View style={styles.deliveryRouteContainer}>
+              {/* From — address + pincode */}
+              <View style={[styles.deliveryLegCard, styles.deliveryLegCardFrom]}>
+                <View style={styles.deliveryLegTitleRow}>
+                  <Text style={styles.deliveryLegLabel}>{t('jobs.fromShort')}</Text>
+                  <Text style={styles.deliveryLegDash}>—</Text>
+                  <Text style={styles.deliveryLegHint}>{t('postJob.deliveryFromHeading')}</Text>
+                </View>
+                <Text style={styles.deliveryMicroHint}>
+                  {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
+                </Text>
+                <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromAddr }]} pointerEvents="none" />
+                  <Input
+                    label={t('postJob.address')}
+                    placeholder={t('postJob.enterFromAddress')}
+                    value={formData.deliveryFromAddress}
+                    onChangeText={(value) => handleChange('deliveryFromAddress', value)}
+                    multiline
+                    numberOfLines={2}
+                    style={styles.inputField}
+                    onFocus={() => scrollInputIntoView(32)}
+                  />
+                </View>
+                <View style={styles.deliveryPinRow}>
+                  <View style={[styles.fieldWithErrorWrap, styles.deliveryPinField]}>
+                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromPin }]} pointerEvents="none" />
+                    <Input
+                      label={t('postJob.pincode')}
+                      placeholder={t('postJob.pincodePlaceholder')}
+                      value={formData.deliveryFromPincode}
+                      onChangeText={(value) =>
+                        handleChange('deliveryFromPincode', value.replace(/\D/g, '').slice(0, 6))
+                      }
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      style={styles.inputField}
+                      onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.08)}
+                    />
+                  </View>
+                </View>
+              </View>
 
-          {/* Pincode */}
-          <View style={styles.fieldWithErrorWrap}>
-            <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
-            <Input
-              label={t('postJob.pincode')}
-              placeholder={t('postJob.pincodePlaceholder')}
-              value={formData.pincode}
-              onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
-              keyboardType="number-pad"
-              maxLength={6}
-              style={styles.inputField}
-            />
-          </View>
+              {/* To — address + pincode */}
+              <View style={[styles.deliveryLegCard, styles.deliveryLegCardTo]}>
+                <View style={styles.deliveryLegTitleRow}>
+                  <Text style={styles.deliveryLegLabel}>{t('jobs.toShort')}</Text>
+                  <Text style={styles.deliveryLegDash}>—</Text>
+                  <Text style={styles.deliveryLegHint}>{t('postJob.deliveryToHeading')}</Text>
+                </View>
+                <Text style={styles.deliveryMicroHint}>
+                  {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
+                </Text>
+                <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toAddr }]} pointerEvents="none" />
+                  <Input
+                    label={t('postJob.address')}
+                    placeholder={t('postJob.enterToAddress')}
+                    value={formData.deliveryToAddress}
+                    onChangeText={(value) => handleChange('deliveryToAddress', value)}
+                    multiline
+                    numberOfLines={2}
+                    style={styles.inputField}
+                    onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.16)}
+                  />
+                </View>
+                <View style={styles.deliveryPinRow}>
+                  <View style={[styles.fieldWithErrorWrap, styles.deliveryPinField]}>
+                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toPin }]} pointerEvents="none" />
+                    <Input
+                      label={t('postJob.pincode')}
+                      placeholder={t('postJob.pincodePlaceholder')}
+                      value={formData.deliveryToPincode}
+                      onChangeText={(value) =>
+                        handleChange('deliveryToPincode', value.replace(/\D/g, '').slice(0, 6))
+                      }
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      style={styles.inputField}
+                      onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.24)}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.fieldWithErrorWrap}>
+                <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
+                <Input
+                  label={t('postJob.address')}
+                  placeholder={t('postJob.enterAddress')}
+                  value={formData.address}
+                  onChangeText={(value) => handleChange('address', value)}
+                  style={styles.inputField}
+                  onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.1)}
+                />
+              </View>
+              <View style={styles.fieldWithErrorWrap}>
+                <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
+                <Input
+                  label={t('postJob.pincode')}
+                  placeholder={t('postJob.pincodePlaceholder')}
+                  value={formData.pincode}
+                  onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={styles.inputField}
+                  onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.15)}
+                />
+              </View>
+            </>
+          )}
 
           {/* Budget */}
           <View style={[styles.inputWrapper, styles.fieldWithErrorWrap]} onStartShouldSetResponder={() => true}>
@@ -237,54 +451,46 @@ const PostJob = ({ onJobPosted }) => {
               onChangeText={(value) => handleChange('budget', value.replace(/\D/g, ''))}
               keyboardType="number-pad"
               style={styles.inputField}
-              onFocus={() => {
-                setTimeout(() => { scrollViewRef.current?.scrollToEnd({ animated: true }); }, 100);
-              }}
+              onFocus={scrollToEndDelayed}
             />
           </View>
 
-          {/* Gender */}
-          <View style={styles.fieldContainer}>
-            <Text style={styles.label}>{t('postJob.genderPreference')}</Text>
-            <View style={styles.fieldWithErrorWrap}>
-              <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.gender }]} pointerEvents="none" />
-              <View style={styles.genderContainer}>
-                {genders.map((gen) => (
-                  <TouchableOpacity
-                    key={gen}
-                    style={[styles.genderButton, formData.gender === gen && styles.genderButtonActive]}
-                    onPress={() => handleChange('gender', gen)}
-                  >
-                    <Text style={[styles.genderText, formData.gender === gen && styles.genderTextActive]}>
-                      {t('gender.' + (gen === 'Any' ? 'any' : gen.toLowerCase()))}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          {!isDelivery ? (
+            <>
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>{t('postJob.genderPreference')}</Text>
+                <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.gender }]} pointerEvents="none" />
+                  <View style={styles.genderContainer}>
+                    {genders.map((gen) => (
+                      <TouchableOpacity
+                        key={gen}
+                        style={[styles.genderButton, formData.gender === gen && styles.genderButtonActive]}
+                        onPress={() => handleChange('gender', gen)}
+                      >
+                        <Text style={[styles.genderText, formData.gender === gen && styles.genderTextActive]}>
+                          {t('gender.' + (gen === 'Any' ? 'any' : gen.toLowerCase()))}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
 
-          {/* Description */}
-          <View 
-            ref={descriptionInputRef}
-            style={styles.descriptionWrapper} 
-            onStartShouldSetResponder={() => true}
-          >
-            <Input
-              label={t('postJob.jobDescriptionOptional')}
-              placeholder={t('postJob.jobDescriptionPlaceholder')}
-              value={formData.description}
-              onChangeText={(value) => handleChange('description', value)}
-              multiline
-              numberOfLines={2}
-              style={styles.inputField}
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 500);
-              }}
-            />
-          </View>
+              <View style={styles.descriptionWrapper} onStartShouldSetResponder={() => true}>
+                <Input
+                  label={t('postJob.jobDescriptionOptional')}
+                  placeholder={t('postJob.jobDescriptionPlaceholder')}
+                  value={formData.description}
+                  onChangeText={(value) => handleChange('description', value)}
+                  multiline
+                  numberOfLines={2}
+                  style={styles.inputField}
+                  onFocus={scrollToEndDelayed}
+                />
+              </View>
+            </>
+          ) : null}
 
           {/* Submit Button */}
           <TouchableOpacity
@@ -318,6 +524,10 @@ const PostJob = ({ onJobPosted }) => {
             category: '',
             address: '',
             pincode: '',
+            deliveryFromAddress: '',
+            deliveryFromPincode: '',
+            deliveryToAddress: '',
+            deliveryToPincode: '',
             budget: '',
             gender: '',
             description: '',
@@ -348,6 +558,10 @@ const PostJob = ({ onJobPosted }) => {
                     category: '',
                     address: '',
                     pincode: '',
+                    deliveryFromAddress: '',
+                    deliveryFromPincode: '',
+                    deliveryToAddress: '',
+                    deliveryToPincode: '',
                     budget: '',
                     gender: '',
                     description: '',
@@ -566,6 +780,62 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  deliveryRouteContainer: {
+    marginTop: spacing.sm,
+    gap: spacing.md,
+  },
+  deliveryLegCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.cardBackground,
+  },
+  deliveryLegCardFrom: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary.main,
+  },
+  deliveryLegCardTo: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success.main,
+  },
+  deliveryLegTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 2,
+    gap: spacing.xs,
+  },
+  deliveryLegLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text.primary,
+    letterSpacing: 0.3,
+  },
+  deliveryLegDash: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  deliveryLegHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    flex: 1,
+    flexShrink: 1,
+  },
+  deliveryMicroHint: {
+    ...typography.small,
+    color: colors.text.muted,
+    marginBottom: spacing.sm,
+  },
+  deliveryPinRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  deliveryPinField: {
+    flex: 1,
+    maxWidth: 240,
   },
 });
 

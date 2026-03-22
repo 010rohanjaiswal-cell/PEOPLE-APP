@@ -3,7 +3,7 @@
  * Implements commission/dues wallet as per APP_COMPLETE_DOCUMENTATION.md
  */
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const RECENT_ACTIVITY_PER_PAGE = 7;
+
 const Wallet = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -51,8 +53,6 @@ const Wallet = () => {
   const [paymentWebViewVisible, setPaymentWebViewVisible] = useState(false);
   const [cashfreeOrderId, setCashfreeOrderId] = useState(null);
   const [cashfreePaymentSessionId, setCashfreePaymentSessionId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   /** amount → loading (API) → submitted (confirmation) */
@@ -69,6 +69,8 @@ const Wallet = () => {
   const [bankVerifyLoading, setBankVerifyLoading] = useState(false);
   const [bankVerifyError, setBankVerifyError] = useState('');
   const bankVerifySeq = useRef(0);
+
+  const [recentActivityPage, setRecentActivityPage] = useState(1);
 
   const loadWallet = async () => {
     try {
@@ -144,14 +146,45 @@ const Wallet = () => {
     return () => clearTimeout(delay);
   }, [bankModalVisible, bankAccountNumber, bankIfsc]);
 
-  // Reset pagination to page 1 when payment transactions change
+  /** Earnings credited (ledger) + withdrawals still processing — sorted by date */
+  const recentActivityItems = useMemo(() => {
+    const items = [];
+    realLedger.forEach((row) => {
+      if (row.type === 'CREDIT_JOB_PAYMENT') {
+        items.push({
+          key: `ledger-${row._id}`,
+          kind: 'earning',
+          title: t('wallet.earningsCredited'),
+          amount: Number(row.amount),
+          date: row.createdAt,
+        });
+      }
+    });
+    withdrawals.forEach((w) => {
+      const st = String(w.status || '').toUpperCase();
+      if (st === 'REQUESTED' || st === 'PROCESSING') {
+        items.push({
+          key: `wd-${w.id}`,
+          kind: 'withdrawal',
+          title: t('wallet.withdrawalProcessing'),
+          amount: Number(w.amount),
+          date: w.createdAt,
+        });
+      }
+    });
+    items.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return items;
+  }, [realLedger, withdrawals, t]);
+
+  const recentActivityTotalPages = Math.max(
+    1,
+    Math.ceil(recentActivityItems.length / RECENT_ACTIVITY_PER_PAGE)
+  );
+
   useEffect(() => {
-    const paymentTransactions = wallet?.paymentTransactions || [];
-    const totalPages = Math.ceil(paymentTransactions.length / itemsPerPage);
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(1);
-    }
-  }, [wallet?.paymentTransactions?.length, currentPage, itemsPerPage]);
+    const tp = Math.max(1, Math.ceil(recentActivityItems.length / RECENT_ACTIVITY_PER_PAGE));
+    setRecentActivityPage((p) => Math.min(p, tp));
+  }, [recentActivityItems.length]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -382,7 +415,7 @@ const Wallet = () => {
     }
   };
 
-  const renderWalletActivity = () => {
+  const renderRecentActivity = () => {
     const formatDate = (date) => {
       if (!date) return '—';
       const d = new Date(date);
@@ -395,216 +428,56 @@ const Wallet = () => {
       });
     };
 
-    const labelForType = (type) => {
-      switch (type) {
-        case 'CREDIT_JOB_PAYMENT':
-          return 'Earnings credited';
-        case 'DEBIT_COMMISSION':
-          return 'Platform commission';
-        case 'WITHDRAW_REQUESTED':
-          return 'Withdrawal requested';
-        case 'WITHDRAW_PAID':
-          return 'Payout sent to bank';
-        case 'WITHDRAW_FAILED_REVERSAL':
-          return 'Withdrawal failed — refunded';
-        default:
-          return type || 'Activity';
-      }
-    };
-
-    const signedAmount = (row) => {
-      const n = Number(row.amount);
-      if (Number.isNaN(n)) return '—';
-      const sign = n >= 0 ? '+' : '−';
-      return `${sign}₹${Math.abs(n).toFixed(2)}`;
-    };
+    const start = (recentActivityPage - 1) * RECENT_ACTIVITY_PER_PAGE;
+    const pageItems = recentActivityItems.slice(start, start + RECENT_ACTIVITY_PER_PAGE);
+    const showPagination = recentActivityItems.length > RECENT_ACTIVITY_PER_PAGE;
 
     return (
       <View style={[styles.card, styles.activityCard]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="receipt-long" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>Wallet activity</Text>
+            <MaterialIcons name="update" size={22} color={colors.text.primary} />
+            <Text style={styles.cardTitle}>{t('wallet.recentActivity')}</Text>
           </View>
         </View>
-        <Text style={styles.withdrawalsHint}>
-          Credits from completed jobs and withdrawals. Pull to refresh.
-        </Text>
-        {realLedger.length === 0 ? (
-          <Text style={styles.emptyWithdrawalsText}>No activity yet.</Text>
-        ) : (
-          realLedger.map((row) => (
-            <View key={String(row._id)} style={styles.wdRow}>
-              <View style={styles.wdLeft}>
-                <Text style={styles.wdLedgerTitle}>{labelForType(row.type)}</Text>
-                <Text style={styles.wdDate}>{formatDate(row.createdAt)}</Text>
-              </View>
-              <Text
-                style={[
-                  styles.wdLedgerAmount,
-                  Number(row.amount) >= 0 ? styles.wdLedgerCredit : styles.wdLedgerDebit,
-                ]}
-              >
-                {signedAmount(row)}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
-    );
-  };
-
-  const renderWithdrawalHistory = () => {
-    const formatDate = (date) => {
-      if (!date) return '—';
-      const d = new Date(date);
-      return d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    };
-
-    const badgeStyle = (status) => {
-      if (status === 'PAID') return [styles.wdBadge, styles.wdBadgePaid];
-      if (status === 'FAILED') return [styles.wdBadge, styles.wdBadgeFailed];
-      if (status === 'REQUESTED' || status === 'PROCESSING') return [styles.wdBadge, styles.wdBadgeProcessing];
-      return [styles.wdBadge, styles.wdBadgeProcessing];
-    };
-
-    const label = (status) => {
-      if (status === 'PAID') return 'Paid';
-      if (status === 'FAILED') return 'Failed';
-      if (status === 'REQUESTED' || status === 'PROCESSING') return 'Processing';
-      return 'Processing';
-    };
-
-    return (
-      <View style={[styles.card, styles.withdrawalsCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="swap-horiz" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>Withdrawal history</Text>
-          </View>
-        </View>
-        <Text style={styles.withdrawalsHint}>
-          Status updates when Cashfree confirms the transfer (webhook). Pull to refresh.
-        </Text>
-        {withdrawals.length === 0 ? (
-          <Text style={styles.emptyWithdrawalsText}>No withdrawals yet.</Text>
-        ) : (
-          withdrawals.map((w) => (
-            <View key={w.id} style={styles.wdRow}>
-              <View style={styles.wdLeft}>
-                <Text style={styles.wdAmount}>₹{Number(w.amount).toFixed(2)}</Text>
-                <Text style={styles.wdDate}>{formatDate(w.createdAt)}</Text>
-                {w.status === 'FAILED' && w.failureReason ? (
-                  <Text style={styles.wdFailReason} numberOfLines={2}>
-                    {w.failureReason}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={badgeStyle(w.status)}>
-                <Text style={styles.wdBadgeText}>{label(w.status)}</Text>
-              </View>
-            </View>
-          ))
-        )}
-      </View>
-    );
-  };
-
-  const renderCommissionLedger = () => {
-    const paymentTransactions = wallet?.paymentTransactions || [];
-    const totalPages = Math.ceil(paymentTransactions.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedPayments = paymentTransactions.slice(startIndex, endIndex);
-
-    const formatDate = (date) => {
-      if (!date) return 'N/A';
-      const d = new Date(date);
-      return d.toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    };
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="payment" size={22} color={colors.text.primary} />
-            <Text style={styles.cardTitle}>{t('wallet.paymentHistory')}</Text>
-          </View>
-        </View>
-
-        {paymentTransactions.length === 0 ? (
-          <View style={styles.emptyInner}>
-            <MaterialIcons name="account-balance-wallet" size={40} color={colors.text.muted} />
-            <Text style={styles.emptyInnerText}>{t('wallet.noPaymentRecords')}</Text>
-            <Text style={styles.emptyInnerSubText}>
-              {t('wallet.paymentHistoryEmptyDesc')}
-            </Text>
-          </View>
+        {recentActivityItems.length === 0 ? (
+          <Text style={styles.emptyWithdrawalsText}>{t('wallet.recentActivityEmpty')}</Text>
         ) : (
           <>
-            {paginatedPayments.map((payment) => (
-              <View
-                key={payment.id}
-                style={styles.ledgerItem}
-              >
-                <View style={styles.ledgerTopRow}>
-                  <View style={styles.ledgerTitleContainer}>
-                    <Text style={styles.ledgerJobTitle} numberOfLines={1}>
-                      {t('wallet.duesPayment')}
-                    </Text>
-                    <Text style={styles.ledgerDate}>
-                      {formatDate(payment.paymentDate)}
-                    </Text>
-                    {payment.transactionCount > 1 && (
-                      <Text style={styles.ledgerSubText}>
-                        {payment.transactionCount} {t('wallet.transactionsCleared')}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.ledgerRightTop}>
-                    <Text style={styles.ledgerDuesLabel}>{t('wallet.amountPaid')}</Text>
-                    <Text style={[styles.ledgerDuesAmount, styles.paymentAmount]}>
-                      ₹{payment.amount}
-                    </Text>
-                    <View style={[styles.ledgerStatusBadge, styles.statusPaidBadge]}>
-                      <Text style={[styles.ledgerStatusText, styles.statusPaidText]}>
-                        {t('wallet.paid')}
-                      </Text>
-                    </View>
-                  </View>
+            {pageItems.map((item) => (
+              <View key={item.key} style={styles.wdRow}>
+                <View style={styles.wdLeft}>
+                  <Text style={styles.wdLedgerTitle}>{item.title}</Text>
+                  <Text style={styles.wdDate}>{formatDate(item.date)}</Text>
                 </View>
+                <Text
+                  style={[
+                    styles.wdLedgerAmount,
+                    item.kind === 'earning' ? styles.wdLedgerCredit : styles.wdWithdrawalProcessingAmount,
+                  ]}
+                >
+                  {item.kind === 'earning' ? '+' : ''}₹{Math.abs(item.amount).toFixed(2)}
+                </Text>
               </View>
             ))}
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
+            {showPagination ? (
               <View style={styles.paginationContainer}>
                 <View style={styles.paginationButtons}>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  {Array.from({ length: recentActivityTotalPages }, (_, i) => i + 1).map((pageNum) => (
                     <TouchableOpacity
                       key={pageNum}
                       style={[
                         styles.paginationButton,
-                        currentPage === pageNum && styles.paginationButtonActive,
+                        recentActivityPage === pageNum && styles.paginationButtonActive,
                       ]}
-                      onPress={() => setCurrentPage(pageNum)}
+                      onPress={() => setRecentActivityPage(pageNum)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${t('wallet.page')} ${pageNum}`}
                     >
                       <Text
                         style={[
                           styles.paginationButtonText,
-                          currentPage === pageNum && styles.paginationButtonTextActive,
+                          recentActivityPage === pageNum && styles.paginationButtonTextActive,
                         ]}
                       >
                         {pageNum}
@@ -613,13 +486,12 @@ const Wallet = () => {
                   ))}
                 </View>
               </View>
-            )}
+            ) : null}
           </>
         )}
       </View>
     );
   };
-
 
   if (loading && !refreshing) {
     return (
@@ -651,9 +523,7 @@ const Wallet = () => {
       ) : null}
 
       {renderWalletBalanceCard()}
-      {renderWalletActivity()}
-      {renderWithdrawalHistory()}
-      {renderCommissionLedger()}
+      {renderRecentActivity()}
     </ScrollView>
 
       {/* Pay Dues Confirmation Modal */}
@@ -1156,22 +1026,13 @@ const styles = StyleSheet.create({
   wdLedgerCredit: {
     color: colors.success.dark,
   },
-  wdLedgerDebit: {
-    color: colors.error.main,
+  wdWithdrawalProcessingAmount: {
+    color: colors.warning.main,
   },
   lockedBalanceHint: {
     ...typography.small,
     color: colors.text.secondary,
     marginTop: spacing.xs,
-  },
-  withdrawalsCard: {
-    marginBottom: 0,
-  },
-  withdrawalsHint: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginBottom: spacing.md,
-    lineHeight: 18,
   },
   emptyWithdrawalsText: {
     ...typography.small,
@@ -1190,40 +1051,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: spacing.sm,
   },
-  wdAmount: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.text.primary,
-  },
   wdDate: {
     ...typography.small,
     color: colors.text.secondary,
     marginTop: 2,
-  },
-  wdFailReason: {
-    ...typography.small,
-    color: colors.error.main,
-    marginTop: spacing.xs,
-  },
-  wdBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  wdBadgeProcessing: {
-    backgroundColor: colors.pending.light,
-  },
-  wdBadgePaid: {
-    backgroundColor: colors.success.light,
-  },
-  wdBadgeFailed: {
-    backgroundColor: colors.error.light,
-  },
-  wdBadgeText: {
-    ...typography.small,
-    fontWeight: '700',
-    color: colors.text.primary,
   },
   textInput: {
     borderWidth: 1,
@@ -1245,98 +1076,10 @@ const styles = StyleSheet.create({
     color: colors.success.main,
     marginTop: spacing.xs,
   },
-  statusPaidBadge: {
-    backgroundColor: colors.success.light,
-  },
-  statusPaidText: {
-    color: colors.success.dark,
-  },
-  emptyInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.lg,
-    gap: spacing.sm,
-  },
-  emptyInnerText: {
-    ...typography.body,
-    color: colors.text.muted,
-  },
-  emptyInnerSubText: {
-    ...typography.small,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-  ledgerItem: {
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-  },
-  ledgerItemPaid: {
-    backgroundColor: colors.cardBackground,
-    borderColor: colors.border,
-  },
-  ledgerItemUnpaid: {
-    backgroundColor: colors.cardBackground,
-    borderColor: colors.border,
-  },
-  ledgerTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  ledgerTitleContainer: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  ledgerJobTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  ledgerDate: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  ledgerRightTop: {
-    alignItems: 'flex-end',
-    marginRight: spacing.sm,
-  },
-  ledgerDuesLabel: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  ledgerDuesAmount: {
-    ...typography.body,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  ledgerStatusBadge: {
-    marginTop: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-  },
-  ledgerStatusText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  ledgerSubText: {
-    ...typography.small,
-    color: colors.text.muted,
-    marginTop: spacing.xs / 2,
-    fontSize: 11,
-  },
-  paymentAmount: {
-    color: colors.success.main,
-    fontSize: 16,
-  },
   paginationContainer: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     paddingTop: spacing.md,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   paginationButtons: {

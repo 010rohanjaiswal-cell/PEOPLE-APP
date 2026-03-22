@@ -11,6 +11,8 @@ import { colors, spacing, typography } from '../../theme';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLanguage } from '../../context/LanguageContext';
+import { isDeliveryJob } from '../../utils/jobDisplay';
+import { JobLocationBlock } from '../../components/job/JobLocationBlock';
 
 const History = () => {
   const { t } = useLanguage();
@@ -66,8 +68,9 @@ const History = () => {
   }, [jobs.length, currentPage, totalPages]);
 
   const renderJobItem = ({ item }) => {
+    const delivery = isDeliveryJob(item);
     return (
-      <View style={styles.jobCard}>
+    <View style={styles.jobCard}>
         <View style={styles.jobHeader}>
           <Text style={styles.jobTitle} numberOfLines={1}>
             {item.title}
@@ -79,9 +82,7 @@ const History = () => {
         </View>
 
         <Text style={styles.jobCategory}>{item.category}</Text>
-        <Text style={styles.jobAddress}>
-          {item.address}, {item.pincode}
-        </Text>
+        <JobLocationBlock job={item} t={t} />
 
         <View style={styles.jobMetaRow}>
           <View style={styles.jobMeta}>
@@ -98,7 +99,7 @@ const History = () => {
           )}
         </View>
 
-        {item.description ? (
+        {!delivery && item.description ? (
           <Text style={styles.jobDescription} numberOfLines={2}>
             {item.description}
           </Text>
@@ -258,11 +259,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text.secondary,
     marginBottom: spacing.xs,
-  },
-  jobAddress: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
   },
   jobMetaRow: {
     flexDirection: 'row',

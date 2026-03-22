@@ -22,6 +22,12 @@ const {
   notifyPaymentSent,
 } = require('../services/notificationService');
 
+function isDeliveryCategory(category) {
+  return String(category || '')
+    .trim()
+    .toLowerCase() === 'delivery';
+}
+
 /**
  * Helper function to get the appropriate profile photo for a user
  * Priority: Freelancer verification profilePhoto > User profilePhoto > null
@@ -73,25 +79,89 @@ router.post('/jobs', authenticate, async (req, res) => {
       });
     }
 
-    const { title, category, address, pincode, budget, gender, description } = req.body || {};
+    const {
+      title,
+      category,
+      address,
+      pincode,
+      budget,
+      gender,
+      description,
+      deliveryFromAddress,
+      deliveryFromPincode,
+      deliveryToAddress,
+      deliveryToPincode,
+    } = req.body || {};
 
-    // Basic validation to mirror mobile form
-    if (!title || !category || !address || !pincode || !budget || !gender) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required job fields',
-      });
+    const catTrim = String(category || '').trim();
+    const hasDeliveryPayload =
+      String(deliveryFromAddress || '').trim().length > 0 &&
+      String(deliveryFromPincode || '').trim().length > 0 &&
+      String(deliveryToAddress || '').trim().length > 0 &&
+      String(deliveryToPincode || '').trim().length > 0;
+    /** Delivery if category says so OR all four delivery fields are sent (covers client / casing issues). */
+    const delivery = isDeliveryCategory(catTrim) || hasDeliveryPayload;
+
+    let addressStr;
+    let pincodeStr;
+    let normalizedGender;
+    let descriptionStr;
+    /** Stored category (normalized to Delivery when using delivery payload). */
+    let categoryStored = catTrim;
+    let deliveryFields = {
+      deliveryFromAddress: null,
+      deliveryFromPincode: null,
+      deliveryToAddress: null,
+      deliveryToPincode: null,
+    };
+
+    if (delivery) {
+      const fromA = String(deliveryFromAddress || '').trim();
+      const fromP = String(deliveryFromPincode || '').trim();
+      const toA = String(deliveryToAddress || '').trim();
+      const toP = String(deliveryToPincode || '').trim();
+      if (!title || !fromA || !fromP || !toA || !toP || budget === undefined || budget === null) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required delivery job fields (from/to address and pincode)',
+        });
+      }
+      if (!/^\d{6}$/.test(fromP) || !/^\d{6}$/.test(toP)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid pincode (6 digits required for from and to)',
+        });
+      }
+      pincodeStr = toP;
+      addressStr = `From: ${fromA} (${fromP}) → To: ${toA} (${toP})`;
+      normalizedGender = 'any';
+      descriptionStr = null;
+      deliveryFields = {
+        deliveryFromAddress: fromA,
+        deliveryFromPincode: fromP,
+        deliveryToAddress: toA,
+        deliveryToPincode: toP,
+      };
+      categoryStored = isDeliveryCategory(catTrim) && catTrim ? catTrim : 'Delivery';
+    } else {
+      if (!title || !catTrim || !address || !pincode || budget === undefined || budget === null || !gender) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required job fields',
+        });
+      }
+      normalizedGender = String(gender).toLowerCase();
+      if (!['male', 'female', 'any'].includes(normalizedGender)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid gender value',
+        });
+      }
+      addressStr = String(address).trim();
+      pincodeStr = String(pincode).trim();
+      descriptionStr = description ? String(description).trim() : null;
     }
 
-    const normalizedGender = String(gender).toLowerCase();
-    if (!['male', 'female', 'any'].includes(normalizedGender)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid gender value',
-      });
-    }
-
-    const pincodeStr = String(pincode).trim();
     let state = null;
     let jobLat = null;
     let jobLng = null;
@@ -112,15 +182,16 @@ router.post('/jobs', authenticate, async (req, res) => {
     const job = await Job.create({
       client: user._id || user.id,
       title: String(title).trim(),
-      category: String(category).trim(),
-      address: String(address).trim(),
+      category: categoryStored,
+      address: addressStr,
       pincode: pincodeStr,
       state,
       jobLat,
       jobLng,
       budget: Number(budget),
       gender: normalizedGender,
-      description: description ? String(description).trim() : null,
+      description: descriptionStr,
+      ...deliveryFields,
       status: 'open',
     });
 
@@ -343,17 +414,55 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
       });
     }
 
-    const { title, category, address, pincode, budget, gender, description } = req.body || {};
+    const {
+      title,
+      category,
+      address,
+      pincode,
+      budget,
+      gender,
+      description,
+      deliveryFromAddress,
+      deliveryFromPincode,
+      deliveryToAddress,
+      deliveryToPincode,
+    } = req.body || {};
 
     if (title) job.title = String(title).trim();
     if (category) job.category = String(category).trim();
-    if (address) job.address = String(address).trim();
-    if (pincode) {
-      job.pincode = String(pincode).trim();
+
+    const catNow = job.category;
+    const delivery = isDeliveryCategory(catNow);
+
+    if (delivery) {
+      const fromA = deliveryFromAddress !== undefined ? String(deliveryFromAddress).trim() : job.deliveryFromAddress;
+      const fromP = deliveryFromPincode !== undefined ? String(deliveryFromPincode).trim() : job.deliveryFromPincode;
+      const toA = deliveryToAddress !== undefined ? String(deliveryToAddress).trim() : job.deliveryToAddress;
+      const toP = deliveryToPincode !== undefined ? String(deliveryToPincode).trim() : job.deliveryToPincode;
+      if (!fromA || !fromP || !toA || !toP) {
+        return res.status(400).json({
+          success: false,
+          error: 'Delivery jobs require from/to address and pincode',
+        });
+      }
+      if (!/^\d{6}$/.test(fromP) || !/^\d{6}$/.test(toP)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid pincode (6 digits required for from and to)',
+        });
+      }
+      job.deliveryFromAddress = fromA;
+      job.deliveryFromPincode = fromP;
+      job.deliveryToAddress = toA;
+      job.deliveryToPincode = toP;
+      job.address = `From: ${fromA} (${fromP}) → To: ${toA} (${toP})`;
+      job.pincode = toP;
+      job.gender = 'any';
+      job.description = null;
       try {
         const [pinInfo, coords] = await Promise.all([
-          getStateFromPincode(job.pincode),
-          getCoordsFromPincode(job.pincode),
+          getStateFromPincode(toP),
+          getCoordsFromPincode(toP),
         ]);
         job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
         if (coords) {
@@ -364,21 +473,47 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
           job.jobLng = null;
         }
       } catch (e) {
-        console.warn('Could not resolve state/coords for pincode on update:', job.pincode, e.message);
+        console.warn('Could not resolve state/coords for delivery to-pincode on update:', toP, e.message);
       }
+    } else {
+      if (address) job.address = String(address).trim();
+      if (pincode) {
+        job.pincode = String(pincode).trim();
+        try {
+          const [pinInfo, coords] = await Promise.all([
+            getStateFromPincode(job.pincode),
+            getCoordsFromPincode(job.pincode),
+          ]);
+          job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
+          if (coords) {
+            job.jobLat = coords.lat;
+            job.jobLng = coords.lng;
+          } else {
+            job.jobLat = null;
+            job.jobLng = null;
+          }
+        } catch (e) {
+          console.warn('Could not resolve state/coords for pincode on update:', job.pincode, e.message);
+        }
+      }
+      job.deliveryFromAddress = null;
+      job.deliveryFromPincode = null;
+      job.deliveryToAddress = null;
+      job.deliveryToPincode = null;
+      if (gender) {
+        const normalizedGender = String(gender).toLowerCase();
+        if (!['male', 'female', 'any'].includes(normalizedGender)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid gender value',
+          });
+        }
+        job.gender = normalizedGender;
+      }
+      if (description !== undefined) job.description = description ? String(description).trim() : null;
     }
+
     if (budget !== undefined) job.budget = Number(budget);
-    if (gender) {
-      const normalizedGender = String(gender).toLowerCase();
-      if (!['male', 'female', 'any'].includes(normalizedGender)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid gender value',
-        });
-      }
-      job.gender = normalizedGender;
-    }
-    if (description !== undefined) job.description = description ? String(description).trim() : null;
 
     await job.save();
 
