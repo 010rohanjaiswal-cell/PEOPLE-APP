@@ -112,6 +112,25 @@ const jobSchema = new mongoose.Schema(
         },
       },
     ],
+    /** Non-delivery jobs: freelancers apply; client accepts one (similar to offers but no amount). */
+    applications: [
+      {
+        freelancer: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        status: {
+          type: String,
+          enum: ['pending', 'accepted', 'rejected'],
+          default: 'pending',
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     // Marks that freelancer has fully completed this job from their side
     freelancerCompleted: {
       type: Boolean,

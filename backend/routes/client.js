@@ -20,6 +20,7 @@ const {
   notifyWorkDone,
   notifyPaymentReceived,
   notifyPaymentSent,
+  notifyApplicationRejected,
 } = require('../services/notificationService');
 
 function isDeliveryCategory(category) {
@@ -407,10 +408,12 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     }
 
     const hasAcceptedOffers = job.offers && job.offers.some((offer) => offer.status === 'accepted');
-    if (hasAcceptedOffers) {
+    const hasAcceptedApplications =
+      job.applications && job.applications.some((a) => a.status === 'accepted');
+    if (hasAcceptedOffers || hasAcceptedApplications) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot edit job with accepted offers',
+        error: 'Cannot edit job with an accepted offer or application',
       });
     }
 
@@ -566,10 +569,12 @@ router.delete('/jobs/:id', authenticate, async (req, res) => {
     }
 
     const hasAcceptedOffers = job.offers && job.offers.some((offer) => offer.status === 'accepted');
-    if (hasAcceptedOffers) {
+    const hasAcceptedApplications =
+      job.applications && job.applications.some((a) => a.status === 'accepted');
+    if (hasAcceptedOffers || hasAcceptedApplications) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot delete job with accepted offers',
+        error: 'Cannot delete job with an accepted offer or application',
       });
     }
 
@@ -694,6 +699,27 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
       }
     });
 
+    // Reject all pending applications (another path was chosen)
+    const clientForApps = await User.findById(user._id || user.id).select('fullName').lean();
+    const clientNameApps = clientForApps?.fullName || 'The client';
+    if (job.applications && job.applications.length) {
+      for (const app of job.applications) {
+        if (app.status === 'pending') {
+          app.status = 'rejected';
+          try {
+            await notifyApplicationRejected(
+              app.freelancer.toString(),
+              clientNameApps,
+              job.title,
+              'other_selected'
+            );
+          } catch (e) {
+            console.error('Notify application not selected:', e);
+          }
+        }
+      }
+    }
+
     // Assign job to freelancer and update status
     job.assignedFreelancer = offer.freelancer._id || offer.freelancer;
     job.status = 'assigned';
@@ -815,6 +841,250 @@ router.post('/jobs/:id/reject-offer', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to reject offer',
+    });
+  }
+});
+
+/**
+ * Get pending applications for a job (sorted by freelancer rating, high to low)
+ * GET /api/client/jobs/:id/applications
+ */
+router.get('/jobs/:id/applications', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can view job applications',
+      });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    }).populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount');
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    const pending = (job.applications || []).filter((a) => a.status === 'pending');
+    pending.sort((a, b) => {
+      const ra = a.freelancer?.averageRating ?? 0;
+      const rb = b.freelancer?.averageRating ?? 0;
+      return rb - ra;
+    });
+
+    res.json({
+      success: true,
+      applications: pending,
+    });
+  } catch (error) {
+    console.error('Error getting job applications:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get applications',
+    });
+  }
+});
+
+/**
+ * Accept an application (assigns freelancer; rejects other pending applications and offers)
+ * POST /api/client/jobs/:id/accept-application
+ */
+router.post('/jobs/:id/accept-application', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can accept applications',
+      });
+    }
+
+    const { applicationId } = req.body;
+    if (!applicationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Application ID is required',
+      });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    }).populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount');
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'open') {
+      return res.status(400).json({
+        success: false,
+        error: 'Can only accept applications for jobs with status "open"',
+      });
+    }
+
+    const application = job.applications.id(applicationId);
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        error: 'Application not found',
+      });
+    }
+
+    if (application.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: 'Application has already been processed',
+      });
+    }
+
+    // Accept this application
+    application.status = 'accepted';
+
+    const clientDoc = await User.findById(user._id || user.id).select('fullName').lean();
+    const clientName = clientDoc?.fullName || 'The client';
+    const appIdStr = applicationId.toString();
+
+    // Reject other pending applications
+    for (const app of job.applications) {
+      if (app._id.toString() !== appIdStr && app.status === 'pending') {
+        app.status = 'rejected';
+        try {
+          const fid = app.freelancer._id?.toString() || app.freelancer.toString();
+          await notifyApplicationRejected(fid, clientName, job.title, 'other_selected');
+        } catch (e) {
+          console.error('Notify application not selected:', e);
+        }
+      }
+    }
+
+    // Reject all pending offers
+    if (job.offers && job.offers.length) {
+      for (const o of job.offers) {
+        if (o.status === 'pending') {
+          o.status = 'rejected';
+          try {
+            const fid = o.freelancer._id?.toString() || o.freelancer.toString();
+            await notifyOfferRejected(fid, clientName, job.title);
+          } catch (e) {
+            console.error('Notify offer rejected:', e);
+          }
+        }
+      }
+    }
+
+    const freelancerId =
+      application.freelancer._id?.toString() || application.freelancer.toString() || application.freelancer;
+
+    job.assignedFreelancer = freelancerId;
+    job.status = 'assigned';
+
+    await job.save();
+
+    try {
+      await notifyJobAssigned(freelancerId, clientName, job.title);
+    } catch (notifError) {
+      console.error('Error sending job assignment notification:', notifError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Application accepted successfully',
+      job,
+    });
+  } catch (error) {
+    console.error('Error accepting application:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to accept application',
+    });
+  }
+});
+
+/**
+ * Reject a single application
+ * POST /api/client/jobs/:id/reject-application
+ */
+router.post('/jobs/:id/reject-application', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can reject applications',
+      });
+    }
+
+    const { applicationId } = req.body;
+    if (!applicationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Application ID is required',
+      });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    const application = job.applications.id(applicationId);
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        error: 'Application not found',
+      });
+    }
+
+    if (application.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: 'Application has already been processed',
+      });
+    }
+
+    application.status = 'rejected';
+    await job.save();
+
+    try {
+      const client = await User.findById(user._id || user.id).select('fullName').lean();
+      const freelancerId = application.freelancer._id?.toString() || application.freelancer.toString();
+      await notifyApplicationRejected(
+        freelancerId,
+        client?.fullName || 'The client',
+        job.title,
+        'rejected'
+      );
+    } catch (notifError) {
+      console.error('Error sending application rejection notification:', notifError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Application rejected successfully',
+      job,
+    });
+  } catch (error) {
+    console.error('Error rejecting application:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to reject application',
     });
   }
 });

@@ -53,6 +53,18 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  /** Freelancer-only: used to sort job applications (high to low). */
+  averageRating: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5,
+  },
+  ratingCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

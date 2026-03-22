@@ -52,6 +52,29 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
   },
+  deliveryBlockCompact: {
+    marginBottom: spacing.xs,
+  },
+  jobAddressRowCompact: {
+    marginBottom: spacing.xs,
+  },
+  jobAddressRowTight: {
+    marginBottom: 0,
+  },
+  jobAddressCompact: {
+    ...typography.small,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  deliverySubLabelCompact: {
+    ...typography.small,
+    fontSize: 11,
+    color: colors.text.secondary,
+    marginTop: 4,
+    marginBottom: 0,
+  },
 });
 
 /**
@@ -59,8 +82,9 @@ const styles = StyleSheet.create({
  * @param {object} props.job
  * @param {object} [props.translated] — optional Hindi translations
  * @param {function} props.t — i18n
+ * @param {boolean} [props.compact] — tighter list-card layout (e.g. Available Jobs)
  */
-export function JobLocationBlock({ job, translated, t }) {
+export function JobLocationBlock({ job, translated, t, compact = false }) {
   const tr = translated || {};
   const address = tr.address ?? job.address ?? '';
   const delivery = isDeliveryJob(job);
@@ -70,6 +94,20 @@ export function JobLocationBlock({ job, translated, t }) {
   const dToP = tr.deliveryToPincode ?? job.deliveryToPincode;
 
   if (delivery && (dFromA || dToA)) {
+    if (compact) {
+      return (
+        <View style={[styles.deliveryBlock, styles.deliveryBlockCompact]}>
+          <View style={styles.deliveryTextCol}>
+            <Text style={styles.deliverySubLabelCompact}>
+              {t('jobs.fromShort')} · {dFromA || '—'} · {dFromP || '—'}
+            </Text>
+            <Text style={[styles.deliverySubLabelCompact, { marginTop: 6 }]}>
+              {t('jobs.toShort')} · {dToA || '—'} · {dToP || '—'}
+            </Text>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.deliveryBlock}>
         <Text style={styles.deliveryRouteLabel}>{t('jobs.deliveryRoute')}</Text>
@@ -91,9 +129,11 @@ export function JobLocationBlock({ job, translated, t }) {
   }
 
   return (
-    <View style={styles.jobAddressRow}>
-      <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-      <Text style={styles.jobAddress}>{address}</Text>
+    <View style={[styles.jobAddressRow, compact && styles.jobAddressRowCompact]}>
+      <MaterialIcons name="location-on" size={compact ? 15 : 16} color={colors.text.secondary} />
+      <Text style={compact ? styles.jobAddressCompact : styles.jobAddress} numberOfLines={compact ? 3 : undefined}>
+        {address}
+      </Text>
     </View>
   );
 }
@@ -101,7 +141,7 @@ export function JobLocationBlock({ job, translated, t }) {
 /**
  * Meta row: gender + pincode OR delivery pin route.
  */
-export function JobMetaGenderOrDeliveryPins({ job, translated, t }) {
+export function JobMetaGenderOrDeliveryPins({ job, translated, t, style }) {
   const tr = translated || {};
   const pincode = tr.pincode ?? job.pincode ?? '';
   const delivery = isDeliveryJob(job);
@@ -110,9 +150,8 @@ export function JobMetaGenderOrDeliveryPins({ job, translated, t }) {
 
   if (delivery) {
     return (
-      <View style={styles.jobMetaLeft}>
+      <View style={[styles.jobMetaLeft, style]}>
         <View style={styles.jobMeta}>
-          <MaterialIcons name="local-shipping" size={16} color={colors.text.secondary} />
           <Text style={styles.jobMetaText}>
             {dFromP || '—'} → {dToP || '—'}
           </Text>
@@ -122,7 +161,7 @@ export function JobMetaGenderOrDeliveryPins({ job, translated, t }) {
   }
 
   return (
-    <View style={styles.jobMetaLeft}>
+    <View style={[styles.jobMetaLeft, style]}>
       <View style={styles.jobMeta}>
         <MaterialIcons name="person" size={16} color={colors.text.secondary} />
         <Text style={styles.jobMetaText}>{t('gender.' + (job.gender || 'any'))}</Text>

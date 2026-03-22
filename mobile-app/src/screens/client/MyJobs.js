@@ -24,6 +24,7 @@ import { clientJobsAPI } from '../../api/clientJobs';
 import { translateJobToHindi } from '../../utils/translate';
 import EditJobModal from '../../components/modals/EditJobModal';
 import OffersModal from '../../components/modals/OffersModal';
+import ApplicationsModal from '../../components/modals/ApplicationsModal';
 import BillModal from '../../components/modals/BillModal';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { isDeliveryJob } from '../../utils/jobDisplay';
@@ -40,6 +41,7 @@ const MyJobs = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [offersModalVisible, setOffersModalVisible] = useState(false);
+  const [applicationsModalVisible, setApplicationsModalVisible] = useState(false);
   const [billModalVisible, setBillModalVisible] = useState(false);
   const [freelancerModalVisible, setFreelancerModalVisible] = useState(false);
   const [expandedJobs, setExpandedJobs] = useState({});
@@ -154,6 +156,11 @@ const MyJobs = () => {
     setOffersModalVisible(true);
   };
 
+  const handleViewApplications = (job) => {
+    setSelectedJob(job);
+    setApplicationsModalVisible(true);
+  };
+
   const toggleJobExpansion = (jobId) => {
     setExpandedJobs(prev => ({
       ...prev,
@@ -251,12 +258,19 @@ const MyJobs = () => {
     if (job.status !== 'open') return false;
     const hasAcceptedOffers =
       job.offers && job.offers.some((offer) => offer.status === 'accepted');
-    return !hasAcceptedOffers;
+    const hasAcceptedApplications =
+      job.applications && job.applications.some((a) => a.status === 'accepted');
+    return !hasAcceptedOffers && !hasAcceptedApplications;
   };
 
   const getOffersCount = (job) => {
     if (!job.offers || !Array.isArray(job.offers)) return 0;
     return job.offers.filter((offer) => offer.status === 'pending').length;
+  };
+
+  const getApplicationsCount = (job) => {
+    if (!job.applications || !Array.isArray(job.applications)) return 0;
+    return job.applications.filter((a) => a.status === 'pending').length;
   };
 
   const renderJobItem = ({ item }) => {
@@ -271,6 +285,7 @@ const MyJobs = () => {
 
     const statusStyle = getStatusBadgeStyle(item.status);
     const offersCount = getOffersCount(item);
+    const applicationsCount = getApplicationsCount(item);
     const showEditDelete = canEditOrDelete(item);
     // Default to expanded (true) unless explicitly set to false
     const isExpanded = expandedJobs[jobId] !== false;
@@ -357,18 +372,36 @@ const MyJobs = () => {
         {/* Status-based action buttons */}
         <View style={styles.actionsRow}>
           {item.status === 'open' && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.viewOffersButton]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleViewOffers(item);
-              }}
-            >
-              <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
-              <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                {t('jobs.viewOffers')}
-              </Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.viewOffersButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleViewOffers(item);
+                }}
+              >
+                <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
+                <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
+                  {offersCount > 0 ? `${t('jobs.viewOffers')} (${offersCount})` : t('jobs.viewOffers')}
+                </Text>
+              </TouchableOpacity>
+              {!delivery && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.viewApplicationsButton]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleViewApplications(item);
+                  }}
+                >
+                  <MaterialIcons name="assignment" size={18} color={colors.warning.main} />
+                  <Text style={[styles.actionButtonText, { color: colors.warning.main }]}>
+                    {applicationsCount > 0
+                      ? `${t('jobs.viewApplications')} (${applicationsCount})`
+                      : t('jobs.viewApplications')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
 
           {item.status === 'work_done' && (
@@ -450,6 +483,16 @@ const MyJobs = () => {
           setSelectedJob(null);
         }}
         onOfferAccepted={loadJobs}
+      />
+
+      <ApplicationsModal
+        visible={applicationsModalVisible}
+        job={selectedJob}
+        onClose={() => {
+          setApplicationsModalVisible(false);
+          setSelectedJob(null);
+        }}
+        onApplicationAccepted={loadJobs}
       />
 
       <BillModal
@@ -693,6 +736,10 @@ const styles = StyleSheet.create({
   },
   viewOffersButton: {
     borderColor: colors.primary.main,
+    backgroundColor: 'transparent',
+  },
+  viewApplicationsButton: {
+    borderColor: colors.warning.main,
     backgroundColor: 'transparent',
   },
   viewFreelancerButton: {

@@ -22,7 +22,12 @@ const {
   notifyJobAssigned,
   notifyWorkDone,
   notifyJobPickedUp,
+  notifyApplicationReceived,
 } = require('../services/notificationService');
+
+function isDeliveryCategory(category) {
+  return String(category || '').trim().toLowerCase() === 'delivery';
+}
 
 // Use memory storage; we'll stream buffers to Cloudinary
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1060,6 +1065,27 @@ router.get('/jobs/available', authenticate, async (req, res) => {
       });
     }
 
+    const fid = freelancerId.toString();
+    for (const job of jobs) {
+      const apps = job.applications || [];
+      const mine = apps.filter(
+        (a) => a.freelancer && a.freelancer.toString() === fid
+      );
+      const pendingApp = mine.find((a) => a.status === 'pending');
+      if (pendingApp) {
+        job.myApplication = {
+          status: 'pending',
+          applicationId: pendingApp._id,
+        };
+      } else if (mine.some((a) => a.status === 'accepted')) {
+        job.myApplication = { status: 'accepted' };
+      } else if (mine.some((a) => a.status === 'rejected')) {
+        job.myApplication = { status: 'rejected' };
+      } else {
+        job.myApplication = null;
+      }
+    }
+
     res.json({
       success: true,
       jobs,
@@ -1283,6 +1309,13 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       });
     }
 
+    if (!isDeliveryCategory(job.category)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Pickup is only for Delivery jobs. Use Apply for other categories.',
+      });
+    }
+
     job.assignedFreelancer = freelancerId;
     job.status = 'assigned';
     await job.save();
@@ -1323,6 +1356,130 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to pickup job',
+    });
+  }
+});
+
+/**
+ * Apply to a non-delivery job (client must accept; cannot re-apply while pending)
+ * POST /api/freelancer/jobs/:id/apply
+ */
+router.post('/jobs/:id/apply', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only freelancers can apply to jobs',
+      });
+    }
+
+    const freelancerId = user._id || user.id;
+
+    const unpaidCommissions = await CommissionTransaction.find({
+      freelancer: freelancerId,
+      duesPaid: false,
+    }).lean();
+
+    const totalDues = unpaidCommissions.reduce(
+      (sum, c) => sum + (c.platformCommission || 0),
+      0
+    );
+
+    const DUES_THRESHOLD = 450;
+    if (totalDues >= DUES_THRESHOLD) {
+      return res.status(400).json({
+        success: false,
+        error: `You have unpaid dues of ₹${totalDues}. Please pay dues in Wallet to apply for jobs.`,
+      });
+    }
+
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.client && job.client.toString() === freelancerId.toString()) {
+      return res.status(400).json({
+        success: false,
+        error: 'You cannot apply to your own job',
+      });
+    }
+
+    if (job.status !== 'open' || job.assignedFreelancer) {
+      return res.status(400).json({
+        success: false,
+        error: 'This job is no longer open for applications',
+      });
+    }
+
+    if (isDeliveryCategory(job.category)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Use Pickup for delivery jobs',
+      });
+    }
+
+    if (!job.applications) job.applications = [];
+
+    const mine = job.applications.filter(
+      (a) => a.freelancer.toString() === freelancerId.toString()
+    );
+    const hasPending = mine.some((a) => a.status === 'pending');
+    if (hasPending) {
+      return res.status(400).json({
+        success: false,
+        error: 'You already have a pending application for this job',
+      });
+    }
+
+    if (mine.some((a) => a.status === 'accepted')) {
+      return res.status(400).json({
+        success: false,
+        error: 'You are already assigned to this job',
+      });
+    }
+
+    job.applications.push({
+      freelancer: freelancerId,
+      status: 'pending',
+      createdAt: new Date(),
+    });
+
+    await job.save();
+
+    try {
+      const freelancer = await User.findById(freelancerId).select('fullName').lean();
+      await notifyApplicationReceived(
+        job.client.toString(),
+        freelancer?.fullName || 'A freelancer',
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending application notification:', notifError);
+    }
+
+    const lastApp = job.applications[job.applications.length - 1];
+
+    res.json({
+      success: true,
+      message: 'Application submitted successfully',
+      jobId: job._id,
+      myApplication: {
+        status: 'pending',
+        applicationId: lastApp?._id,
+      },
+    });
+  } catch (error) {
+    console.error('Error applying to job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to apply',
     });
   }
 });

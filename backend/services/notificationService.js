@@ -263,6 +263,43 @@ async function notifyJobPickedUp(clientId, freelancerName, jobTitle) {
 }
 
 /**
+ * Client: new application on a non-delivery job
+ */
+async function notifyApplicationReceived(clientId, freelancerName, jobTitle) {
+  return createNotification({
+    userId: clientId,
+    type: 'application_received',
+    title: 'New Application',
+    message: `${freelancerName} applied for "${jobTitle}"`,
+    data: {
+      jobTitle,
+      freelancerName,
+    },
+  });
+}
+
+/**
+ * Freelancer: application rejected or not selected
+ */
+async function notifyApplicationRejected(freelancerId, clientName, jobTitle, reason) {
+  const msg =
+    reason === 'other_selected'
+      ? `${clientName} selected another freelancer for "${jobTitle}"`
+      : `${clientName} did not select your application for "${jobTitle}"`;
+  return createNotification({
+    userId: freelancerId,
+    type: 'application_rejected',
+    title: 'Application Update',
+    message: msg,
+    data: {
+      jobTitle,
+      clientName,
+      reason: reason || 'rejected',
+    },
+  });
+}
+
+/**
  * Create notification for chat message
  */
 async function notifyChatMessage(recipientId, senderName, messagePreview) {
@@ -290,5 +327,7 @@ module.exports = {
   notifyWorkDone,
   notifyJobPickedUp,
   notifyChatMessage,
+  notifyApplicationReceived,
+  notifyApplicationRejected,
 };
 

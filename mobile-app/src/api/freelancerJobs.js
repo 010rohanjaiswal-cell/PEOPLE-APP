@@ -43,6 +43,16 @@ export const freelancerJobsAPI = {
   },
 
   /**
+   * Apply to a non-delivery job (client accepts later)
+   * @param {string} jobId - Job ID
+   * @returns {Promise}
+   */
+  applyJob: async (jobId) => {
+    const response = await apiClient.post(`/api/freelancer/jobs/${jobId}/apply`);
+    return response.data;
+  },
+
+  /**
    * Make an offer on a job
    * @param {string} jobId - Job ID
    * @param {Object} offerData - Offer details (amount, message)

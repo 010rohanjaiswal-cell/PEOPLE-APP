@@ -14,7 +14,6 @@ import {
   Alert,
   Modal,
   TextInput,
-  Dimensions,
   ScrollView,
   RefreshControl,
 } from 'react-native';
@@ -29,8 +28,6 @@ import { useLocation } from '../../context/LocationContext';
 import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
@@ -50,6 +47,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [pickupJob, setPickupJob] = useState(null);
   const [pickingUp, setPickingUp] = useState(false);
   const [pickupSuccessModalVisible, setPickupSuccessModalVisible] = useState(false);
+  const [applyingJobId, setApplyingJobId] = useState(null);
+  const [applySuccessModalVisible, setApplySuccessModalVisible] = useState(false);
   const [offerSuccessModalVisible, setOfferSuccessModalVisible] = useState(false);
   const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
   const [offerErrorMessage, setOfferErrorMessage] = useState('');
@@ -248,6 +247,46 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     setPickupModalVisible(true);
   };
 
+  const submitApply = async (job) => {
+    const jid = job._id || job.id;
+    try {
+      setApplyingJobId(jid);
+      const response = await freelancerJobsAPI.applyJob(jid);
+      if (response.success) {
+        loadJobs();
+        setApplySuccessModalVisible(true);
+      } else {
+        Alert.alert(t('common.error'), response.error || t('jobs.failedApply'));
+      }
+    } catch (err) {
+      console.error('Error applying to job:', err);
+      Alert.alert(
+        t('common.error'),
+        err.response?.data?.error || err.message || t('jobs.failedApply')
+      );
+    } finally {
+      setApplyingJobId(null);
+    }
+  };
+
+  const handleApplyJob = (job) => {
+    if (!canWork) {
+      Alert.alert(t('jobs.cannotApply'), t('jobs.cannotApplyPayDues'));
+      return;
+    }
+    if (hasActiveJob) {
+      Alert.alert(t('jobs.cannotApply'), t('jobs.cannotApplyActiveJob'));
+      return;
+    }
+    const myApp = job.myApplication;
+    if (myApp?.status === 'pending') return;
+
+    Alert.alert(t('jobs.applyConfirmTitle'), t('jobs.applyConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('jobs.apply'), onPress: () => submitApply(job) },
+    ]);
+  };
+
   const confirmPickupJob = async () => {
     if (!pickupJob) return;
 
@@ -409,16 +448,22 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     const title = tr ? tr.title : item.title;
     const delivery = isDeliveryJob(item);
     const description = tr ? tr.description : (item.description || '');
-    
-    // Debug log for first job only to avoid spam
-    if (item._id === jobs[0]?._id || item.id === jobs[0]?.id) {
-      console.log('Rendering job - canWork:', canWork, 'canPickup:', canPickup, 'canMakeOffer:', canMakeOffer, 'isPickedUp:', isPickedUp, 'hasActiveJob:', hasActiveJob);
-    }
+    const myApp = item.myApplication;
+    const isWaitingApp = !delivery && myApp?.status === 'pending';
+    const canApply =
+      canWork &&
+      !isPickedUp &&
+      !hasActiveJob &&
+      !isWaitingApp &&
+      (myApp == null || myApp.status === 'rejected');
+    const applyingThis = applyingJobId === jobId;
 
     return (
     <View style={styles.jobCard}>
       <View style={styles.jobHeader}>
-        <Text style={styles.jobTitle}>{title}</Text>
+        <Text style={styles.jobTitle} numberOfLines={2} ellipsizeMode="tail">
+          {title}
+        </Text>
         <Text style={styles.jobBudget}>₹{item.budget}</Text>
       </View>
       {!delivery && description ? (
@@ -442,18 +487,24 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           ) : null}
         </View>
       ) : null}
-      <JobLocationBlock job={item} translated={tr} t={t} />
+      <JobLocationBlock job={item} translated={tr} t={t} compact />
       <View style={styles.jobMetaRow}>
-        <JobMetaGenderOrDeliveryPins job={item} translated={tr} t={t} />
-        {item.distanceKm != null && (
-          <View style={styles.jobMeta}>
+        <JobMetaGenderOrDeliveryPins
+          job={item}
+          translated={tr}
+          t={t}
+          style={styles.jobMetaMainInner}
+        />
+        {item.distanceKm != null ? (
+          <View style={styles.jobMetaDistance}>
             <MaterialIcons name="near-me" size={16} color={colors.text.secondary} />
             <Text style={styles.jobMetaText}>{item.distanceKm} {t('jobs.kmAway')}</Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.actionsRow}>
+        {delivery ? (
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -482,6 +533,44 @@ const AvailableJobs = ({ onJobPickedUp }) => {
               : t('jobs.pickupJob')}
           </Text>
         </TouchableOpacity>
+        ) : (
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            styles.applyButton,
+            (!canApply || isPickedUp || applyingThis) && styles.actionButtonDisabled,
+          ]}
+          onPress={() => handleApplyJob(item)}
+          disabled={!canApply || isPickedUp || applyingThis}
+        >
+          {applyingThis ? (
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : (
+            <MaterialIcons
+              name="assignment"
+              size={18}
+              color={canApply && !isPickedUp ? colors.background : colors.text.muted}
+            />
+          )}
+          <Text
+            style={[
+              styles.actionButtonText,
+              styles.applyButtonText,
+              { color: canApply && !isPickedUp ? colors.background : colors.text.muted },
+            ]}
+          >
+            {!canWork
+              ? t('jobs.payDues')
+              : isPickedUp
+              ? t('jobs.alreadyTaken')
+              : hasActiveJob
+              ? t('jobs.alreadyTaken')
+              : isWaitingApp
+              ? t('jobs.waitingForClient')
+              : t('jobs.apply')}
+          </Text>
+        </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[
@@ -803,6 +892,32 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         </View>
       </Modal>
 
+      {/* Apply success (non-delivery) */}
+      <Modal
+        visible={applySuccessModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setApplySuccessModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.successIconContainer}>
+              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
+            </View>
+            <Text style={styles.modalTitle}>{t('jobs.applicationSent')}</Text>
+            <Text style={styles.modalSubtitle}>{t('jobs.applicationSentMsg')}</Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
+                onPress={() => setApplySuccessModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Make Offer Success Modal */}
       <Modal
         visible={offerSuccessModalVisible}
@@ -887,9 +1002,11 @@ const styles = StyleSheet.create({
     color: colors.error.main,
     textAlign: 'center',
   },
+  /** Small side inset so the card can be ~98% of screen; old `spacing.lg` made the list feel ~90% wide. */
   listContent: {
     paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: '1%',
+    width: '100%',
   },
   jobCard: {
     backgroundColor: colors.cardBackground,
@@ -898,25 +1015,31 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    width: SCREEN_WIDTH * 0.97,
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
   },
   jobHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
   jobTitle: {
     ...typography.body,
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
+    flex: 1,
+    minWidth: 0,
+    marginRight: spacing.xs,
   },
   jobBudget: {
     ...typography.body,
     color: colors.primary.main,
     fontWeight: '600',
+    flexShrink: 0,
   },
   jobCategory: {
     ...typography.body,
@@ -936,9 +1059,24 @@ const styles = StyleSheet.create({
   },
   jobMetaRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: spacing.xs,
     marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  jobMetaMainInner: {
+    flex: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
+  },
+  jobMetaDistance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 0,
+    marginLeft: spacing.xs,
   },
   jobMeta: {
     flexDirection: 'row',
@@ -1001,6 +1139,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success.main,
     borderColor: colors.success.main,
   },
+  applyButton: {
+    backgroundColor: colors.warning.main,
+    borderColor: colors.warning.main,
+  },
   makeOfferButton: {
     backgroundColor: colors.primary.main,
     borderColor: colors.primary.main,
@@ -1014,6 +1156,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   pickupButtonText: {
+    color: colors.background,
+  },
+  applyButtonText: {
     color: colors.background,
   },
   makeOfferButtonText: {

@@ -99,6 +99,42 @@ export const clientJobsAPI = {
     const response = await apiClient.get(`/api/client/jobs/${jobId}/offers`);
     return response.data;
   },
+
+  /**
+   * Get applications for a job (pending, sorted by rating high → low)
+   * @param {string} jobId - Job ID
+   * @returns {Promise}
+   */
+  getApplications: async (jobId) => {
+    const response = await apiClient.get(`/api/client/jobs/${jobId}/applications`);
+    return response.data;
+  },
+
+  /**
+   * Accept an application (assigns freelancer)
+   * @param {string} jobId - Job ID
+   * @param {string} applicationId - Application subdocument id
+   * @returns {Promise}
+   */
+  acceptApplication: async (jobId, applicationId) => {
+    const response = await apiClient.post(`/api/client/jobs/${jobId}/accept-application`, {
+      applicationId,
+    });
+    return response.data;
+  },
+
+  /**
+   * Reject an application
+   * @param {string} jobId - Job ID
+   * @param {string} applicationId - Application subdocument id
+   * @returns {Promise}
+   */
+  rejectApplication: async (jobId, applicationId) => {
+    const response = await apiClient.post(`/api/client/jobs/${jobId}/reject-application`, {
+      applicationId,
+    });
+    return response.data;
+  },
 };
 
 export default clientJobsAPI;

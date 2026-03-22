@@ -3,7 +3,7 @@
  * Form to create a new job posting
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import {
   Animated,
   Alert,
   Keyboard,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -43,18 +42,51 @@ const CATEGORY_KEYS = {
   'Other': 'Other',
 };
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+/**
+ * Scroll so the focused field stays just below the top padding of the scroll area
+ * (avoids scrollToEnd / fixed Y which jump to the bottom or wrong position).
+ */
+function createScrollFieldIntoView(scrollViewRef) {
+  return (fieldWrapperRef) => {
+    const scroll = scrollViewRef.current;
+    const field = fieldWrapperRef?.current;
+    if (!scroll || !field || typeof field.measureLayout !== 'function') return;
+
+    const pad = Platform.OS === 'ios' ? 18 : 22;
+    const delay = Platform.OS === 'ios' ? 110 : 160;
+
+    const run = () => {
+      field.measureLayout(
+        scroll,
+        (_x, y) => {
+          scroll.scrollTo({ y: Math.max(0, y - pad), animated: true });
+        },
+        () => {}
+      );
+    };
+    requestAnimationFrame(() => setTimeout(run, delay));
+  };
+}
 
 const PostJob = ({ onJobPosted }) => {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const { gpsEnabled, gpsDenied } = useLocation();
   const scrollViewRef = useRef(null);
+  const scrollFieldIntoView = useMemo(() => createScrollFieldIntoView(scrollViewRef), []);
+  const fromAddrWrapRef = useRef(null);
+  const fromPinWrapRef = useRef(null);
+  const toAddrWrapRef = useRef(null);
+  const toPinWrapRef = useRef(null);
+  const budgetWrapRef = useRef(null);
+  const ndAddressWrapRef = useRef(null);
+  const ndPinWrapRef = useRef(null);
+  const descriptionWrapRef = useRef(null);
   const [keyboardPad, setKeyboardPad] = useState(0);
 
-  /** Offset from screen top → Post Job KeyboardAvoidingView (header + tab strip + safe area). */
+  /** Android: KAV offset. iOS: rely on ScrollView automaticallyAdjustKeyboardInsets + measure scroll. */
   const keyboardVerticalOffset =
-    Platform.OS === 'ios' ? insets.top + 120 : Math.max(insets.top, 12);
+    Platform.OS === 'android' ? Math.max(insets.top, 12) + 100 : 0;
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -71,33 +103,7 @@ const PostJob = ({ onJobPosted }) => {
     };
   }, []);
 
-  /** Scroll so the focused field stays above the keyboard (same idea as budget’s scrollToEnd). */
-  const scrollInputIntoView = (scrollY) => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, scrollY),
-          animated: true,
-        });
-      }, Platform.OS === 'ios' ? 60 : 80);
-    });
-  };
-
-  const scrollToEndDelayed = () => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, Platform.OS === 'ios' ? 100 : 160);
-    });
-  };
-
-  const scrollToStart = () => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      }, 80);
-    });
-  };
+  const focusScrollToField = (ref) => scrollFieldIntoView(ref);
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -271,7 +277,7 @@ const PostJob = ({ onJobPosted }) => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior="padding"
+      behavior={Platform.OS === 'android' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
       <ScrollView
@@ -301,7 +307,6 @@ const PostJob = ({ onJobPosted }) => {
               value={formData.title}
               onChangeText={(value) => handleChange('title', value)}
               style={styles.inputField}
-              onFocus={scrollToStart}
             />
           </View>
 
@@ -338,34 +343,46 @@ const PostJob = ({ onJobPosted }) => {
                 <Text style={styles.deliveryMicroHint}>
                   {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
                 </Text>
-                <View style={styles.fieldWithErrorWrap}>
-                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromAddr }]} pointerEvents="none" />
-                  <Input
-                    label={t('postJob.address')}
-                    placeholder={t('postJob.enterFromAddress')}
-                    value={formData.deliveryFromAddress}
-                    onChangeText={(value) => handleChange('deliveryFromAddress', value)}
-                    multiline
-                    numberOfLines={2}
-                    style={styles.inputField}
-                    onFocus={() => scrollInputIntoView(32)}
-                  />
+                <View
+                  ref={fromAddrWrapRef}
+                  collapsable={false}
+                  style={styles.measureFieldWrap}
+                >
+                  <View style={styles.fieldWithErrorWrap}>
+                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromAddr }]} pointerEvents="none" />
+                    <Input
+                      label={t('postJob.address')}
+                      placeholder={t('postJob.enterFromAddress')}
+                      value={formData.deliveryFromAddress}
+                      onChangeText={(value) => handleChange('deliveryFromAddress', value)}
+                      multiline
+                      numberOfLines={2}
+                      style={styles.inputField}
+                      onFocus={() => focusScrollToField(fromAddrWrapRef)}
+                    />
+                  </View>
                 </View>
                 <View style={styles.deliveryPinRow}>
-                  <View style={[styles.fieldWithErrorWrap, styles.deliveryPinField]}>
-                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromPin }]} pointerEvents="none" />
-                    <Input
-                      label={t('postJob.pincode')}
-                      placeholder={t('postJob.pincodePlaceholder')}
-                      value={formData.deliveryFromPincode}
-                      onChangeText={(value) =>
-                        handleChange('deliveryFromPincode', value.replace(/\D/g, '').slice(0, 6))
-                      }
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      style={styles.inputField}
-                      onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.08)}
-                    />
+                  <View
+                    ref={fromPinWrapRef}
+                    collapsable={false}
+                    style={[styles.deliveryPinField, styles.measureFieldWrap]}
+                  >
+                    <View style={styles.fieldWithErrorWrap}>
+                      <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromPin }]} pointerEvents="none" />
+                      <Input
+                        label={t('postJob.pincode')}
+                        placeholder={t('postJob.pincodePlaceholder')}
+                        value={formData.deliveryFromPincode}
+                        onChangeText={(value) =>
+                          handleChange('deliveryFromPincode', value.replace(/\D/g, '').slice(0, 6))
+                        }
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        style={styles.inputField}
+                        onFocus={() => focusScrollToField(fromPinWrapRef)}
+                      />
+                    </View>
                   </View>
                 </View>
               </View>
@@ -380,69 +397,98 @@ const PostJob = ({ onJobPosted }) => {
                 <Text style={styles.deliveryMicroHint}>
                   {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
                 </Text>
-                <View style={styles.fieldWithErrorWrap}>
-                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toAddr }]} pointerEvents="none" />
-                  <Input
-                    label={t('postJob.address')}
-                    placeholder={t('postJob.enterToAddress')}
-                    value={formData.deliveryToAddress}
-                    onChangeText={(value) => handleChange('deliveryToAddress', value)}
-                    multiline
-                    numberOfLines={2}
-                    style={styles.inputField}
-                    onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.16)}
-                  />
+                <View
+                  ref={toAddrWrapRef}
+                  collapsable={false}
+                  style={styles.measureFieldWrap}
+                >
+                  <View style={styles.fieldWithErrorWrap}>
+                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toAddr }]} pointerEvents="none" />
+                    <Input
+                      label={t('postJob.address')}
+                      placeholder={t('postJob.enterToAddress')}
+                      value={formData.deliveryToAddress}
+                      onChangeText={(value) => handleChange('deliveryToAddress', value)}
+                      multiline
+                      numberOfLines={2}
+                      style={styles.inputField}
+                      onFocus={() => focusScrollToField(toAddrWrapRef)}
+                    />
+                  </View>
                 </View>
                 <View style={styles.deliveryPinRow}>
-                  <View style={[styles.fieldWithErrorWrap, styles.deliveryPinField]}>
-                    <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toPin }]} pointerEvents="none" />
-                    <Input
-                      label={t('postJob.pincode')}
-                      placeholder={t('postJob.pincodePlaceholder')}
-                      value={formData.deliveryToPincode}
-                      onChangeText={(value) =>
-                        handleChange('deliveryToPincode', value.replace(/\D/g, '').slice(0, 6))
-                      }
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      style={styles.inputField}
-                      onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.24)}
-                    />
+                  <View
+                    ref={toPinWrapRef}
+                    collapsable={false}
+                    style={[styles.deliveryPinField, styles.measureFieldWrap]}
+                  >
+                    <View style={styles.fieldWithErrorWrap}>
+                      <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toPin }]} pointerEvents="none" />
+                      <Input
+                        label={t('postJob.pincode')}
+                        placeholder={t('postJob.pincodePlaceholder')}
+                        value={formData.deliveryToPincode}
+                        onChangeText={(value) =>
+                          handleChange('deliveryToPincode', value.replace(/\D/g, '').slice(0, 6))
+                        }
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        style={styles.inputField}
+                        onFocus={() => focusScrollToField(toPinWrapRef)}
+                      />
+                    </View>
                   </View>
                 </View>
               </View>
             </View>
           ) : (
             <>
-              <View style={styles.fieldWithErrorWrap}>
-                <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
-                <Input
-                  label={t('postJob.address')}
-                  placeholder={t('postJob.enterAddress')}
-                  value={formData.address}
-                  onChangeText={(value) => handleChange('address', value)}
-                  style={styles.inputField}
-                  onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.1)}
-                />
+              <View
+                ref={ndAddressWrapRef}
+                collapsable={false}
+                style={styles.measureFieldWrap}
+              >
+                <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
+                  <Input
+                    label={t('postJob.address')}
+                    placeholder={t('postJob.enterAddress')}
+                    value={formData.address}
+                    onChangeText={(value) => handleChange('address', value)}
+                    style={styles.inputField}
+                    onFocus={() => focusScrollToField(ndAddressWrapRef)}
+                  />
+                </View>
               </View>
-              <View style={styles.fieldWithErrorWrap}>
-                <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
-                <Input
-                  label={t('postJob.pincode')}
-                  placeholder={t('postJob.pincodePlaceholder')}
-                  value={formData.pincode}
-                  onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  style={styles.inputField}
-                  onFocus={() => scrollInputIntoView(SCREEN_HEIGHT * 0.15)}
-                />
+              <View
+                ref={ndPinWrapRef}
+                collapsable={false}
+                style={styles.measureFieldWrap}
+              >
+                <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
+                  <Input
+                    label={t('postJob.pincode')}
+                    placeholder={t('postJob.pincodePlaceholder')}
+                    value={formData.pincode}
+                    onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    style={styles.inputField}
+                    onFocus={() => focusScrollToField(ndPinWrapRef)}
+                  />
+                </View>
               </View>
             </>
           )}
 
           {/* Budget */}
-          <View style={[styles.inputWrapper, styles.fieldWithErrorWrap]} onStartShouldSetResponder={() => true}>
+          <View
+            ref={budgetWrapRef}
+            collapsable={false}
+            style={[styles.inputWrapper, styles.fieldWithErrorWrap, styles.measureFieldWrap]}
+            onStartShouldSetResponder={() => true}
+          >
             <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.budget }]} pointerEvents="none" />
             <Input
               label={t('postJob.budget')}
@@ -451,7 +497,7 @@ const PostJob = ({ onJobPosted }) => {
               onChangeText={(value) => handleChange('budget', value.replace(/\D/g, ''))}
               keyboardType="number-pad"
               style={styles.inputField}
-              onFocus={scrollToEndDelayed}
+              onFocus={() => focusScrollToField(budgetWrapRef)}
             />
           </View>
 
@@ -477,7 +523,12 @@ const PostJob = ({ onJobPosted }) => {
                 </View>
               </View>
 
-              <View style={styles.descriptionWrapper} onStartShouldSetResponder={() => true}>
+              <View
+                ref={descriptionWrapRef}
+                collapsable={false}
+                style={[styles.descriptionWrapper, styles.measureFieldWrap]}
+                onStartShouldSetResponder={() => true}
+              >
                 <Input
                   label={t('postJob.jobDescriptionOptional')}
                   placeholder={t('postJob.jobDescriptionPlaceholder')}
@@ -486,7 +537,7 @@ const PostJob = ({ onJobPosted }) => {
                   multiline
                   numberOfLines={2}
                   style={styles.inputField}
-                  onFocus={scrollToEndDelayed}
+                  onFocus={() => focusScrollToField(descriptionWrapRef)}
                 />
               </View>
             </>
@@ -612,6 +663,8 @@ const styles = StyleSheet.create({
     padding: 2,
     borderRadius: spacing.sm,
   },
+  /** Wrapper for measureLayout + scrollTo (keyboard). No layout change. */
+  measureFieldWrap: {},
   errorBorderBox: {
     ...StyleSheet.absoluteFillObject,
     borderWidth: 2,
