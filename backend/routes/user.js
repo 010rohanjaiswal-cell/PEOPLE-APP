@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const PushToken = require('../models/PushToken');
 const FreelancerVerification = require('../models/FreelancerVerification');
+const FreelancerRating = require('../models/FreelancerRating');
 const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
@@ -114,6 +115,26 @@ router.get('/profile', authenticate, async (req, res) => {
     // When user has both roles (freelancer verification exists), use freelancer name/photo for display
     const displayFullName = (verificationToUse && verificationToUse.fullName) ? verificationToUse.fullName : (user.fullName || null);
 
+    // For freelancers, prefer aggregate computed from per-client ratings (avoids drift if legacy fields exist).
+    let averageRating = user.averageRating ?? 0;
+    let ratingCount = user.ratingCount ?? 0;
+    if (user.role === 'freelancer') {
+      try {
+        const agg = await FreelancerRating.aggregate([
+          { $match: { freelancer: user._id } },
+          { $group: { _id: '$freelancer', averageRating: { $avg: '$rating' }, ratingCount: { $sum: 1 } } },
+        ]);
+        if (agg && agg[0]) {
+          averageRating = agg[0].averageRating != null ? Number(agg[0].averageRating) : 0;
+          ratingCount = agg[0].ratingCount != null ? Number(agg[0].ratingCount) : 0;
+          // Best-effort sync back to user document
+          User.updateOne({ _id: user._id }, { $set: { averageRating, ratingCount } }).catch(() => {});
+        }
+      } catch (e) {
+        // ignore; fall back to stored fields
+      }
+    }
+
     res.json({
       success: true,
       user: {
@@ -125,8 +146,8 @@ router.get('/profile', authenticate, async (req, res) => {
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,
         verification: verificationData,
-        averageRating: user.averageRating ?? 0,
-        ratingCount: user.ratingCount ?? 0,
+        averageRating,
+        ratingCount,
       }
     });
   } catch (error) {

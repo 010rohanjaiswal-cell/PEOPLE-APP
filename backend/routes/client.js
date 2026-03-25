@@ -1251,70 +1251,39 @@ router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
     const freelancerId = job.assignedFreelancer.toString();
 
     // Update freelancer aggregate rating per-client (repeat ratings from same client replace previous).
+    // IMPORTANT: compute aggregate from FreelancerRating collection to avoid drift from legacy counts.
     const session = await mongoose.startSession();
     let newAvg = 0;
     let newCount = 0;
     try {
       await session.withTransaction(async () => {
-        const freelancer = await User.findById(freelancerId)
-          .select('averageRating ratingCount')
-          .session(session)
-          .lean();
-        if (!freelancer) {
+        const freelancerExists = await User.findById(freelancerId).select('_id').session(session).lean();
+        if (!freelancerExists) {
           const err = new Error('Freelancer not found');
           err.statusCode = 404;
           throw err;
         }
 
-        const oldAvg = Number(freelancer.averageRating || 0);
-        const oldCount = Number(freelancer.ratingCount || 0);
+        await FreelancerRating.updateOne(
+          { client: clientId, freelancer: freelancerId },
+          { $set: { rating } },
+          { upsert: true, session }
+        );
 
-        const existing = await FreelancerRating.findOne({ client: clientId, freelancer: freelancerId })
-          .session(session)
-          .lean();
+        const agg = await FreelancerRating.aggregate([
+          { $match: { freelancer: new mongoose.Types.ObjectId(freelancerId) } },
+          { $group: { _id: '$freelancer', averageRating: { $avg: '$rating' }, ratingCount: { $sum: 1 } } },
+        ]).session(session);
 
-        if (existing) {
-          // Replace this client's previous rating without changing count
-          const prev = Number(existing.rating || 0);
-          newCount = oldCount;
-          newAvg = oldCount > 0 ? (oldAvg * oldCount - prev + rating) / oldCount : rating;
+        const computed = agg && agg[0] ? agg[0] : null;
+        newAvg = computed?.averageRating != null ? Number(computed.averageRating) : 0;
+        newCount = computed?.ratingCount != null ? Number(computed.ratingCount) : 0;
 
-          await FreelancerRating.updateOne(
-            { _id: existing._id },
-            { $set: { rating } },
-            { session }
-          );
-
-          await User.updateOne(
-            { _id: freelancerId },
-            { $set: { averageRating: newAvg } },
-            { session }
-          );
-        } else {
-          // First time this client rates this freelancer: increment count
-          newCount = oldCount + 1;
-          newAvg = (oldAvg * oldCount + rating) / newCount;
-
-          await FreelancerRating.create(
-            [
-              {
-                client: clientId,
-                freelancer: freelancerId,
-                rating,
-              },
-            ],
-            { session }
-          );
-
-          await User.updateOne(
-            { _id: freelancerId },
-            {
-              $set: { averageRating: newAvg },
-              $inc: { ratingCount: 1 },
-            },
-            { session }
-          );
-        }
+        await User.updateOne(
+          { _id: freelancerId },
+          { $set: { averageRating: newAvg, ratingCount: newCount } },
+          { session }
+        );
       });
     } catch (e) {
       if (e?.statusCode === 404) {
