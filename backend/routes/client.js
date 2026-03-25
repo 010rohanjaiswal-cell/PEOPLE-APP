@@ -13,6 +13,7 @@ const CommissionTransaction = require('../models/CommissionTransaction');
 const { getStateFromPincode, getCoordsFromPincode } = require('../services/locationService');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
+const FreelancerRating = require('../models/FreelancerRating');
 const {
   notifyOfferAccepted,
   notifyOfferRejected,
@@ -1238,6 +1239,7 @@ router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
       });
     }
 
+    // Per-job rating: keep it one-time (so the job's record stays stable).
     if (job.clientRating != null) {
       return res.status(400).json({
         success: false,
@@ -1245,27 +1247,83 @@ router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
       });
     }
 
+    const clientId = (user._id || user.id).toString();
     const freelancerId = job.assignedFreelancer.toString();
-    const freelancer = await User.findById(freelancerId).select('averageRating ratingCount').lean();
-    if (!freelancer) {
-      return res.status(404).json({
-        success: false,
-        error: 'Freelancer not found',
+
+    // Update freelancer aggregate rating per-client (repeat ratings from same client replace previous).
+    const session = await mongoose.startSession();
+    let newAvg = 0;
+    let newCount = 0;
+    try {
+      await session.withTransaction(async () => {
+        const freelancer = await User.findById(freelancerId)
+          .select('averageRating ratingCount')
+          .session(session)
+          .lean();
+        if (!freelancer) {
+          const err = new Error('Freelancer not found');
+          err.statusCode = 404;
+          throw err;
+        }
+
+        const oldAvg = Number(freelancer.averageRating || 0);
+        const oldCount = Number(freelancer.ratingCount || 0);
+
+        const existing = await FreelancerRating.findOne({ client: clientId, freelancer: freelancerId })
+          .session(session)
+          .lean();
+
+        if (existing) {
+          // Replace this client's previous rating without changing count
+          const prev = Number(existing.rating || 0);
+          newCount = oldCount;
+          newAvg = oldCount > 0 ? (oldAvg * oldCount - prev + rating) / oldCount : rating;
+
+          await FreelancerRating.updateOne(
+            { _id: existing._id },
+            { $set: { rating } },
+            { session }
+          );
+
+          await User.updateOne(
+            { _id: freelancerId },
+            { $set: { averageRating: newAvg } },
+            { session }
+          );
+        } else {
+          // First time this client rates this freelancer: increment count
+          newCount = oldCount + 1;
+          newAvg = (oldAvg * oldCount + rating) / newCount;
+
+          await FreelancerRating.create(
+            [
+              {
+                client: clientId,
+                freelancer: freelancerId,
+                rating,
+              },
+            ],
+            { session }
+          );
+
+          await User.updateOne(
+            { _id: freelancerId },
+            {
+              $set: { averageRating: newAvg },
+              $inc: { ratingCount: 1 },
+            },
+            { session }
+          );
+        }
       });
-    }
-
-    const oldAvg = Number(freelancer.averageRating || 0);
-    const oldCount = Number(freelancer.ratingCount || 0);
-    const newCount = oldCount + 1;
-    const newAvg = (oldAvg * oldCount + rating) / newCount;
-
-    await User.updateOne(
-      { _id: freelancerId },
-      {
-        $set: { averageRating: newAvg },
-        $inc: { ratingCount: 1 },
+    } catch (e) {
+      if (e?.statusCode === 404) {
+        return res.status(404).json({ success: false, error: e.message });
       }
-    );
+      throw e;
+    } finally {
+      session.endSession();
+    }
 
     job.clientRating = rating;
     job.clientRatedAt = new Date();
