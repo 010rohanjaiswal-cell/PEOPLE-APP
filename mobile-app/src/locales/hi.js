@@ -145,8 +145,7 @@ export default {
     cannotApplyPayDues: 'आपके बकाया कमीशन हैं। आवेदन से पहले वॉलेट में बकाया भरें।',
     cannotApplyActiveJob: 'आपके पास पहले से सक्रिय नौकरी है। नई नौकरी पर आवेदन से पहले उसे पूरा करें।',
     failedApply: 'आवेदन भेजने में विफल',
-    applicationSent: 'आवेदन भेजा गया',
-    applicationSentMsg: 'आपका आवेदन भेज दिया गया। क्लाइंट के जवाब का इंतजार है।',
+    appliedSuccessfully: 'सफलतापूर्वक आवेदन किया गया',
     viewApplications: 'आवेदन देखें',
   },
   applications: {
@@ -191,6 +190,11 @@ export default {
     paid: 'भुगतान हो गया',
     paymentSuccessful: 'भुगतान सफल',
     paymentRecordedSuccess: 'भुगतान सफलतापूर्वक रिकॉर्ड किया गया!',
+  },
+  rating: {
+    title: 'फ्रीलांसर को रेट करें',
+    subtitle: 'कृपया रेटिंग दें:',
+    submit: 'रेटिंग जमा करें',
   },
   verification: {
     selectDate: 'तारीख चुनें',

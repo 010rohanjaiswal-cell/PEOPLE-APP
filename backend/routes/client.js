@@ -1188,6 +1188,108 @@ router.post('/jobs/:id/pay', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * Rate the assigned freelancer for a completed job (required after payment)
+ * POST /api/client/jobs/:id/rate-freelancer
+ * Body: { rating: number } where rating is 0..5
+ */
+router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can rate freelancers',
+      });
+    }
+
+    const ratingRaw = req.body?.rating;
+    const rating = Number(ratingRaw);
+    if (ratingRaw === undefined || Number.isNaN(rating) || rating < 0 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rating must be a number between 0 and 5',
+      });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'You can rate only after the job is completed',
+      });
+    }
+
+    if (!job.assignedFreelancer) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job has no assigned freelancer',
+      });
+    }
+
+    if (job.clientRating != null) {
+      return res.status(400).json({
+        success: false,
+        error: 'You have already rated this job',
+      });
+    }
+
+    const freelancerId = job.assignedFreelancer.toString();
+    const freelancer = await User.findById(freelancerId).select('averageRating ratingCount').lean();
+    if (!freelancer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Freelancer not found',
+      });
+    }
+
+    const oldAvg = Number(freelancer.averageRating || 0);
+    const oldCount = Number(freelancer.ratingCount || 0);
+    const newCount = oldCount + 1;
+    const newAvg = (oldAvg * oldCount + rating) / newCount;
+
+    await User.updateOne(
+      { _id: freelancerId },
+      {
+        $set: { averageRating: newAvg },
+        $inc: { ratingCount: 1 },
+      }
+    );
+
+    job.clientRating = rating;
+    job.clientRatedAt = new Date();
+    await job.save();
+
+    res.json({
+      success: true,
+      message: 'Rating submitted successfully',
+      rating: job.clientRating,
+      freelancer: {
+        _id: freelancerId,
+        averageRating: newAvg,
+        ratingCount: newCount,
+      },
+    });
+  } catch (error) {
+    console.error('Error rating freelancer:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to submit rating',
+    });
+  }
+});
+
 module.exports = router;
 
 

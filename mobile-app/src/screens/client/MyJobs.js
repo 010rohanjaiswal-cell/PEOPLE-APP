@@ -372,9 +372,9 @@ const MyJobs = () => {
         {/* Status-based action buttons */}
         <View style={styles.actionsRow}>
           {item.status === 'open' && (
-            <>
+            delivery ? (
               <TouchableOpacity
-                style={[styles.actionButton, styles.viewOffersButton]}
+                style={[styles.actionButton, styles.viewOffersButton, styles.viewOffersButtonDeliveryWide]}
                 onPress={(e) => {
                   e.stopPropagation();
                   handleViewOffers(item);
@@ -385,23 +385,36 @@ const MyJobs = () => {
                   {offersCount > 0 ? `${t('jobs.viewOffers')} (${offersCount})` : t('jobs.viewOffers')}
                 </Text>
               </TouchableOpacity>
-              {!delivery && (
+            ) : (
+              <View style={styles.actionsRowOpenPair}>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.viewApplicationsButton]}
+                  style={[styles.actionButton, styles.viewOffersButton, styles.openJobActionHalf]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleViewOffers(item);
+                  }}
+                >
+                  <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
+                  <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
+                    {offersCount > 0 ? `${t('jobs.viewOffers')} (${offersCount})` : t('jobs.viewOffers')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.viewApplicationsButton, styles.openJobActionHalf]}
                   onPress={(e) => {
                     e.stopPropagation();
                     handleViewApplications(item);
                   }}
                 >
-                  <MaterialIcons name="assignment" size={18} color={colors.warning.main} />
-                  <Text style={[styles.actionButtonText, { color: colors.warning.main }]}>
+                  <MaterialIcons name="assignment" size={18} color={colors.primary.main} />
+                  <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
                     {applicationsCount > 0
                       ? `${t('jobs.viewApplications')} (${applicationsCount})`
                       : t('jobs.viewApplications')}
                   </Text>
                 </TouchableOpacity>
-              )}
-            </>
+              </View>
+            )
           )}
 
           {item.status === 'work_done' && (
@@ -725,6 +738,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  /** Non-delivery open jobs: View Offers + View Applications side by side, 98% screen, ~50% each */
+  actionsRowOpenPair: {
+    width: '98%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+  },
+  openJobActionHalf: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  /** Delivery open jobs: single View Offers button */
+  viewOffersButtonDeliveryWide: {
+    width: '95%',
+    alignSelf: 'center',
+    justifyContent: 'center',
+  },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -739,7 +771,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   viewApplicationsButton: {
-    borderColor: colors.warning.main,
+    borderColor: colors.primary.main,
     backgroundColor: 'transparent',
   },
   viewFreelancerButton: {

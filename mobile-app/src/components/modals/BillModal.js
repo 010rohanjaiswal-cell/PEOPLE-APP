@@ -20,6 +20,8 @@ import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import { paymentAPI } from '../../api';
 import { startPhonePeTransaction } from '../../config/phonepe';
+import RatingModal from './RatingModal';
+import { clientJobsAPI } from '../../api/clientJobs';
 
 const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const { t } = useLanguage();
@@ -28,6 +30,9 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [processing, setProcessing] = useState(false);
   const [merchantOrderId, setMerchantOrderId] = useState(null);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [ratingValue, setRatingValue] = useState(null);
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   const freelancer = job?.assignedFreelancer || {};
   const amount = job?.budget || 0;
@@ -94,8 +99,29 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
 
   const handleSuccessClose = () => {
     setSuccessModalVisible(false);
-    if (onPaymentSuccess) onPaymentSuccess();
-    onClose();
+    setRatingValue(null);
+    setRatingModalVisible(true);
+  };
+
+  const submitRating = async () => {
+    const jobId = job?._id || job?.id;
+    if (!jobId) return;
+    if (ratingValue == null) return;
+    try {
+      setSubmittingRating(true);
+      const resp = await clientJobsAPI.rateFreelancer(jobId, ratingValue);
+      if (!resp?.success) {
+        throw new Error(resp?.error || 'Failed to submit rating');
+      }
+      setRatingModalVisible(false);
+      setSubmittingRating(false);
+      if (onPaymentSuccess) onPaymentSuccess();
+      onClose();
+    } catch (e) {
+      setSubmittingRating(false);
+      setErrorMessage(e?.response?.data?.error || e?.message || 'Failed to submit rating');
+      setErrorModalVisible(true);
+    }
   };
 
   return (
@@ -197,6 +223,15 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
         </View>
       </View>
     </Modal>
+
+    <RatingModal
+      visible={ratingModalVisible}
+      userName={freelancerName}
+      rating={ratingValue}
+      onSetRating={setRatingValue}
+      onSubmit={submitRating}
+      submitting={submittingRating}
+    />
 
     {/* Error Modal */}
     <Modal

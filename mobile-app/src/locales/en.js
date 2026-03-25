@@ -145,8 +145,7 @@ export default {
     cannotApplyPayDues: 'You have unpaid commission dues. Please pay dues in Wallet before applying.',
     cannotApplyActiveJob: 'You already have an active job. Complete it before applying to new jobs.',
     failedApply: 'Failed to submit application',
-    applicationSent: 'Application sent',
-    applicationSentMsg: 'Your application was submitted. Waiting for the client to respond.',
+    appliedSuccessfully: 'Applied Successfully',
     viewApplications: 'View Applications',
   },
   applications: {
@@ -191,6 +190,11 @@ export default {
     paid: 'Paid',
     paymentSuccessful: 'Payment Successful',
     paymentRecordedSuccess: 'Payment recorded successfully!',
+  },
+  rating: {
+    title: 'Rate freelancer',
+    subtitle: 'Please give a rating for',
+    submit: 'Submit Rating',
   },
   verification: {
     selectDate: 'Select date',

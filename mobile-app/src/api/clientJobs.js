@@ -135,6 +135,19 @@ export const clientJobsAPI = {
     });
     return response.data;
   },
+
+  /**
+   * Rate assigned freelancer for a completed job
+   * @param {string} jobId - Job ID
+   * @param {number} rating - 0..5
+   * @returns {Promise}
+   */
+  rateFreelancer: async (jobId, rating) => {
+    const response = await apiClient.post(`/api/client/jobs/${jobId}/rate-freelancer`, {
+      rating,
+    });
+    return response.data;
+  },
 };
 
 export default clientJobsAPI;

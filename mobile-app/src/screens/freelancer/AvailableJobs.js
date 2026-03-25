@@ -281,10 +281,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     const myApp = job.myApplication;
     if (myApp?.status === 'pending') return;
 
-    Alert.alert(t('jobs.applyConfirmTitle'), t('jobs.applyConfirmMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('jobs.apply'), onPress: () => submitApply(job) },
-    ]);
+    submitApply(job);
   };
 
   const confirmPickupJob = async () => {
@@ -900,20 +897,15 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         onRequestClose={() => setApplySuccessModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.successIconContainer}>
-              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
-            </View>
-            <Text style={styles.modalTitle}>{t('jobs.applicationSent')}</Text>
-            <Text style={styles.modalSubtitle}>{t('jobs.applicationSentMsg')}</Text>
-            <View style={[styles.modalActions, styles.modalActionsCentered]}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
-                onPress={() => setApplySuccessModalVisible(false)}
-              >
-                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.modalContent, styles.applySuccessModalContent]}>
+            <Text style={styles.applySuccessText}>{t('jobs.appliedSuccessfully')}</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalSubmitButton, styles.applySuccessOkButton]}
+              onPress={() => setApplySuccessModalVisible(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1140,8 +1132,8 @@ const styles = StyleSheet.create({
     borderColor: colors.success.main,
   },
   applyButton: {
-    backgroundColor: colors.warning.main,
-    borderColor: colors.warning.main,
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   makeOfferButton: {
     backgroundColor: colors.primary.main,
@@ -1177,6 +1169,28 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  applySuccessModalContent: {
+    alignItems: 'stretch',
+    paddingVertical: spacing.xl,
+  },
+  applySuccessText: {
+    ...typography.body,
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  applySuccessOkButton: {
+    alignSelf: 'stretch',
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalTitle: {
     ...typography.h2,

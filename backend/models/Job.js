@@ -131,6 +131,17 @@ const jobSchema = new mongoose.Schema(
         },
       },
     ],
+    /** Client rating for assigned freelancer after payment (0–5). */
+    clientRating: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 5,
+    },
+    clientRatedAt: {
+      type: Date,
+      default: null,
+    },
     // Marks that freelancer has fully completed this job from their side
     freelancerCompleted: {
       type: Boolean,
