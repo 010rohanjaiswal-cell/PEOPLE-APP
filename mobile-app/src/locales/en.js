@@ -130,7 +130,7 @@ export default {
     pleaseSelectCategory: 'Please select a category',
     pleaseEnterAddress: 'Please enter an address',
     pleaseEnterValidPincode: 'Please enter a valid 6-digit pincode',
-    budgetMin10: 'Budget must be at least ₹10',
+    budgetMin10: 'Budget must be at least ₹1',
     pleaseSelectGender: 'Please select a gender preference',
     deliveryRoute: 'Route',
     fromShort: 'From',

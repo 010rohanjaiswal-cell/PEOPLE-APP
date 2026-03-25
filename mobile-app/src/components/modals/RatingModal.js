@@ -49,7 +49,18 @@ const RatingModal = ({ visible, userName, rating, onSetRating, onSubmit, submitt
               activeOpacity={0.8}
               disabled={submitting}
             >
-              <Text style={[styles.zeroText, rating === 0 && styles.zeroTextActive]}>0</Text>
+              <View style={styles.zeroIconRow}>
+                <MaterialIcons
+                  name="remove"
+                  size={18}
+                  color={rating === 0 ? colors.error.main : colors.error.dark}
+                />
+                <MaterialIcons
+                  name="star-border"
+                  size={20}
+                  color={rating === 0 ? colors.error.main : colors.error.dark}
+                />
+              </View>
             </TouchableOpacity>
 
             {Array.from({ length: 5 }).map((_, idx) => {
@@ -132,7 +143,7 @@ const styles = StyleSheet.create({
   },
   zeroPill: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.error.main,
     backgroundColor: colors.background,
     borderRadius: 999,
     paddingHorizontal: spacing.md,
@@ -140,16 +151,13 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   zeroPillActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
+    borderColor: colors.error.main,
+    backgroundColor: colors.error.light,
   },
-  zeroText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.text.secondary,
-  },
-  zeroTextActive: {
-    color: colors.primary.main,
+  zeroIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   submitButton: {
     backgroundColor: colors.primary.main,

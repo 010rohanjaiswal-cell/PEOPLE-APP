@@ -125,6 +125,8 @@ router.get('/profile', authenticate, async (req, res) => {
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,
         verification: verificationData,
+        averageRating: user.averageRating ?? 0,
+        ratingCount: user.ratingCount ?? 0,
       }
     });
   } catch (error) {
@@ -174,6 +176,8 @@ router.put('/profile', authenticate, upload.single('image'), async (req, res) =>
         profilePhoto,
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,
+        averageRating: user.averageRating ?? 0,
+        ratingCount: user.ratingCount ?? 0,
       },
     });
   } catch (error) {

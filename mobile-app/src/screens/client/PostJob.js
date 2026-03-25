@@ -224,7 +224,7 @@ const PostJob = ({ onJobPosted }) => {
     }
 
     const budgetNum = parseFloat(String(formData.budget || '').replace(/,/g, ''));
-    if (!Number.isFinite(budgetNum) || budgetNum < 10) {
+    if (!Number.isFinite(budgetNum) || budgetNum < 1) {
       runErrorBorderAnimation(borderOpacity.budget);
       return;
     }

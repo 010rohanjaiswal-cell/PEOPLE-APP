@@ -63,47 +63,45 @@ const FreelancerDashboard = () => {
     return () => clearInterval(interval);
   }, [checkPermission]);
 
-  // Refresh user profile on mount to get updated profile photo and verification data
-  useEffect(() => {
-    const refreshUserProfile = async () => {
-      try {
-        const profileResponse = await userAPI.getProfile();
-        if (profileResponse.success && profileResponse.user) {
-          await updateUser(profileResponse.user);
-          
-          // Set verification data if available
-          if (profileResponse.user.verification) {
-            setVerification(profileResponse.user.verification);
-          }
-        }
-        
-        // Also try to fetch verification data directly
-        try {
-          const verificationResponse = await verificationAPI.getVerificationStatus();
-          if (verificationResponse.success) {
-            let verificationData = null;
-            if (verificationResponse.verification) {
-              verificationData = verificationResponse.verification;
-            } else if (verificationResponse.data?.verification) {
-              verificationData = verificationResponse.data.verification;
-            } else if (verificationResponse.data) {
-              verificationData = verificationResponse.data;
-            }
-            if (verificationData) {
-              setVerification(verificationData);
-            }
-          }
-        } catch (verificationError) {
-          // Silently fail - verification data is optional
-        }
-      } catch (error) {
-        console.error('Error refreshing user profile:', error);
-        // Silently fail - user data will be updated on next login
-      }
-    };
+  const refreshUserProfile = useCallback(async () => {
+    try {
+      const profileResponse = await userAPI.getProfile();
+      if (profileResponse.success && profileResponse.user) {
+        await updateUser(profileResponse.user);
 
+        if (profileResponse.user.verification) {
+          setVerification(profileResponse.user.verification);
+        }
+      }
+
+      // Also try to fetch verification data directly
+      try {
+        const verificationResponse = await verificationAPI.getVerificationStatus();
+        if (verificationResponse.success) {
+          let verificationData = null;
+          if (verificationResponse.verification) {
+            verificationData = verificationResponse.verification;
+          } else if (verificationResponse.data?.verification) {
+            verificationData = verificationResponse.data.verification;
+          } else if (verificationResponse.data) {
+            verificationData = verificationResponse.data;
+          }
+          if (verificationData) {
+            setVerification(verificationData);
+          }
+        }
+      } catch (verificationError) {
+        // Silently fail - verification data is optional
+      }
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+    }
+  }, [updateUser]);
+
+  // Refresh user profile on mount to get updated profile photo/rating
+  useEffect(() => {
     refreshUserProfile();
-  }, []); // Only run on mount
+  }, [refreshUserProfile]);
 
   const tabs = [
     { key: 'AvailableJobs', labelKey: 'available', icon: 'work', component: AvailableJobsScreen },
@@ -127,7 +125,7 @@ const FreelancerDashboard = () => {
   };
   const ActiveScreen = getActiveScreen();
 
-  const toggleDrawer = () => {
+  const toggleDrawer = async () => {
     if (drawerVisible) {
       // Close drawer
       Animated.timing(drawerAnimation, {
@@ -137,6 +135,8 @@ const FreelancerDashboard = () => {
       }).start(() => setDrawerVisible(false));
     } else {
       // Open drawer
+      // Refresh profile in background; do NOT block drawer (avoids hanging on slow/cold network)
+      refreshUserProfile();
       setDrawerVisible(true);
       Animated.timing(drawerAnimation, {
         toValue: 0,
@@ -329,10 +329,15 @@ const FreelancerDashboard = () => {
                     </Text>
                     <Text style={styles.drawerUserPhone}>{user.phone || ''}</Text>
                   </View>
-                  <View style={styles.drawerRatingRow}>
-                    <MaterialIcons name="star" size={18} color={colors.warning.main} />
-                    <Text style={styles.drawerRatingText}>4.5</Text>
-                  </View>
+                  {Number(user?.ratingCount || 0) > 0 &&
+                  Number.isFinite(Number(user?.averageRating)) ? (
+                    <View style={styles.drawerRatingRow}>
+                      <MaterialIcons name="star" size={18} color={colors.warning.main} />
+                      <Text style={styles.drawerRatingText}>
+                        {Number(user.averageRating).toFixed(1)} ({Number(user.ratingCount)})
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
