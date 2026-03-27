@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const Notification = require('../models/Notification');
+const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 
 /**
  * GET /api/notifications
@@ -18,7 +19,9 @@ router.get('/', authenticate, async (req, res) => {
     const userId = req.user._id || req.user.id;
     const { page = 1, limit = 20, unreadOnly = false } = req.query;
 
-    console.log(`📬 Fetching notifications for user: ${userId}`);
+    if (VERBOSE_NOTIF_LOGS) {
+      console.log(`📬 Fetching notifications for user: ${userId}`);
+    }
 
     const query = { user: userId };
     if (unreadOnly === 'true') {
@@ -36,7 +39,9 @@ router.get('/', authenticate, async (req, res) => {
     const total = await Notification.countDocuments(query);
     const unreadCount = await Notification.countDocuments({ user: userId, read: false });
 
-    console.log(`✅ Found ${notifications.length} notifications, ${unreadCount} unread for user ${userId}`);
+    if (VERBOSE_NOTIF_LOGS) {
+      console.log(`✅ Found ${notifications.length} notifications, ${unreadCount} unread for user ${userId}`);
+    }
 
     res.json({
       success: true,
@@ -67,7 +72,9 @@ router.get('/unread-count', authenticate, async (req, res) => {
     const userId = req.user._id || req.user.id;
     const count = await Notification.countDocuments({ user: userId, read: false });
 
-    console.log(`📊 Unread count for user ${userId}: ${count}`);
+    if (VERBOSE_NOTIF_LOGS) {
+      console.log(`📊 Unread count for user ${userId}: ${count}`);
+    }
 
     res.json({
       success: true,

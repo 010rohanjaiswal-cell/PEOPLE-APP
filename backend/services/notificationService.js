@@ -11,6 +11,7 @@ const PushToken = require('../models/PushToken');
 const { getIO } = require('../config/socketio');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 
 /**
  * Send push notification via Expo Push API (non-blocking)
@@ -19,7 +20,9 @@ async function sendExpoPush(userId, title, body, data = {}) {
   try {
     const tokens = await PushToken.find({ user: userId }).select('expoPushToken').lean();
     if (!tokens.length) {
-      console.log(`📲 No push tokens for user ${userId} – skip Expo push`);
+      if (VERBOSE_NOTIF_LOGS) {
+        console.log(`📲 No push tokens for user ${userId} – skip Expo push`);
+      }
       return;
     }
 
@@ -32,7 +35,9 @@ async function sendExpoPush(userId, title, body, data = {}) {
       channelId: 'default',
     }));
 
-    console.log(`📲 Sending Expo push to ${messages.length} device(s) for user ${userId}`);
+    if (VERBOSE_NOTIF_LOGS) {
+      console.log(`📲 Sending Expo push to ${messages.length} device(s) for user ${userId}`);
+    }
     const { data: result } = await axios.post(EXPO_PUSH_URL, messages, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 10000,
@@ -94,13 +99,15 @@ async function createNotification({ userId, type, title, message, data = {} }) {
       };
       
       const userIdStr = userId.toString();
-      console.log(`📤 Emitting notification to user ${userIdStr} via Socket.io`);
+      if (VERBOSE_NOTIF_LOGS) {
+        console.log(`📤 Emitting notification to user ${userIdStr} via Socket.io`);
+      }
       
-      // Emit to both notification room and user room for reliability
+      // Emit to notifications room (each socket joins both rooms; emitting twice causes duplicates)
       io.to(`notifications_${userIdStr}`).emit('new_notification', notificationData);
-      io.to(`user_${userIdStr}`).emit('new_notification', notificationData);
-      
-      console.log(`✅ Notification emitted to rooms: notifications_${userIdStr}, user_${userIdStr}`);
+      if (VERBOSE_NOTIF_LOGS) {
+        console.log(`✅ Notification emitted to room: notifications_${userIdStr}`);
+      }
     } else {
       console.warn('⚠️ Socket.io not available, notification will only be saved to database');
     }

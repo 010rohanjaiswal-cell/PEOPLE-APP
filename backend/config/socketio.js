@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const { notifyChatMessage } = require('../services/notificationService');
+const VERBOSE_SOCKET_LOGS = process.env.VERBOSE_SOCKET_LOGS === 'true';
 
 let io = null;
 
@@ -57,7 +58,9 @@ const setupSocketIO = (server) => {
   });
 
   io.on('connection', (socket) => {
-    console.log(`✅ User connected: ${socket.userId}`);
+    if (VERBOSE_SOCKET_LOGS) {
+      console.log(`✅ User connected: ${socket.userId}`);
+    }
 
     // Join user's personal room for receiving messages and notifications
     socket.join(`user_${socket.userId}`);
@@ -191,11 +194,15 @@ const setupSocketIO = (server) => {
 
     // Handle disconnect
     socket.on('disconnect', () => {
-      console.log(`❌ User disconnected: ${socket.userId}`);
+      if (VERBOSE_SOCKET_LOGS) {
+        console.log(`❌ User disconnected: ${socket.userId}`);
+      }
     });
   });
 
-  console.log('✅ Socket.io initialized');
+  if (VERBOSE_SOCKET_LOGS) {
+    console.log('✅ Socket.io initialized');
+  }
 };
 
 const getIO = () => {

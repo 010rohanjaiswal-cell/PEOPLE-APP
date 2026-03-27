@@ -59,12 +59,12 @@ const NotificationModal = ({ visible, onClose }) => {
     return () => { cancelled = true; };
   }, [locale, notifications]);
 
-  // Auto-mark all notifications as read when modal opens
+  // Auto-mark all notifications as read once when modal opens (avoid loops on unreadCount updates)
   useEffect(() => {
-    if (visible && unreadCount > 0) {
+    if (visible) {
       markAllAsRead();
     }
-  }, [visible, unreadCount, markAllAsRead]);
+  }, [visible, markAllAsRead]);
 
   const getNotificationIcon = (type) => {
     switch (type) {

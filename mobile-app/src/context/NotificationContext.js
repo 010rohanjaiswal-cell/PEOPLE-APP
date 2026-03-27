@@ -3,7 +3,7 @@
  * Manages notification state and real-time updates
  */
 
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import { notificationsAPI } from '../api';
@@ -21,27 +21,43 @@ export const useNotifications = () => {
 export const NotificationProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   const { socket, isConnected } = useSocket();
+  const userId = useMemo(() => (user?._id || user?.id || null), [user?._id, user?.id]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const notificationIdSetRef = useRef(new Set());
+  const loadInFlightRef = useRef(false);
+  const lastLoadAtRef = useRef(0);
+
+  useEffect(() => {
+    // Keep a fast lookup set for de-duping socket events
+    try {
+      notificationIdSetRef.current = new Set((notifications || []).map((n) => n?._id).filter(Boolean));
+    } catch {
+      notificationIdSetRef.current = new Set();
+    }
+  }, [notifications]);
 
   // Load notifications
   const loadNotifications = useCallback(async (showLoading = true) => {
-    if (!isAuthenticated || !user) {
-      console.log('⚠️ Cannot load notifications: not authenticated or no user');
+    if (!isAuthenticated || !userId) {
       return;
     }
 
     try {
+      // Prevent render-loops and request storms when user object updates frequently
+      if (loadInFlightRef.current) return;
+      const now = Date.now();
+      if (now - lastLoadAtRef.current < 1500) return;
+      lastLoadAtRef.current = now;
+      loadInFlightRef.current = true;
+
       if (showLoading) setLoading(true);
-      console.log('📬 Loading notifications for user:', user._id || user.id);
       const response = await notificationsAPI.getNotifications({ limit: 50 });
-      console.log('📬 Notifications response:', response);
       if (response.success) {
         setNotifications(response.notifications || []);
         setUnreadCount(response.unreadCount || 0);
-        console.log('✅ Loaded notifications:', response.notifications?.length || 0, 'Unread:', response.unreadCount || 0);
       } else {
         console.error('❌ Failed to load notifications:', response.error);
       }
@@ -51,12 +67,13 @@ export const NotificationProvider = ({ children }) => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      loadInFlightRef.current = false;
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   // Load unread count only
   const loadUnreadCount = useCallback(async () => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
 
     try {
       const response = await notificationsAPI.getUnreadCount();
@@ -68,7 +85,7 @@ export const NotificationProvider = ({ children }) => {
       console.error('❌ Error loading unread count:', error);
       console.error('❌ Error details:', error.response?.data || error.message);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId) => {
@@ -131,13 +148,13 @@ export const NotificationProvider = ({ children }) => {
 
   // Load notifications on mount and when user changes
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userId) {
       loadNotifications();
     } else {
       setNotifications([]);
       setUnreadCount(0);
     }
-  }, [isAuthenticated, user, loadNotifications]);
+  }, [isAuthenticated, userId, loadNotifications]);
 
   // Set up Socket.io listener for new notifications
   useEffect(() => {
@@ -154,22 +171,25 @@ export const NotificationProvider = ({ children }) => {
     console.log('✅ Setting up notification listener on socket. Socket ID:', socket.id);
     
     const handleNewNotification = (data) => {
-      console.log('🔔 New notification received via Socket.io:', JSON.stringify(data, null, 2));
       const newNotification = data.notification;
       
       if (!newNotification) {
         console.error('❌ Invalid notification data received:', data);
         return;
       }
-      
-      console.log('📬 Adding notification to list:', newNotification.title);
+
+      const nid = newNotification._id;
+      if (nid && notificationIdSetRef.current.has(nid)) {
+        // Avoid duplicate events (backend may emit to multiple rooms / reconnects)
+        return;
+      }
+      if (nid) notificationIdSetRef.current.add(nid);
       
       // Add notification to the beginning of the list
       setNotifications(prev => {
         // Check if notification already exists (avoid duplicates)
         const exists = prev.some(n => n._id === newNotification._id);
         if (exists) {
-          console.log('⚠️ Notification already exists, skipping duplicate');
           return prev;
         }
         return [newNotification, ...prev];
@@ -178,17 +198,9 @@ export const NotificationProvider = ({ children }) => {
       // Increment unread count if notification is unread
       if (!newNotification.read) {
         setUnreadCount(prev => {
-          const newCount = prev + 1;
-          console.log('📬 Unread count incremented from', prev, 'to', newCount);
-          return newCount;
+          return prev + 1;
         });
       }
-      
-      // Also refresh the full notification list to ensure consistency
-      setTimeout(() => {
-        console.log('🔄 Refreshing notification list after receiving new notification');
-        loadNotifications(false);
-      }, 500);
     };
 
     socket.on('new_notification', handleNewNotification);
@@ -200,18 +212,18 @@ export const NotificationProvider = ({ children }) => {
         socket.off('new_notification', handleNewNotification);
       }
     };
-  }, [socket, isConnected, loadNotifications]);
+  }, [socket, isConnected]);
 
   // Periodically refresh unread count (every 30 seconds)
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
 
     const interval = setInterval(() => {
       loadUnreadCount();
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, user, loadUnreadCount]);
+  }, [isAuthenticated, userId, loadUnreadCount]);
 
   const value = {
     notifications,
