@@ -34,7 +34,7 @@ export const NotificationProvider = ({ children }) => {
     }
 
     try {
-      if (showLoading && !refreshing) setLoading(true);
+      if (showLoading) setLoading(true);
       console.log('📬 Loading notifications for user:', user._id || user.id);
       const response = await notificationsAPI.getNotifications({ limit: 50 });
       console.log('📬 Notifications response:', response);
@@ -52,7 +52,7 @@ export const NotificationProvider = ({ children }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAuthenticated, user, refreshing]);
+  }, [isAuthenticated, user]);
 
   // Load unread count only
   const loadUnreadCount = useCallback(async () => {
