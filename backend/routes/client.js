@@ -13,6 +13,8 @@ const CommissionTransaction = require('../models/CommissionTransaction');
 const { getStateFromPincode, getCoordsFromPincode } = require('../services/locationService');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
+const Wallet = require('../models/Wallet');
+const WalletLedger = require('../models/WalletLedger');
 const FreelancerRating = require('../models/FreelancerRating');
 const {
   notifyOfferAccepted,
@@ -1182,6 +1184,152 @@ router.post('/jobs/:id/pay', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Error marking job as paid:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to mark job as paid',
+    });
+  }
+});
+
+function toRupees(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.round(x * 100) / 100;
+}
+
+async function getOrCreateWallet(userId) {
+  let wallet = await Wallet.findOne({ user: userId });
+  if (!wallet) wallet = await Wallet.create({ user: userId });
+  return wallet;
+}
+
+/**
+ * Mark job as paid by cash (client confirms cash payment)
+ * POST /api/client/jobs/:id/pay-cash
+ *
+ * - marks job completed
+ * - collects 10% commission: deducts from freelancer wallet if available; otherwise creates dues
+ */
+router.post('/jobs/:id/pay-cash', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can mark jobs as paid',
+      });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    }).populate('assignedFreelancer', 'fullName profilePhoto phone');
+
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    if (job.status !== 'work_done') {
+      return res.status(400).json({
+        success: false,
+        error: 'Can only pay for jobs with status "work_done"',
+      });
+    }
+    if (!job.assignedFreelancer) {
+      return res.status(400).json({ success: false, error: 'Job has no assigned freelancer' });
+    }
+
+    const freelancerId = job.assignedFreelancer._id?.toString() || job.assignedFreelancer.toString();
+
+    const jobAmount = toRupees(job.budget || 0);
+    const platformCommission = toRupees(jobAmount * 0.1);
+    const amountReceived = toRupees(Math.max(0, jobAmount - platformCommission));
+
+    // Deduct commission from freelancer withdrawable wallet if possible
+    const wallet = await getOrCreateWallet(freelancerId);
+    const available = toRupees(wallet.availableBalance || 0);
+    const debit = toRupees(Math.min(available, platformCommission));
+    const remaining = toRupees(Math.max(0, platformCommission - debit));
+
+    if (debit > 0) {
+      wallet.availableBalance = toRupees(Math.max(0, wallet.availableBalance - debit));
+      await wallet.save();
+      await WalletLedger.create({
+        walletUser: freelancerId,
+        type: 'DEBIT_COMMISSION',
+        amount: -debit,
+        refType: 'Job',
+        refId: job._id.toString(),
+        meta: { jobId: job._id.toString(), method: 'cash' },
+      });
+    }
+
+    // Record dues: only the remaining commission becomes dues
+    if (remaining > 0) {
+      await CommissionTransaction.create({
+        freelancer: freelancerId,
+        job: job._id,
+        jobTitle: job.title,
+        clientName: null,
+        clientId: user._id || user.id,
+        jobAmount,
+        platformCommission: remaining,
+        amountReceived,
+        duesPaid: false,
+        duesPaidAt: null,
+        duesPaymentOrderId: `CASH_JOB_${job._id.toString()}`,
+      });
+    } else {
+      // Commission fully collected via wallet
+      await CommissionTransaction.create({
+        freelancer: freelancerId,
+        job: job._id,
+        jobTitle: job.title,
+        clientName: null,
+        clientId: user._id || user.id,
+        jobAmount,
+        platformCommission,
+        amountReceived,
+        duesPaid: true,
+        duesPaidAt: new Date(),
+        duesPaymentOrderId: `WALLET_DEBIT_JOB_${job._id.toString()}`,
+      });
+    }
+
+    // Mark job completed
+    job.status = 'completed';
+    await job.save();
+
+    // Notify freelancer about payment received (cash)
+    try {
+      const client = await User.findById(user._id || user.id).select('fullName').lean();
+      await notifyPaymentReceived(
+        freelancerId,
+        client?.fullName || 'The client',
+        amountReceived,
+        job.title
+      );
+      await notifyPaymentSent(
+        user._id?.toString() || user.id,
+        job.assignedFreelancer?.fullName || 'The freelancer',
+        jobAmount,
+        job.title
+      );
+    } catch (notifError) {
+      console.error('Error sending payment notification:', notifError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Cash payment recorded successfully',
+      job,
+      commission: {
+        platformCommission,
+        deductedFromWallet: debit,
+        remainingDues: remaining,
+      },
+    });
+  } catch (error) {
+    console.error('Error marking job paid by cash:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to mark job as paid',

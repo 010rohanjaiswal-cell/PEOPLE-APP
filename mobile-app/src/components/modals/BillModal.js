@@ -74,6 +74,22 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
     }
   };
 
+  const handlePayCash = async () => {
+    if (!job?._id) return;
+    setProcessing(true);
+    setErrorMessage('');
+    try {
+      const resp = await clientJobsAPI.payJobCash(job._id);
+      if (!resp?.success) throw new Error(resp?.error || 'Failed to record cash payment');
+      setSuccessModalVisible(true);
+    } catch (e) {
+      setErrorMessage(e?.response?.data?.error || e?.message || 'Failed to record cash payment');
+      setErrorModalVisible(true);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const confirmJobPayment = async (merchantOrderIdToCheck) => {
     const maxRetries = 10;
     const pollInterval = 3000;
@@ -183,8 +199,8 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose} style={styles.cancelButton} size="lg" textStyle={styles.footerButtonText}>
-              Cancel
+            <Button variant="outline" onPress={handlePayCash} style={styles.cancelButton} size="lg" textStyle={styles.footerButtonText} disabled={processing}>
+              Pay Cash
             </Button>
             <Button onPress={handlePay} style={styles.payButton} disabled={processing} size="lg" textStyle={styles.footerButtonText}>
               {processing ? <ActivityIndicator color="#fff" size="small" /> : 'Pay'}

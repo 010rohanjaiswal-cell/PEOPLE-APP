@@ -91,6 +91,16 @@ export const clientJobsAPI = {
   },
 
   /**
+   * Mark job as paid by cash (deduct commission from freelancer wallet if possible)
+   * @param {string} jobId - Job ID
+   * @returns {Promise}
+   */
+  payJobCash: async (jobId) => {
+    const response = await apiClient.post(`/api/client/jobs/${jobId}/pay-cash`);
+    return response.data;
+  },
+
+  /**
    * Get offers for a job
    * @param {string} jobId - Job ID
    * @returns {Promise} List of offers
