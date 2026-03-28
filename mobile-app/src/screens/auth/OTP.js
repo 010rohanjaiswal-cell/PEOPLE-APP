@@ -77,7 +77,8 @@ const OTP = ({ navigation, route }) => {
       if (!deviceId || typeof deviceId !== 'string') {
         deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       }
-      const result = await authAPI.verifyOTP(formattedPhone, otp, deviceId, forceLogin);
+      const shouldForceLogin = forceLogin === true;
+      const result = await authAPI.verifyOTP(formattedPhone, otp, deviceId, shouldForceLogin);
 
       if (result.success) {
         await loginWithToken(result.token, result.user);
@@ -206,7 +207,7 @@ const OTP = ({ navigation, route }) => {
 
               {/* Submit Button with Error */}
               <TouchableOpacity
-                onPress={handleVerifyOTP}
+                onPress={() => handleVerifyOTP(false)}
                 disabled={!validateOTP(otp) || loading}
                 style={[styles.submitButton, (!validateOTP(otp) || loading) && styles.submitButtonDisabled]}
                 activeOpacity={0.7}

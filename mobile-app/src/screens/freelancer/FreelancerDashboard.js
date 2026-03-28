@@ -53,6 +53,14 @@ const FreelancerDashboard = () => {
   const [verification, setVerification] = useState(null);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
 
+  const formatRatingCount = (rawCount) => {
+    const count = Number(rawCount || 0);
+    if (!Number.isFinite(count) || count <= 0) return '0';
+    if (count < 1000) return String(Math.floor(count));
+    if (count < 1000000) return `${Math.floor(count / 1000)}k`;
+    return `${Math.floor(count / 1000000)}M`;
+  };
+
   const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
 
   // Re-check GPS on/off every 10 seconds so we show or hide jobs correctly
@@ -334,7 +342,7 @@ const FreelancerDashboard = () => {
                     <View style={styles.drawerRatingRow}>
                       <MaterialIcons name="star" size={18} color={colors.warning.main} />
                       <Text style={styles.drawerRatingText}>
-                        {Number(user.averageRating).toFixed(1)} ({Number(user.ratingCount)})
+                        {Number(user.averageRating).toFixed(1)} ({formatRatingCount(user.ratingCount)})
                       </Text>
                     </View>
                   ) : null}

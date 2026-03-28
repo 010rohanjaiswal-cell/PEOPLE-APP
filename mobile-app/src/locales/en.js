@@ -249,6 +249,7 @@ export default {
     recentActivityEmpty: 'No recent activity yet.',
     earningsCredited: 'Earnings credited',
     withdrawalProcessing: 'Withdrawal processing',
+    duesPaidActivity: 'Dues paid',
   },
   orders: {
     failedLoadOrders: 'Failed to load orders',

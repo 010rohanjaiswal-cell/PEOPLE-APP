@@ -3,7 +3,7 @@
  * Manages authentication state
  */
 
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../api';
 import { setUnauthorizedCallback } from '../api/client';
@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateUser = async (userData) => {
+  const updateUser = useCallback(async (userData) => {
     try {
       await AsyncStorage.setItem('userData', JSON.stringify(userData));
       setUser(userData);
@@ -128,19 +128,22 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error updating user:', error);
     }
-  };
+  }, []);
 
-  const value = {
-    user,
-    token,
-    loading,
-    isAuthenticated,
-    isNewUser,
-    login,
-    loginWithToken,
-    logout,
-    updateUser,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      isAuthenticated,
+      isNewUser,
+      login,
+      loginWithToken,
+      logout,
+      updateUser,
+    }),
+    [user, token, loading, isAuthenticated, isNewUser, login, loginWithToken, logout, updateUser]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

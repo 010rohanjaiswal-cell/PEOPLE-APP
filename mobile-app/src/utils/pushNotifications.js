@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { userAPI } from '../api/user';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Show notification when app is in foreground (optional: banner + sound)
 Notifications.setNotificationHandler({
@@ -39,7 +40,15 @@ export async function registerPushTokenAsync() {
     const token = tokenResult?.data;
     if (!token) return null;
 
+    // Avoid spamming backend on every user/profile refresh
+    const key = `pushToken:lastRegistered:${Platform.OS}`;
+    const last = await AsyncStorage.getItem(key);
+    if (last && last === token) {
+      return token;
+    }
+
     await userAPI.registerPushToken(token, Platform.OS);
+    await AsyncStorage.setItem(key, token);
     return token;
   } catch (e) {
     console.warn('Push registration failed:', e?.message);

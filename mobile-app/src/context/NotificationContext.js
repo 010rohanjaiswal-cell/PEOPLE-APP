@@ -29,6 +29,8 @@ export const NotificationProvider = ({ children }) => {
   const notificationIdSetRef = useRef(new Set());
   const loadInFlightRef = useRef(false);
   const lastLoadAtRef = useRef(0);
+  const unreadInFlightRef = useRef(false);
+  const lastUnreadAtRef = useRef(0);
 
   useEffect(() => {
     // Keep a fast lookup set for de-duping socket events
@@ -76,14 +78,22 @@ export const NotificationProvider = ({ children }) => {
     if (!isAuthenticated || !userId) return;
 
     try {
+      // Guard against multiple intervals / rerenders causing request storms
+      if (unreadInFlightRef.current) return;
+      const now = Date.now();
+      if (now - lastUnreadAtRef.current < 1500) return;
+      lastUnreadAtRef.current = now;
+      unreadInFlightRef.current = true;
+
       const response = await notificationsAPI.getUnreadCount();
       if (response.success) {
         setUnreadCount(response.count || 0);
-        console.log('📊 Unread count updated:', response.count || 0);
       }
     } catch (error) {
       console.error('❌ Error loading unread count:', error);
       console.error('❌ Error details:', error.response?.data || error.message);
+    } finally {
+      unreadInFlightRef.current = false;
     }
   }, [isAuthenticated, userId]);
 

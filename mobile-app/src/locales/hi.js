@@ -249,6 +249,7 @@ export default {
     recentActivityEmpty: 'अभी कोई हाल की गतिविधि नहीं।',
     earningsCredited: 'कमाई जमा की गई',
     withdrawalProcessing: 'निकासी प्रक्रिया में',
+    duesPaidActivity: 'बकाया भुगतान',
   },
   orders: {
     failedLoadOrders: 'ऑर्डर लोड नहीं हो सके',

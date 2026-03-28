@@ -22,8 +22,14 @@ const apiClient = axios.create({
   },
 });
 
-// Log API base URL for debugging
-console.log('🔗 API Base URL:', API_BASE_URL);
+const VERBOSE_API_LOGS =
+  process.env.EXPO_PUBLIC_VERBOSE_API_LOGS === '1' ||
+  process.env.EXPO_PUBLIC_VERBOSE_API_LOGS === 'true';
+
+// Log API base URL for debugging (opt-in; logging can slow JS thread)
+if (__DEV__ && VERBOSE_API_LOGS) {
+  console.log('🔗 API Base URL:', API_BASE_URL);
+}
 
 // One-device-one-login: when backend returns 401 (e.g. LOGGED_IN_ELSEWHERE), clear auth state
 let onUnauthorizedCallback = null;
@@ -42,8 +48,10 @@ apiClient.interceptors.request.use(
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-      // Log request for debugging
-      console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+      // Log request for debugging (opt-in; can slow JS thread)
+      if (__DEV__ && VERBOSE_API_LOGS) {
+        console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+      }
     } catch (error) {
       console.error('Error getting auth token:', error);
     }
@@ -58,7 +66,14 @@ apiClient.interceptors.request.use(
 // Response interceptor - Handle errors globally
 apiClient.interceptors.response.use(
   (response) => {
-    console.log('✅ API Response:', response.config.method?.toUpperCase(), response.config.url, response.status);
+    if (__DEV__ && VERBOSE_API_LOGS) {
+      console.log(
+        '✅ API Response:',
+        response.config.method?.toUpperCase(),
+        response.config.url,
+        response.status
+      );
+    }
     return response;
   },
   async (error) => {

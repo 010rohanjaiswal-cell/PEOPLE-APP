@@ -55,9 +55,10 @@ const Wallet = () => {
   const [cashfreePaymentSessionId, setCashfreePaymentSessionId] = useState(null);
 
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
-  /** amount → loading (API) → submitted (confirmation) */
-  const [withdrawPhase, setWithdrawPhase] = useState('amount');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
+  /** loading (API) → submitted (confirmation) */
+  const [withdrawPhase, setWithdrawPhase] = useState('idle');
+  const [withdrawAmount, setWithdrawAmount] = useState(''); // kept for compatibility (no longer user-entered)
+  const [minWithdrawAlertVisible, setMinWithdrawAlertVisible] = useState(false);
 
   const [bankAccount, setBankAccount] = useState(null);
   const [bankModalVisible, setBankModalVisible] = useState(false);
@@ -146,7 +147,7 @@ const Wallet = () => {
     return () => clearTimeout(delay);
   }, [bankModalVisible, bankAccountNumber, bankIfsc]);
 
-  /** Earnings credited (ledger) + withdrawals still processing — sorted by date */
+  /** Earnings (ledger) + dues payments + withdrawals processing — sorted by date */
   const recentActivityItems = useMemo(() => {
     const items = [];
     realLedger.forEach((row) => {
@@ -159,6 +160,17 @@ const Wallet = () => {
           date: row.createdAt,
         });
       }
+    });
+    (wallet?.paymentTransactions || []).forEach((pt) => {
+      const amt = Number(pt.amount || 0);
+      if (!(amt > 0)) return;
+      items.push({
+        key: `dues-${pt.id || pt.orderId}`,
+        kind: 'duesPaid',
+        title: t('wallet.duesPaidActivity'),
+        amount: amt,
+        date: pt.paymentDate || pt.createdAt,
+      });
     });
     withdrawals.forEach((w) => {
       const st = String(w.status || '').toUpperCase();
@@ -174,7 +186,7 @@ const Wallet = () => {
     });
     items.sort((a, b) => new Date(b.date) - new Date(a.date));
     return items;
-  }, [realLedger, withdrawals, t]);
+  }, [realLedger, withdrawals, wallet?.paymentTransactions, t]);
 
   const recentActivityTotalPages = Math.max(
     1,
@@ -255,6 +267,11 @@ const Wallet = () => {
 
   const renderWalletBalanceCard = () => {
     const available = Number(realWallet?.availableBalance || 0);
+    const totalDues = Number(wallet?.totalDues || 0);
+    const withdrawableAfterDues = Number((available - totalDues).toFixed(2));
+    const canWithdraw = withdrawableAfterDues > 0;
+    const hasDues = totalDues > 0;
+    const isNegative = withdrawableAfterDues < 0;
     const bankAdded = bankAccount?.added === true;
 
     return (
@@ -297,8 +314,21 @@ const Wallet = () => {
         </View>
 
         <View style={styles.amountRow}>
-          <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
-          <Text style={styles.noDuesLabel}>Available balance</Text>
+          {isNegative ? (
+            <>
+              <Text style={[styles.noDuesAmount, { color: colors.error.main }]}>
+                ₹{withdrawableAfterDues.toFixed(2)}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
+              <Text style={styles.noDuesLabel}>Available balance</Text>
+              <Text style={[styles.lockedBalanceHint, { marginTop: spacing.xs }]}>
+                Withdrawable after dues: ₹{withdrawableAfterDues.toFixed(2)}
+              </Text>
+            </>
+          )}
           {Number(realWallet?.lockedBalance || 0) > 0 ? (
             <Text style={styles.lockedBalanceHint}>
               ₹{Number(realWallet?.lockedBalance || 0).toFixed(2)} processing (withdrawal in progress)
@@ -309,31 +339,44 @@ const Wallet = () => {
         <TouchableOpacity
           style={[
             styles.payDuesButton,
-            { backgroundColor: colors.primary.main },
-            (!bankAdded || available <= 0) && { opacity: 0.5 },
+            { backgroundColor: isNegative ? colors.error.main : colors.primary.main },
+            (isNegative ? !hasDues : (!bankAdded || !canWithdraw)) && { opacity: 0.5 },
           ]}
           onPress={() => {
-            setWithdrawPhase('amount');
-            const a = Number(realWallet?.availableBalance ?? 0);
-            setWithdrawAmount(a > 0 ? a.toFixed(2) : '');
+            if (isNegative) {
+              // Pay dues to clear negative balance
+              handlePayDues();
+              return;
+            }
+
+            // Withdraw full withdrawable balance (after dues) instantly (no amount entry modal)
+            const full = canWithdraw ? Number(withdrawableAfterDues.toFixed(2)) : 0;
+            if (full < 100) {
+              setMinWithdrawAlertVisible(true);
+              return;
+            }
+            setWithdrawAmount(full.toFixed(2));
             setWithdrawModalVisible(true);
+            submitWithdraw(full);
           }}
-          disabled={!bankAdded || available <= 0}
+          disabled={isNegative ? !hasDues : (!bankAdded || !canWithdraw)}
         >
           <>
-            <MaterialIcons name="north-east" size={20} color="#FFFFFF" />
-            <Text style={styles.payDuesButtonText}>Withdraw</Text>
+            <MaterialIcons name={isNegative ? 'payments' : 'north-east'} size={20} color="#FFFFFF" />
+            <Text style={styles.payDuesButtonText}>{isNegative ? 'Clear Dues' : 'Withdraw'}</Text>
           </>
         </TouchableOpacity>
 
-        {!bankAdded ? <Text style={styles.inlineHint}>Add bank account to withdraw</Text> : null}
+        {!isNegative && !bankAdded ? (
+          <Text style={styles.inlineHint}>Add bank account to withdraw</Text>
+        ) : null}
       </View>
     );
   };
 
-  const submitWithdraw = async () => {
-    const amt = Number(withdrawAmount);
-    const maxAvail = Number(realWallet?.availableBalance ?? 0);
+  const submitWithdraw = async (amount) => {
+    const amt = Number(amount);
+    const maxAvail = Number(((Number(realWallet?.availableBalance ?? 0) - Number(wallet?.totalDues || 0)) || 0).toFixed(2));
     const MIN_WITHDRAW = 100;
     if (!amt || amt <= 0) {
       setPaymentErrorMessage('Enter a valid amount');
@@ -341,12 +384,11 @@ const Wallet = () => {
       return;
     }
     if (amt < MIN_WITHDRAW) {
-      setPaymentErrorMessage(`Minimum withdrawal is ₹${MIN_WITHDRAW} per transfer (Cashfree payout rule).`);
-      setPaymentErrorModalVisible(true);
+      setMinWithdrawAlertVisible(true);
       return;
     }
     if (amt > maxAvail + 0.001) {
-      setPaymentErrorMessage('Amount cannot exceed your available balance.');
+      setPaymentErrorMessage('Amount cannot exceed your withdrawable balance.');
       setPaymentErrorModalVisible(true);
       return;
     }
@@ -357,7 +399,7 @@ const Wallet = () => {
       setWithdrawPhase('submitted');
       await loadWallet();
     } catch (e) {
-      setWithdrawPhase('amount');
+      setWithdrawPhase('idle');
       setPaymentErrorMessage(e?.response?.data?.error || e?.message || 'Withdrawal failed');
       setPaymentErrorModalVisible(true);
     }
@@ -366,7 +408,7 @@ const Wallet = () => {
   const closeWithdrawModal = () => {
     if (withdrawPhase === 'loading') return;
     setWithdrawModalVisible(false);
-    setWithdrawPhase('amount');
+    setWithdrawPhase('idle');
     setWithdrawAmount('');
   };
 
@@ -453,10 +495,13 @@ const Wallet = () => {
                 <Text
                   style={[
                     styles.wdLedgerAmount,
-                    item.kind === 'earning' ? styles.wdLedgerCredit : styles.wdWithdrawalProcessingAmount,
+                    item.kind === 'earning'
+                      ? styles.wdLedgerCredit
+                      : styles.wdWithdrawalProcessingAmount,
                   ]}
                 >
-                  {item.kind === 'earning' ? '+' : ''}₹{Math.abs(item.amount).toFixed(2)}
+                  {item.kind === 'earning' ? '+' : item.kind === 'duesPaid' ? '-' : ''}₹
+                  {Math.abs(item.amount).toFixed(2)}
                 </Text>
               </View>
             ))}
@@ -619,6 +664,34 @@ const Wallet = () => {
         </View>
       </Modal>
 
+      {/* Minimum Withdraw Alert Modal (₹100) */}
+      <Modal
+        visible={minWithdrawAlertVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMinWithdrawAlertVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.errorIconContainer}>
+              <MaterialIcons name="info" size={64} color={colors.warning.main} />
+            </View>
+            <Text style={styles.modalTitle}>Minimum withdrawal</Text>
+            <Text style={styles.modalSubtitle}>
+              Minimum withdrawal is ₹100 per transfer.
+            </Text>
+            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton]}
+                onPress={() => setMinWithdrawAlertVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <PaymentWebView
         visible={paymentWebViewVisible}
         paymentSessionId={cashfreePaymentSessionId}
@@ -660,7 +733,7 @@ const Wallet = () => {
                   style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
                   onPress={() => {
                     setWithdrawModalVisible(false);
-                    setWithdrawPhase('amount');
+                    setWithdrawPhase('idle');
                     setWithdrawAmount('');
                   }}
                 >
@@ -668,63 +741,7 @@ const Wallet = () => {
                 </TouchableOpacity>
               </View>
             </View>
-          ) : (
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-              style={styles.kbAvoid}
-            >
-              <ScrollView
-                contentContainerStyle={styles.modalScrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Withdraw</Text>
-                  <Text style={styles.modalSubtitle}>
-                    Withdraw available balance to your saved bank account (minimum ₹100 per transfer). You can
-                    change the amount below.
-                  </Text>
-
-                  <View style={{ gap: spacing.sm }}>
-                    <TextInput
-                      value={withdrawAmount}
-                      onChangeText={setWithdrawAmount}
-                      placeholder="Amount (₹)"
-                      keyboardType="decimal-pad"
-                      placeholderTextColor={colors.text.secondary}
-                      style={styles.textInput}
-                    />
-                    <TouchableOpacity
-                      onPress={() => {
-                        const a = Number(realWallet?.availableBalance ?? 0);
-                        if (a > 0) setWithdrawAmount(a.toFixed(2));
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.withdrawFullBalanceLink}>Use full balance</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity
-                      style={[styles.modalButton, styles.modalCancelButton]}
-                      onPress={closeWithdrawModal}
-                    >
-                      <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.modalButton, styles.modalSubmitButton]}
-                      onPress={submitWithdraw}
-                      disabled={withdrawPhase === 'loading'}
-                    >
-                      <Text style={styles.modalSubmitText}>Withdraw</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </ScrollView>
-            </KeyboardAvoidingView>
-          )}
+          ) : null}
         </View>
       </Modal>
 
