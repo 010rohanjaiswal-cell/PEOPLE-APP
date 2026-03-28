@@ -215,7 +215,6 @@ router.put('/profile', authenticate, upload.single('image'), async (req, res) =>
 router.get('/profile/:userId', authenticate, async (req, res) => {
   try {
     const userId = req.params.userId;
-    const currentUserId = req.user.id || req.user._id;
 
     // Get user from database
     const user = await User.findById(userId);
@@ -230,21 +229,22 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
     // Get the appropriate profile photo (freelancer verification photo takes priority)
     const profilePhoto = await getUserProfilePhoto(userId);
 
-    // Get verification details if user is a freelancer
+    // Get verification details if user is a freelancer (same source as GET /api/user/profile for self)
     let verificationData = null;
+    let verificationToUse = null;
     if (user.role === 'freelancer') {
-      // Simple query - explicitly select fields we need, use .lean() for plain object
       const verification = await FreelancerVerification.findOne({ user: user._id })
         .select('fullName dob gender address profilePhoto')
-        .lean() // Convert to plain object
+        .lean()
         .sort({ createdAt: -1 });
-      
-      // Fallback to string ID if not found
-      const verificationToUse = verification || await FreelancerVerification.findOne({ user: user._id.toString() })
-        .select('fullName dob gender address profilePhoto')
-        .lean() // Convert to plain object
-        .sort({ createdAt: -1 });
-      
+
+      verificationToUse =
+        verification ||
+        (await FreelancerVerification.findOne({ user: user._id.toString() })
+          .select('fullName dob gender address profilePhoto')
+          .lean()
+          .sort({ createdAt: -1 }));
+
       if (verificationToUse) {
         verificationData = {
           fullName: verificationToUse.fullName || null,
@@ -259,13 +259,18 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
       }
     }
 
+    const displayFullName =
+      verificationToUse && verificationToUse.fullName
+        ? verificationToUse.fullName
+        : user.fullName || null;
+
     res.json({
       success: true,
       user: {
         id: user._id || user.id,
         phone: user.phone,
         role: user.role,
-        fullName: user.fullName || null,
+        fullName: displayFullName,
         profilePhoto: profilePhoto, // Use the helper function result
         email: user.email || null,
         verificationStatus: user.verificationStatus || null,

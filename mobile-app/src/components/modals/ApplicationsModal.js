@@ -22,8 +22,71 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { clientJobsAPI } from '../../api/clientJobs';
+import { userAPI } from '../../api';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
+/** Same DOB parsing as freelancer Profile.js (YYYY-MM-DD, DD/MM/YYYY, etc.). */
+function parseDob(value) {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) {
+    const [y, m, d] = s.split(/[-/]/).map((p) => parseInt(p, 10));
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s)) {
+    const [d, m, y] = s.split(/[-/]/).map((p) => parseInt(p, 10));
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function calculateAgeFromDob(dob) {
+  const birthDate = parseDob(dob);
+  if (!birthDate) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  if (age < 0 || age > 150) return null;
+  return age;
+}
+
+/** Map stored gender to localized Male/Female only; avoid showing noisy or malformed values. */
+function normalizeGenderLabel(raw, t) {
+  const notProvided = t('applications.notProvided');
+  if (raw == null) return notProvided;
+
+  let value = raw;
+  if (typeof value === 'object') {
+    value = value.label ?? value.value ?? value.gender ?? '';
+  }
+  let s = String(value).trim();
+  if (!s) return notProvided;
+
+  if (s.startsWith('{')) {
+    try {
+      return normalizeGenderLabel(JSON.parse(s), t);
+    } catch {
+      return notProvided;
+    }
+  }
+
+  const firstToken = (s.split(/[\s,;/|]+/)[0] || s).trim();
+  const norm = firstToken.toLowerCase().replace(/[^a-z]/g, '');
+
+  if (norm === 'male' || norm === 'm' || norm === 'man') return t('common.gender.male');
+  if (norm === 'female' || norm === 'f' || norm === 'woman') return t('common.gender.female');
+
+  return notProvided;
+}
 
 const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => {
   const { t } = useLanguage();
@@ -41,7 +104,42 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   const [autoPickEnabled, setAutoPickEnabled] = useState(true);
   const [autoPickSaving, setAutoPickSaving] = useState(false);
   const [photoPreviewUri, setPhotoPreviewUri] = useState(null);
-  const [profileFreelancer, setProfileFreelancer] = useState(null);
+  const [freelancerProfileModalOpen, setFreelancerProfileModalOpen] = useState(false);
+  const [freelancerProfileUser, setFreelancerProfileUser] = useState(null);
+  const [freelancerProfileLoading, setFreelancerProfileLoading] = useState(false);
+  const [freelancerProfileError, setFreelancerProfileError] = useState(null);
+
+  const closeFreelancerProfileModal = () => {
+    setFreelancerProfileModalOpen(false);
+    setFreelancerProfileUser(null);
+    setFreelancerProfileLoading(false);
+    setFreelancerProfileError(null);
+  };
+
+  const openFreelancerProfile = (freelancer) => {
+    const id = freelancer?._id ?? freelancer?.id;
+    if (id == null || id === '') return;
+    setFreelancerProfileModalOpen(true);
+    setFreelancerProfileUser(null);
+    setFreelancerProfileLoading(true);
+    setFreelancerProfileError(null);
+    (async () => {
+      try {
+        const res = await userAPI.getUserProfile(String(id));
+        if (res?.success && res.user) {
+          setFreelancerProfileUser(res.user);
+        } else {
+          setFreelancerProfileError(res?.error || t('applications.profileLoadFailed'));
+        }
+      } catch (err) {
+        setFreelancerProfileError(
+          err.response?.data?.error || err.message || t('applications.profileLoadFailed')
+        );
+      } finally {
+        setFreelancerProfileLoading(false);
+      }
+    })();
+  };
 
   useEffect(() => {
     if (visible && job) {
@@ -52,7 +150,10 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       setErrorMessage('');
       setAutoPickEnabled(true);
       setPhotoPreviewUri(null);
-      setProfileFreelancer(null);
+      setFreelancerProfileModalOpen(false);
+      setFreelancerProfileUser(null);
+      setFreelancerProfileLoading(false);
+      setFreelancerProfileError(null);
     }
   }, [visible, job]);
 
@@ -194,64 +295,21 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
     return stars;
   };
 
-  const calculateAge = (dob) => {
-    if (!dob) return null;
-    try {
-      let birthDate;
-      if (typeof dob === 'string' && dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) {
-          birthDate = new Date(
-            parseInt(parts[0], 10),
-            parseInt(parts[1], 10) - 1,
-            parseInt(parts[2], 10)
-          );
-        } else {
-          birthDate = new Date(dob);
-        }
-      } else {
-        birthDate = new Date(dob);
-      }
-      if (isNaN(birthDate.getTime())) return null;
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      if (age < 0 || age > 150) return null;
-      return age;
-    } catch {
-      return null;
-    }
+  const profileAgeLine = (verification) => {
+    const age = calculateAgeFromDob(verification?.dob);
+    if (age !== null) return `${age} ${t('applications.years')}`;
+    if (verification?.dob) return `${t('applications.dobPrefix')}${verification.dob}`;
+    return t('applications.notProvided');
   };
 
-  const genderDisplay = (g) => {
-    if (!g || typeof g !== 'string') return null;
-    const key = g.trim().toLowerCase();
-    if (key === 'male') return t('common.gender.male');
-    if (key === 'female') return t('common.gender.female');
-    return g.trim();
-  };
-
-  const ageLabel = (f) => {
-    const v = f?.verification;
-    const age = calculateAge(v?.dob);
-    if (age == null) return t('applications.notProvided');
-    return String(age);
-  };
-
-  const genderLabel = (f) => {
-    const g = f?.verification?.gender;
-    const label = genderDisplay(g);
-    return label || t('applications.notProvided');
-  };
-
-  const addressLabel = (f) => {
-    const addr = f?.verification?.address;
+  const profileAddressLine = (verification) => {
+    const addr = verification?.address;
     if (addr && String(addr).trim()) return String(addr).trim();
     return t('applications.notProvided');
   };
+
+  const v = freelancerProfileUser?.verification;
+  const profileDisplayName = v?.fullName || freelancerProfileUser?.fullName || '—';
 
   return (
     <>
@@ -337,7 +395,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                             <TouchableOpacity
                               style={styles.freelancerDetailsTouchable}
                               activeOpacity={0.7}
-                              onPress={() => setProfileFreelancer(freelancer)}
+                              onPress={() => openFreelancerProfile(freelancer)}
                             >
                               <View style={styles.freelancerDetails}>
                                 <Text style={styles.freelancerName}>
@@ -421,67 +479,73 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       </Modal>
 
       <Modal
-        visible={!!profileFreelancer}
+        visible={freelancerProfileModalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setProfileFreelancer(null)}
+        onRequestClose={closeFreelancerProfileModal}
       >
         <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setProfileFreelancer(null)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeFreelancerProfileModal} />
           <View style={styles.freelancerProfileCard}>
             <View style={styles.freelancerProfileHeader}>
               <Text style={styles.freelancerProfileTitle}>{t('applications.freelancerProfile')}</Text>
               <TouchableOpacity
-                onPress={() => setProfileFreelancer(null)}
+                onPress={closeFreelancerProfileModal}
                 style={styles.closeButton}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <MaterialIcons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
-            <ScrollView
-              style={styles.freelancerProfileScroll}
-              contentContainerStyle={styles.freelancerProfileScrollContent}
-              showsVerticalScrollIndicator
-              nestedScrollEnabled
-            >
-              <View style={styles.freelancerProfileHero}>
-                {profileFreelancer?.profilePhoto ? (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => setPhotoPreviewUri(profileFreelancer.profilePhoto)}
-                  >
-                    <Image
-                      source={{ uri: profileFreelancer.profilePhoto }}
-                      style={styles.freelancerProfilePhotoLarge}
-                    />
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.freelancerProfilePhotoLargePlaceholder}>
-                    <MaterialIcons name="person" size={48} color={colors.text.muted} />
-                  </View>
-                )}
-                <Text style={styles.freelancerProfileName}>
-                  {profileFreelancer?.fullName || '—'}
-                </Text>
+            {freelancerProfileLoading ? (
+              <View style={styles.freelancerProfileLoadingBox}>
+                <ActivityIndicator size="large" color={colors.primary.main} />
               </View>
-              <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('applications.rating')}</Text>
-                <Text style={styles.freelancerProfileValue}>{ratingLabel(profileFreelancer)}</Text>
+            ) : freelancerProfileError ? (
+              <View style={styles.freelancerProfileScrollContent}>
+                <Text style={styles.freelancerProfileValue}>{freelancerProfileError}</Text>
               </View>
-              <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('applications.age')}</Text>
-                <Text style={styles.freelancerProfileValue}>{ageLabel(profileFreelancer)}</Text>
-              </View>
-              <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('applications.gender')}</Text>
-                <Text style={styles.freelancerProfileValue}>{genderLabel(profileFreelancer)}</Text>
-              </View>
-              <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('postJob.address')}</Text>
-                <Text style={styles.freelancerProfileValue}>{addressLabel(profileFreelancer)}</Text>
-              </View>
-            </ScrollView>
+            ) : (
+              <ScrollView
+                style={styles.freelancerProfileScroll}
+                contentContainerStyle={styles.freelancerProfileScrollContent}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+              >
+                <View style={styles.freelancerProfileHero}>
+                  {freelancerProfileUser?.profilePhoto ? (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => setPhotoPreviewUri(freelancerProfileUser.profilePhoto)}
+                    >
+                      <Image
+                        source={{ uri: freelancerProfileUser.profilePhoto }}
+                        style={styles.freelancerProfilePhotoLarge}
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.freelancerProfilePhotoLargePlaceholder}>
+                      <MaterialIcons name="person" size={48} color={colors.text.muted} />
+                    </View>
+                  )}
+                  <Text style={styles.freelancerProfileName}>{profileDisplayName}</Text>
+                </View>
+                <View style={styles.freelancerProfileRow}>
+                  <Text style={styles.freelancerProfileLabel}>{t('applications.age')}</Text>
+                  <Text style={styles.freelancerProfileValue}>{profileAgeLine(v)}</Text>
+                </View>
+                <View style={styles.freelancerProfileRow}>
+                  <Text style={styles.freelancerProfileLabel}>{t('applications.gender')}</Text>
+                  <Text style={styles.freelancerProfileValue}>
+                    {normalizeGenderLabel(v?.gender, t)}
+                  </Text>
+                </View>
+                <View style={styles.freelancerProfileRow}>
+                  <Text style={styles.freelancerProfileLabel}>{t('postJob.address')}</Text>
+                  <Text style={styles.freelancerProfileValue}>{profileAddressLine(v)}</Text>
+                </View>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -936,6 +1000,12 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontWeight: '600',
     flex: 1,
+  },
+  freelancerProfileLoadingBox: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 140,
   },
   freelancerProfileScroll: {
     maxHeight: SCREEN_H * 0.68,

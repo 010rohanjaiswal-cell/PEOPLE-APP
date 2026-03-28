@@ -176,6 +176,9 @@ export default {
     tapToClosePhoto: 'Tap anywhere to close',
     viewPhoto: 'View profile photo',
     notProvided: 'Not provided',
+    profileLoadFailed: 'Could not load profile',
+    years: 'years',
+    dobPrefix: 'DOB: ',
   },
   offers: {
     acceptOffer: 'Accept Offer',

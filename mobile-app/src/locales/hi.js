@@ -176,6 +176,9 @@ export default {
     tapToClosePhoto: 'बंद करने के लिए कहीं भी टैप करें',
     viewPhoto: 'प्रोफ़ाइल फोटो देखें',
     notProvided: 'उपलब्ध नहीं',
+    profileLoadFailed: 'प्रोफ़ाइल लोड नहीं हो सकी',
+    years: 'वर्ष',
+    dobPrefix: 'जन्म तिथि: ',
   },
   offers: {
     acceptOffer: 'ऑफर स्वीकार करें',

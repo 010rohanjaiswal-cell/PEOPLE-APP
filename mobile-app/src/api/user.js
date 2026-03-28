@@ -14,6 +14,15 @@ export const userAPI = {
     return response.data;
   },
 
+  /**
+   * Get another user's profile (same payload shape as freelancer profile / MyJobs view).
+   * GET /api/user/profile/:userId
+   */
+  getUserProfile: async (userId) => {
+    const response = await apiClient.get(`/api/user/profile/${userId}`);
+    return response.data;
+  },
+
   updateProfile: async ({ fullName, imageAsset } = {}) => {
     const formData = new FormData();
     if (fullName != null) formData.append('fullName', String(fullName));
@@ -30,11 +39,6 @@ export const userAPI = {
     return response.data;
   },
 
-  /**
-   * Get user profile by ID (for viewing other users' profiles)
-   * @param {string} userId - User ID
-   * @returns {Promise}
-   */
   /**
    * Register Expo push token with backend for push notifications
    * @param {string} expoPushToken - Token from getExpoPushTokenAsync()

@@ -894,51 +894,9 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
       return rb - ra;
     });
 
-    const freelancerIdStrings = [
-      ...new Set(
-        pending
-          .map((a) => a.freelancer?._id?.toString())
-          .filter(Boolean)
-      ),
-    ];
-    const freelancerObjectIds = freelancerIdStrings.map(
-      (id) => new mongoose.Types.ObjectId(id)
-    );
-
-    const latestVerByUser = new Map();
-    if (freelancerObjectIds.length > 0) {
-      const verifications = await FreelancerVerification.find({
-        user: { $in: freelancerObjectIds },
-      })
-        .sort({ createdAt: -1 })
-        .select('user dob gender address')
-        .lean();
-
-      for (const v of verifications) {
-        const uid = v.user?.toString();
-        if (!uid || latestVerByUser.has(uid)) continue;
-        latestVerByUser.set(uid, {
-          dob: v.dob || null,
-          gender: v.gender || null,
-          address: v.address || null,
-        });
-      }
-    }
-
-    const applicationsOut = pending.map((a) => {
-      const o = typeof a.toObject === 'function' ? a.toObject() : { ...a };
-      const f = o.freelancer;
-      const fid = f?._id?.toString();
-      const ver = fid ? latestVerByUser.get(fid) : null;
-      if (f) {
-        o.freelancer = { ...f, verification: ver || null };
-      }
-      return o;
-    });
-
     res.json({
       success: true,
-      applications: applicationsOut,
+      applications: pending,
       autoPickEnabled: job.autoPickEnabled !== false,
     });
   } catch (error) {
