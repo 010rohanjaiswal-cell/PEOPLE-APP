@@ -872,7 +872,10 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
     const job = await Job.findOne({
       _id: req.params.id,
       client: user._id || user.id,
-    }).populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount');
+    }).populate(
+      'applications.freelancer',
+      'fullName profilePhoto phone averageRating ratingCount email verificationStatus'
+    );
 
     if (!job) {
       return res.status(404).json({
@@ -981,7 +984,10 @@ router.post('/jobs/:id/accept-application', authenticate, async (req, res) => {
     });
 
     const jobOut = await Job.findById(job._id)
-      .populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount')
+      .populate(
+        'applications.freelancer',
+        'fullName profilePhoto phone averageRating ratingCount email verificationStatus'
+      )
       .lean();
 
     res.json({

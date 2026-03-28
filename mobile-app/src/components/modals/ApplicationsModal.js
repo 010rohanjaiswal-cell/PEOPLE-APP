@@ -14,12 +14,16 @@ import {
   ActivityIndicator,
   RefreshControl,
   Switch,
+  Pressable,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
-import { Button } from '../common';
 import { clientJobsAPI } from '../../api/clientJobs';
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => {
   const { t } = useLanguage();
@@ -36,6 +40,8 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   const [selectedApplicationId, setSelectedApplicationId] = useState(null);
   const [autoPickEnabled, setAutoPickEnabled] = useState(true);
   const [autoPickSaving, setAutoPickSaving] = useState(false);
+  const [photoPreviewUri, setPhotoPreviewUri] = useState(null);
+  const [profileFreelancer, setProfileFreelancer] = useState(null);
 
   useEffect(() => {
     if (visible && job) {
@@ -45,6 +51,8 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       setLoading(false);
       setErrorMessage('');
       setAutoPickEnabled(true);
+      setPhotoPreviewUri(null);
+      setProfileFreelancer(null);
     }
   }, [visible, job]);
 
@@ -186,6 +194,14 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
     return stars;
   };
 
+  const verificationLabel = (f) => {
+    const s = f?.verificationStatus;
+    if (s === 'pending') return t('applications.verification.pending');
+    if (s === 'approved') return t('applications.verification.approved');
+    if (s === 'rejected') return t('applications.verification.rejected');
+    return t('applications.notProvided');
+  };
+
   return (
     <>
       <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -229,6 +245,8 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                   style={styles.content}
                   contentContainerStyle={styles.contentContainer}
                   showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
                   refreshControl={
                     <RefreshControl
                       refreshing={refreshing}
@@ -249,23 +267,36 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                         <View style={styles.cardHeader}>
                           <View style={styles.freelancerInfo}>
                             {freelancer.profilePhoto ? (
-                              <Image
-                                source={{ uri: freelancer.profilePhoto }}
-                                style={styles.profilePhoto}
-                              />
+                              <TouchableOpacity
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('applications.viewPhoto')}
+                                onPress={() => setPhotoPreviewUri(freelancer.profilePhoto)}
+                              >
+                                <Image
+                                  source={{ uri: freelancer.profilePhoto }}
+                                  style={styles.profilePhoto}
+                                />
+                              </TouchableOpacity>
                             ) : (
                               <View style={styles.profilePhotoPlaceholder}>
                                 <MaterialIcons name="person" size={24} color={colors.text.muted} />
                               </View>
                             )}
-                            <View style={styles.freelancerDetails}>
-                              <Text style={styles.freelancerName}>
-                                {freelancer.fullName || '—'}
-                              </Text>
-                              <Text style={styles.ratingText}>
-                                {t('applications.rating')}: {ratingLabel(freelancer)}
-                              </Text>
-                            </View>
+                            <TouchableOpacity
+                              style={styles.freelancerDetailsTouchable}
+                              activeOpacity={0.7}
+                              onPress={() => setProfileFreelancer(freelancer)}
+                            >
+                              <View style={styles.freelancerDetails}>
+                                <Text style={styles.freelancerName}>
+                                  {freelancer.fullName || '—'}
+                                </Text>
+                                <Text style={styles.ratingText}>
+                                  {t('applications.rating')}: {ratingLabel(freelancer)}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
                           </View>
                           <View
                             style={[
@@ -307,12 +338,105 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                 </ScrollView>
               )}
             </View>
+          </View>
+        </View>
+      </Modal>
 
-            <View style={styles.footer}>
-              <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
-                {t('applications.closeFooter')}
-              </Button>
+      <Modal
+        visible={!!photoPreviewUri}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoPreviewUri(null)}
+      >
+        <Pressable style={styles.photoPreviewOverlay} onPress={() => setPhotoPreviewUri(null)}>
+          <SafeAreaView style={styles.photoPreviewSafe} edges={['top', 'left', 'right']}>
+            <TouchableOpacity
+              style={styles.photoPreviewClose}
+              onPress={() => setPhotoPreviewUri(null)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialIcons name="close" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.photoPreviewInner} pointerEvents="box-none">
+              <Image
+                source={{ uri: photoPreviewUri || undefined }}
+                style={styles.photoPreviewImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.photoPreviewHint}>{t('applications.tapToClosePhoto')}</Text>
             </View>
+          </SafeAreaView>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!profileFreelancer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileFreelancer(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setProfileFreelancer(null)} />
+          <View style={styles.freelancerProfileCard}>
+            <View style={styles.freelancerProfileHeader}>
+              <Text style={styles.freelancerProfileTitle}>{t('applications.freelancerProfile')}</Text>
+              <TouchableOpacity
+                onPress={() => setProfileFreelancer(null)}
+                style={styles.closeButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialIcons name="close" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.freelancerProfileScroll}
+              contentContainerStyle={styles.freelancerProfileScrollContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+            >
+              <View style={styles.freelancerProfileHero}>
+                {profileFreelancer?.profilePhoto ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setPhotoPreviewUri(profileFreelancer.profilePhoto)}
+                  >
+                    <Image
+                      source={{ uri: profileFreelancer.profilePhoto }}
+                      style={styles.freelancerProfilePhotoLarge}
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.freelancerProfilePhotoLargePlaceholder}>
+                    <MaterialIcons name="person" size={48} color={colors.text.muted} />
+                  </View>
+                )}
+                <Text style={styles.freelancerProfileName}>
+                  {profileFreelancer?.fullName || '—'}
+                </Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('common.phoneNumber')}</Text>
+                <Text style={styles.freelancerProfileValue}>
+                  {profileFreelancer?.phone || t('applications.notProvided')}
+                </Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('applications.email')}</Text>
+                <Text style={styles.freelancerProfileValue}>
+                  {profileFreelancer?.email || t('applications.notProvided')}
+                </Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('applications.rating')}</Text>
+                <Text style={styles.freelancerProfileValue}>{ratingLabel(profileFreelancer)}</Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('applications.accountVerification')}</Text>
+                <Text style={styles.freelancerProfileValue}>
+                  {verificationLabel(profileFreelancer)}
+                </Text>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -462,6 +586,7 @@ const styles = StyleSheet.create({
   modal: {
     backgroundColor: colors.background,
     borderRadius: spacing.lg,
+    maxHeight: '88%',
     height: '80%',
     width: '100%',
     maxWidth: 500,
@@ -507,9 +632,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   contentWrapper: {
-    flexShrink: 1,
-    flexGrow: 1,
-    minHeight: 200,
+    flex: 1,
+    minHeight: 0,
   },
   loadingContainer: {
     padding: spacing.xxl,
@@ -545,8 +669,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    flexGrow: 1,
+    paddingBottom: spacing.xxl,
   },
   card: {
     backgroundColor: colors.cardBackground,
@@ -581,6 +704,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
+  },
+  freelancerDetailsTouchable: {
+    flex: 1,
+    minWidth: 0,
   },
   freelancerDetails: {
     flex: 1,
@@ -711,14 +838,104 @@ const styles = StyleSheet.create({
   errorIconContainer: {
     marginBottom: spacing.md,
   },
-  footer: {
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  photoPreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
   },
-  closeButtonFooter: {
-    minHeight: 50,
+  photoPreviewSafe: {
+    flex: 1,
+  },
+  photoPreviewClose: {
+    alignSelf: 'flex-end',
+    padding: spacing.md,
+    zIndex: 2,
+  },
+  photoPreviewInner: {
+    flex: 1,
+    width: SCREEN_W,
+    maxHeight: SCREEN_H * 0.88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  photoPreviewImage: {
+    width: SCREEN_W - spacing.lg * 2,
+    height: SCREEN_H * 0.68,
+  },
+  photoPreviewHint: {
+    marginTop: spacing.lg,
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  freelancerProfileCard: {
+    backgroundColor: colors.background,
+    borderRadius: spacing.lg,
+    width: '90%',
+    maxWidth: 440,
+    maxHeight: SCREEN_H * 0.82,
+    overflow: 'hidden',
+    zIndex: 1,
+  },
+  freelancerProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  freelancerProfileTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  freelancerProfileScroll: {
+    maxHeight: SCREEN_H * 0.68,
+  },
+  freelancerProfileScrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  freelancerProfileHero: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  freelancerProfilePhotoLarge: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginBottom: spacing.sm,
+  },
+  freelancerProfilePhotoLargePlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freelancerProfileName: {
+    ...typography.h3,
+    color: colors.text.primary,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  freelancerProfileRow: {
+    marginBottom: spacing.md,
+  },
+  freelancerProfileLabel: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+    fontWeight: '600',
+  },
+  freelancerProfileValue: {
+    ...typography.body,
+    color: colors.text.primary,
   },
 });
 
