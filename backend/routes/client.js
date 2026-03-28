@@ -874,7 +874,7 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
       client: user._id || user.id,
     }).populate(
       'applications.freelancer',
-      'fullName profilePhoto phone averageRating ratingCount email verificationStatus'
+      'fullName profilePhoto averageRating ratingCount'
     );
 
     if (!job) {
@@ -894,9 +894,51 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
       return rb - ra;
     });
 
+    const freelancerIdStrings = [
+      ...new Set(
+        pending
+          .map((a) => a.freelancer?._id?.toString())
+          .filter(Boolean)
+      ),
+    ];
+    const freelancerObjectIds = freelancerIdStrings.map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const latestVerByUser = new Map();
+    if (freelancerObjectIds.length > 0) {
+      const verifications = await FreelancerVerification.find({
+        user: { $in: freelancerObjectIds },
+      })
+        .sort({ createdAt: -1 })
+        .select('user dob gender address')
+        .lean();
+
+      for (const v of verifications) {
+        const uid = v.user?.toString();
+        if (!uid || latestVerByUser.has(uid)) continue;
+        latestVerByUser.set(uid, {
+          dob: v.dob || null,
+          gender: v.gender || null,
+          address: v.address || null,
+        });
+      }
+    }
+
+    const applicationsOut = pending.map((a) => {
+      const o = typeof a.toObject === 'function' ? a.toObject() : { ...a };
+      const f = o.freelancer;
+      const fid = f?._id?.toString();
+      const ver = fid ? latestVerByUser.get(fid) : null;
+      if (f) {
+        o.freelancer = { ...f, verification: ver || null };
+      }
+      return o;
+    });
+
     res.json({
       success: true,
-      applications: pending,
+      applications: applicationsOut,
       autoPickEnabled: job.autoPickEnabled !== false,
     });
   } catch (error) {
@@ -986,7 +1028,7 @@ router.post('/jobs/:id/accept-application', authenticate, async (req, res) => {
     const jobOut = await Job.findById(job._id)
       .populate(
         'applications.freelancer',
-        'fullName profilePhoto phone averageRating ratingCount email verificationStatus'
+        'fullName profilePhoto averageRating ratingCount'
       )
       .lean();
 

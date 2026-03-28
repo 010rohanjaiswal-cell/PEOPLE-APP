@@ -171,15 +171,10 @@ export default {
     failedReject: 'Failed to reject application',
     closeFooter: 'Close',
     freelancerProfile: 'Freelancer profile',
-    email: 'Email',
+    age: 'Age',
+    gender: 'Gender',
     tapToClosePhoto: 'Tap anywhere to close',
     viewPhoto: 'View profile photo',
-    accountVerification: 'Account verification',
-    verification: {
-      pending: 'Pending',
-      approved: 'Approved',
-      rejected: 'Rejected',
-    },
     notProvided: 'Not provided',
   },
   offers: {

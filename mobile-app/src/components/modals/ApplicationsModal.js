@@ -194,11 +194,62 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
     return stars;
   };
 
-  const verificationLabel = (f) => {
-    const s = f?.verificationStatus;
-    if (s === 'pending') return t('applications.verification.pending');
-    if (s === 'approved') return t('applications.verification.approved');
-    if (s === 'rejected') return t('applications.verification.rejected');
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    try {
+      let birthDate;
+      if (typeof dob === 'string' && dob.includes('-')) {
+        const parts = dob.split('-');
+        if (parts.length === 3) {
+          birthDate = new Date(
+            parseInt(parts[0], 10),
+            parseInt(parts[1], 10) - 1,
+            parseInt(parts[2], 10)
+          );
+        } else {
+          birthDate = new Date(dob);
+        }
+      } else {
+        birthDate = new Date(dob);
+      }
+      if (isNaN(birthDate.getTime())) return null;
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 0 || age > 150) return null;
+      return age;
+    } catch {
+      return null;
+    }
+  };
+
+  const genderDisplay = (g) => {
+    if (!g || typeof g !== 'string') return null;
+    const key = g.trim().toLowerCase();
+    if (key === 'male') return t('common.gender.male');
+    if (key === 'female') return t('common.gender.female');
+    return g.trim();
+  };
+
+  const ageLabel = (f) => {
+    const v = f?.verification;
+    const age = calculateAge(v?.dob);
+    if (age == null) return t('applications.notProvided');
+    return String(age);
+  };
+
+  const genderLabel = (f) => {
+    const g = f?.verification?.gender;
+    const label = genderDisplay(g);
+    return label || t('applications.notProvided');
+  };
+
+  const addressLabel = (f) => {
+    const addr = f?.verification?.address;
+    if (addr && String(addr).trim()) return String(addr).trim();
     return t('applications.notProvided');
   };
 
@@ -415,26 +466,20 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                 </Text>
               </View>
               <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('common.phoneNumber')}</Text>
-                <Text style={styles.freelancerProfileValue}>
-                  {profileFreelancer?.phone || t('applications.notProvided')}
-                </Text>
-              </View>
-              <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('applications.email')}</Text>
-                <Text style={styles.freelancerProfileValue}>
-                  {profileFreelancer?.email || t('applications.notProvided')}
-                </Text>
-              </View>
-              <View style={styles.freelancerProfileRow}>
                 <Text style={styles.freelancerProfileLabel}>{t('applications.rating')}</Text>
                 <Text style={styles.freelancerProfileValue}>{ratingLabel(profileFreelancer)}</Text>
               </View>
               <View style={styles.freelancerProfileRow}>
-                <Text style={styles.freelancerProfileLabel}>{t('applications.accountVerification')}</Text>
-                <Text style={styles.freelancerProfileValue}>
-                  {verificationLabel(profileFreelancer)}
-                </Text>
+                <Text style={styles.freelancerProfileLabel}>{t('applications.age')}</Text>
+                <Text style={styles.freelancerProfileValue}>{ageLabel(profileFreelancer)}</Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('applications.gender')}</Text>
+                <Text style={styles.freelancerProfileValue}>{genderLabel(profileFreelancer)}</Text>
+              </View>
+              <View style={styles.freelancerProfileRow}>
+                <Text style={styles.freelancerProfileLabel}>{t('postJob.address')}</Text>
+                <Text style={styles.freelancerProfileValue}>{addressLabel(profileFreelancer)}</Text>
               </View>
             </ScrollView>
           </View>

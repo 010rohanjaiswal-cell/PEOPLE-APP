@@ -171,15 +171,10 @@ export default {
     failedReject: 'आवेदन अस्वीकार नहीं हो सका',
     closeFooter: 'बंद करें',
     freelancerProfile: 'फ्रीलांसर प्रोफ़ाइल',
-    email: 'ईमेल',
+    age: 'आयु',
+    gender: 'लिंग',
     tapToClosePhoto: 'बंद करने के लिए कहीं भी टैप करें',
     viewPhoto: 'प्रोफ़ाइल फोटो देखें',
-    accountVerification: 'खाता सत्यापन',
-    verification: {
-      pending: 'लंबित',
-      approved: 'स्वीकृत',
-      rejected: 'अस्वीकृत',
-    },
     notProvided: 'उपलब्ध नहीं',
   },
   offers: {
