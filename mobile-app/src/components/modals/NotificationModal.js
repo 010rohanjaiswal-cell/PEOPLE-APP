@@ -70,6 +70,10 @@ const NotificationModal = ({ visible, onClose }) => {
     switch (type) {
       case 'offer_received':
         return 'attach-money';
+      case 'application_received':
+        return 'person-add';
+      case 'application_rejected':
+        return 'person-off';
       case 'offer_accepted':
         return 'check-circle';
       case 'offer_rejected':
@@ -97,6 +101,7 @@ const NotificationModal = ({ visible, onClose }) => {
   const getNotificationColor = (type) => {
     switch (type) {
       case 'offer_received':
+      case 'application_received':
       case 'job_picked_up':
       case 'job_assigned':
         return colors.primary.main;
@@ -107,6 +112,7 @@ const NotificationModal = ({ visible, onClose }) => {
       case 'profile_verified':
         return colors.success.main;
       case 'offer_rejected':
+      case 'application_rejected':
         return colors.error.main;
       case 'chat_message':
         return colors.info?.main || colors.primary.main;
@@ -183,12 +189,18 @@ const NotificationModal = ({ visible, onClose }) => {
                     // Only show specific notification types
                     const allowedTypes = [
                       'offer_received',
+                      'application_received',
                       'offer_accepted',
                       'offer_rejected',
+                      'application_rejected',
                       'job_picked_up',
+                      'job_assigned',
+                      'job_completed',
                       'work_done',
                       'payment_received',
+                      'payment_sent',
                       'chat_message',
+                      'profile_verified',
                     ];
                     return allowedTypes.includes(notification.type);
                   })

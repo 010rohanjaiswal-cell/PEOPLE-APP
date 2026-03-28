@@ -138,7 +138,7 @@ export default {
     deliveryEnterFrom: 'Please enter pickup address',
     deliveryEnterTo: 'Please enter drop address',
     apply: 'Apply',
-    waitingForClient: 'Waiting for client',
+    waitingForClient: 'Waiting to accept',
     applyConfirmTitle: 'Apply for this job?',
     applyConfirmMessage: 'The client will be notified. You can apply again only if they reject you or choose someone else.',
     cannotApply: 'Cannot apply',

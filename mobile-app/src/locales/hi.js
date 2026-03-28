@@ -138,7 +138,7 @@ export default {
     deliveryEnterFrom: 'कृपया पिकअप पता दर्ज करें',
     deliveryEnterTo: 'कृपया ड्रॉप पता दर्ज करें',
     apply: 'आवेदन करें',
-    waitingForClient: 'क्लाइंट की स्वीकृति का इंतजार',
+    waitingForClient: 'स्वीकृति की प्रतीक्षा',
     applyConfirmTitle: 'इस नौकरी के लिए आवेदन?',
     applyConfirmMessage: 'क्लाइंट को सूचना मिलेगी। आप तब तक दोबारा आवेदन कर सकते हैं जब तक वे अस्वीकार न करें या किसी और को न चुनें।',
     cannotApply: 'आवेदन नहीं कर सकते',
