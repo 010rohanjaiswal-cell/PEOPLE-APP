@@ -24,6 +24,7 @@ const {
   notifyJobPickedUp,
   notifyApplicationReceived,
 } = require('../services/notificationService');
+const { afterApplicationSubmitted } = require('../services/autoPickApplications');
 
 function isDeliveryCategory(category) {
   return String(category || '').trim().toLowerCase() === 'delivery';
@@ -1462,6 +1463,12 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       );
     } catch (notifError) {
       console.error('Error sending application notification:', notifError);
+    }
+
+    try {
+      await afterApplicationSubmitted(job._id);
+    } catch (e) {
+      console.error('Auto pick after apply:', e);
     }
 
     const lastApp = job.applications[job.applications.length - 1];

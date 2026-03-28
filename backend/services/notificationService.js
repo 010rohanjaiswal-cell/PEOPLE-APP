@@ -322,6 +322,24 @@ async function notifyChatMessage(recipientId, senderName, messagePreview) {
   });
 }
 
+/**
+ * Client: freelancer was auto-selected (Auto pick)
+ */
+async function notifyAutoPickClient(clientId, freelancerName, jobTitle, ratingLabel, jobId) {
+  return createNotification({
+    userId: clientId,
+    type: 'auto_pick',
+    title: 'Freelancer auto-selected',
+    message: `${freelancerName} was automatically selected for "${jobTitle}" based on experience and ratings (Auto pick: ${ratingLabel}).`,
+    data: {
+      jobId: jobId != null ? String(jobId) : null,
+      jobTitle,
+      freelancerName,
+      ratingLabel,
+    },
+  });
+}
+
 module.exports = {
   createNotification,
   notifyOfferReceived,
@@ -336,5 +354,6 @@ module.exports = {
   notifyChatMessage,
   notifyApplicationReceived,
   notifyApplicationRejected,
+  notifyAutoPickClient,
 };
 

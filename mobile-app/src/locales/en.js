@@ -152,7 +152,10 @@ export default {
     title: 'Job applications',
     loading: 'Loading applications...',
     empty: 'No applications yet',
-    emptySub: 'Freelancers who tap Apply appear here, sorted by rating (highest first).',
+    emptySub: 'Freelancers who tap Apply appear here, sorted by experience (rating count) then rating.',
+    autoPick: 'Auto pick',
+    autoPickHint:
+      'When on, the app can assign the best freelancer automatically: after 10 applications, or after 5 applications with no action for 30 minutes. Chooses highest experience (rating count), then highest rating.',
     rating: 'Rating',
     accept: 'Accept',
     reject: 'Reject',

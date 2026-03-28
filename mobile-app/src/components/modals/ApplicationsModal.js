@@ -13,6 +13,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  Switch,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -33,6 +34,8 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+  const [autoPickEnabled, setAutoPickEnabled] = useState(true);
+  const [autoPickSaving, setAutoPickSaving] = useState(false);
 
   useEffect(() => {
     if (visible && job) {
@@ -41,6 +44,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       setApplications([]);
       setLoading(false);
       setErrorMessage('');
+      setAutoPickEnabled(true);
     }
   }, [visible, job]);
 
@@ -60,6 +64,11 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       if (response && response.success) {
         const list = response.applications || [];
         setApplications(list);
+        if (typeof response.autoPickEnabled === 'boolean') {
+          setAutoPickEnabled(response.autoPickEnabled);
+        } else {
+          setAutoPickEnabled(true);
+        }
       } else {
         setApplications([]);
       }
@@ -77,6 +86,24 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   const onRefresh = () => {
     setRefreshing(true);
     loadApplications();
+  };
+
+  const handleAutoPickToggle = async (value) => {
+    const jobId = job?._id || job?.id;
+    if (!jobId) return;
+    setAutoPickSaving(true);
+    try {
+      const resp = await clientJobsAPI.setAutoPick(jobId, value);
+      if (resp?.success) {
+        setAutoPickEnabled(resp.autoPickEnabled !== false);
+      }
+    } catch (err) {
+      console.error('Auto pick toggle:', err);
+      setErrorMessage(err.response?.data?.error || err.message || t('common.error'));
+      setErrorModalVisible(true);
+    } finally {
+      setAutoPickSaving(false);
+    }
   };
 
   const handleAccept = (applicationId) => {
@@ -169,6 +196,20 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                 <MaterialIcons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.autoPickRow}>
+              <View style={styles.autoPickTextCol}>
+                <Text style={styles.autoPickTitle}>{t('applications.autoPick')}</Text>
+                <Text style={styles.autoPickHint}>{t('applications.autoPickHint')}</Text>
+              </View>
+              <Switch
+                value={autoPickEnabled}
+                onValueChange={handleAutoPickToggle}
+                disabled={autoPickSaving || loading}
+                trackColor={{ false: colors.border, true: colors.primary.light }}
+                thumbColor={autoPickEnabled ? colors.primary.main : colors.text.muted}
+              />
             </View>
 
             <View style={styles.contentWrapper}>
@@ -441,6 +482,29 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: spacing.xs,
+  },
+  autoPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.cardBackground,
+  },
+  autoPickTextCol: {
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  autoPickTitle: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  autoPickHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
   },
   contentWrapper: {
     flexShrink: 1,

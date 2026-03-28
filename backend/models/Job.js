@@ -112,6 +112,11 @@ const jobSchema = new mongoose.Schema(
         },
       },
     ],
+    /** Non-delivery jobs: auto-select best applicant when rules trigger (default on). */
+    autoPickEnabled: {
+      type: Boolean,
+      default: true,
+    },
     /** Non-delivery jobs: freelancers apply; client accepts one (similar to offers but no amount). */
     applications: [
       {

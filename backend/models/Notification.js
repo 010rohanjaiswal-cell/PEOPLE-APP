@@ -27,6 +27,7 @@ const notificationSchema = new mongoose.Schema({
       'job_picked_up',
       'application_received',
       'application_rejected',
+      'auto_pick',
       'chat_message',
       'profile_verified',
       'system',

@@ -25,6 +25,11 @@ const {
   notifyPaymentSent,
   notifyApplicationRejected,
 } = require('../services/notificationService');
+const {
+  acceptApplicationCore,
+  evaluateAutoPick,
+  clearAutoPickTimer,
+} = require('../services/autoPickApplications');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -849,7 +854,7 @@ router.post('/jobs/:id/reject-offer', authenticate, async (req, res) => {
 });
 
 /**
- * Get pending applications for a job (sorted by freelancer rating, high to low)
+ * Get pending applications for a job (sorted: ratingCount desc, then averageRating desc)
  * GET /api/client/jobs/:id/applications
  */
 router.get('/jobs/:id/applications', authenticate, async (req, res) => {
@@ -861,6 +866,8 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
         error: 'Only clients can view job applications',
       });
     }
+
+    await evaluateAutoPick(req.params.id);
 
     const job = await Job.findOne({
       _id: req.params.id,
@@ -876,20 +883,70 @@ router.get('/jobs/:id/applications', authenticate, async (req, res) => {
 
     const pending = (job.applications || []).filter((a) => a.status === 'pending');
     pending.sort((a, b) => {
-      const ra = a.freelancer?.averageRating ?? 0;
-      const rb = b.freelancer?.averageRating ?? 0;
+      const ca = Number(a.freelancer?.ratingCount ?? 0);
+      const cb = Number(b.freelancer?.ratingCount ?? 0);
+      if (cb !== ca) return cb - ca;
+      const ra = Number(a.freelancer?.averageRating ?? 0);
+      const rb = Number(b.freelancer?.averageRating ?? 0);
       return rb - ra;
     });
 
     res.json({
       success: true,
       applications: pending,
+      autoPickEnabled: job.autoPickEnabled !== false,
     });
   } catch (error) {
     console.error('Error getting job applications:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get applications',
+    });
+  }
+});
+
+/**
+ * Enable/disable Auto pick for a job (default on)
+ * PUT /api/client/jobs/:id/auto-pick
+ * Body: { enabled: boolean }
+ */
+router.put('/jobs/:id/auto-pick', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({ success: false, error: 'Only clients can update auto pick' });
+    }
+
+    const { enabled } = req.body || {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'enabled (boolean) is required' });
+    }
+
+    const job = await Job.findOne({
+      _id: req.params.id,
+      client: user._id || user.id,
+    });
+
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    job.autoPickEnabled = enabled;
+    await job.save();
+
+    if (!enabled) {
+      clearAutoPickTimer(job._id);
+    }
+
+    res.json({
+      success: true,
+      autoPickEnabled: job.autoPickEnabled,
+    });
+  } catch (error) {
+    console.error('Error updating auto pick:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update auto pick',
     });
   }
 });
@@ -916,97 +973,26 @@ router.post('/jobs/:id/accept-application', authenticate, async (req, res) => {
       });
     }
 
-    const job = await Job.findOne({
-      _id: req.params.id,
-      client: user._id || user.id,
-    }).populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount');
+    const { job } = await acceptApplicationCore({
+      jobId: req.params.id,
+      applicationId,
+      clientUserId: user._id || user.id,
+      isAutoPick: false,
+    });
 
-    if (!job) {
-      return res.status(404).json({
-        success: false,
-        error: 'Job not found',
-      });
-    }
-
-    if (job.status !== 'open') {
-      return res.status(400).json({
-        success: false,
-        error: 'Can only accept applications for jobs with status "open"',
-      });
-    }
-
-    const application = job.applications.id(applicationId);
-    if (!application) {
-      return res.status(404).json({
-        success: false,
-        error: 'Application not found',
-      });
-    }
-
-    if (application.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        error: 'Application has already been processed',
-      });
-    }
-
-    // Accept this application
-    application.status = 'accepted';
-
-    const clientDoc = await User.findById(user._id || user.id).select('fullName').lean();
-    const clientName = clientDoc?.fullName || 'The client';
-    const appIdStr = applicationId.toString();
-
-    // Reject other pending applications
-    for (const app of job.applications) {
-      if (app._id.toString() !== appIdStr && app.status === 'pending') {
-        app.status = 'rejected';
-        try {
-          const fid = app.freelancer._id?.toString() || app.freelancer.toString();
-          await notifyApplicationRejected(fid, clientName, job.title, 'other_selected');
-        } catch (e) {
-          console.error('Notify application not selected:', e);
-        }
-      }
-    }
-
-    // Reject all pending offers
-    if (job.offers && job.offers.length) {
-      for (const o of job.offers) {
-        if (o.status === 'pending') {
-          o.status = 'rejected';
-          try {
-            const fid = o.freelancer._id?.toString() || o.freelancer.toString();
-            await notifyOfferRejected(fid, clientName, job.title);
-          } catch (e) {
-            console.error('Notify offer rejected:', e);
-          }
-        }
-      }
-    }
-
-    const freelancerId =
-      application.freelancer._id?.toString() || application.freelancer.toString() || application.freelancer;
-
-    job.assignedFreelancer = freelancerId;
-    job.status = 'assigned';
-
-    await job.save();
-
-    try {
-      await notifyJobAssigned(freelancerId, clientName, job.title);
-    } catch (notifError) {
-      console.error('Error sending job assignment notification:', notifError);
-    }
+    const jobOut = await Job.findById(job._id)
+      .populate('applications.freelancer', 'fullName profilePhoto phone averageRating ratingCount')
+      .lean();
 
     res.json({
       success: true,
       message: 'Application accepted successfully',
-      job,
+      job: jobOut,
     });
   } catch (error) {
     console.error('Error accepting application:', error);
-    res.status(500).json({
+    const code = error.statusCode || 500;
+    res.status(code >= 400 && code < 600 ? code : 500).json({
       success: false,
       error: error.message || 'Failed to accept application',
     });

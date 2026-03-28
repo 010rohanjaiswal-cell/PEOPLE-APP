@@ -121,6 +121,16 @@ export const clientJobsAPI = {
   },
 
   /**
+   * Enable/disable Auto pick (best applicant by experience + rating)
+   * @param {string} jobId
+   * @param {boolean} enabled
+   */
+  setAutoPick: async (jobId, enabled) => {
+    const response = await apiClient.put(`/api/client/jobs/${jobId}/auto-pick`, { enabled });
+    return response.data;
+  },
+
+  /**
    * Accept an application (assigns freelancer)
    * @param {string} jobId - Job ID
    * @param {string} applicationId - Application subdocument id

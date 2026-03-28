@@ -72,6 +72,8 @@ const NotificationModal = ({ visible, onClose }) => {
         return 'attach-money';
       case 'application_received':
         return 'person-add';
+      case 'auto_pick':
+        return 'stars';
       case 'application_rejected':
         return 'person-off';
       case 'offer_accepted':
@@ -102,6 +104,7 @@ const NotificationModal = ({ visible, onClose }) => {
     switch (type) {
       case 'offer_received':
       case 'application_received':
+      case 'auto_pick':
       case 'job_picked_up':
       case 'job_assigned':
         return colors.primary.main;
@@ -190,6 +193,7 @@ const NotificationModal = ({ visible, onClose }) => {
                     const allowedTypes = [
                       'offer_received',
                       'application_received',
+                      'auto_pick',
                       'offer_accepted',
                       'offer_rejected',
                       'application_rejected',
