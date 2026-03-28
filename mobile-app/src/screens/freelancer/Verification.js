@@ -19,16 +19,452 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
-import { Button, Card, CardContent } from '../../components/common';
+import { Button } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    zIndex: 1,
+  },
+  screenRoot: {
+    flex: 1,
+    backgroundColor: '#EEF3FA',
+    overflow: 'hidden',
+  },
+  colorWash: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  blobBlue: {
+    position: 'absolute',
+    top: -72,
+    right: -48,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+  },
+  blobGreen: {
+    position: 'absolute',
+    bottom: '12%',
+    left: -56,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  page: {
+    maxWidth: 400,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  backToLoginRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  backToLoginText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary.main,
+  },
+  brandBlock: {
+    marginBottom: spacing.lg,
+  },
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.3,
+  },
+  brandAccent: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+    gap: 6,
+  },
+  brandAccentBlue: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary.main,
+  },
+  brandAccentGreen: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.success.main,
+  },
+  brandSubtitle: {
+    marginTop: spacing.md,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.text.secondary,
+  },
+  brandSubtitleAccent: {
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  brandSubtitleAccentGreen: {
+    color: colors.success.dark,
+    fontWeight: '600',
+  },
+  authCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.12)',
+    overflow: 'hidden',
+    shadowColor: colors.primary.main,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    padding: spacing.lg,
+    position: 'relative',
+  },
+  cardStripeRow: {
+    flexDirection: 'row',
+    marginHorizontal: -spacing.lg,
+    marginTop: -spacing.lg,
+    marginBottom: spacing.md,
+    height: 4,
+  },
+  cardStripeBlue: {
+    flex: 1,
+    backgroundColor: colors.primary.main,
+  },
+  cardStripeGreen: {
+    flex: 1,
+    backgroundColor: colors.success.main,
+  },
+  statusContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    width: '100%',
+  },
+  iconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    alignSelf: 'center',
+  },
+  // pendingIcon removed (no pending page in new flow)
+  // approvedIcon removed (no approved page)
+  rejectedIcon: {
+    backgroundColor: colors.error.light,
+  },
+  statusTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  statusMessage: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 24,
+  },
+  progressContainer: {
+    marginBottom: spacing.lg,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotActive: {
+    backgroundColor: colors.primary.main,
+  },
+  progressDotText: {
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  progressLine: {
+    height: 3,
+    width: 70,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.sm,
+    borderRadius: 2,
+  },
+  progressLineActive: {
+    backgroundColor: colors.primary.main,
+  },
+  stepHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  stepHeaderTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+  },
+  arrowButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
+  },
+  floatingArrow: {
+    position: 'absolute',
+    right: spacing.sm,
+    bottom: spacing.sm,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingArrowDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
+  },
+  floatingBack: {
+    position: 'absolute',
+    left: spacing.sm,
+    bottom: spacing.sm,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // backPill/backPillText removed; using floatingBack arrow instead
+  // refreshButton + refreshButtonText removed (no pending page in new flow)
+  // dashboardButton + dashboardButtonText removed (no approved page)
+  resubmitButton: {
+    borderColor: colors.error.main,
+  },
+  resubmitButtonText: {
+    ...typography.button,
+    color: colors.error.main,
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center align content including arrow
+    gap: spacing.sm,
+    minHeight: 50, // Increase height to prevent text from being covered
+    paddingVertical: spacing.md, // Add vertical padding
+    backgroundColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    paddingHorizontal: spacing.buttonPadding?.horizontal || spacing.lg,
+  },
+  submitButtonDisabled: {
+    backgroundColor: colors.text.muted,
+    opacity: 0.5,
+  },
+  submitButtonText: {
+    ...typography.button,
+    color: '#FFFFFF',
+  },
+  formContainer: {
+    position: 'relative',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 0,
+    width: '100%',
+    paddingBottom: spacing.xl + 54,
+  },
+  stepBlock: {
+    marginBottom: spacing.md,
+  },
+  stepTitle: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    fontWeight: '600',
+  },
+  input: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.35)',
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    color: colors.text.primary,
+    backgroundColor: colors.primary.light,
+    minHeight: 48,
+  },
+  inputDisabled: {
+    backgroundColor: '#F1F5F9',
+    borderColor: colors.inputBorder,
+    color: colors.text.primary,
+  },
+  secondaryButton: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  secondaryButtonText: {
+    ...typography.button,
+    color: colors.primary.main,
+  },
+  secondaryButtonTextSuccess: {
+    ...typography.button,
+    color: colors.success.main,
+  },
+  inlineButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  panNameText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginTop: spacing.sm,
+  },
+  verifiedInline: {
+    ...typography.body,
+    color: colors.success.main,
+    marginTop: spacing.sm,
+  },
+  mismatchInline: {
+    ...typography.body,
+    color: colors.error.main,
+    marginTop: spacing.sm,
+  },
+  // Terms & Conditions styles moved to FaceVerification screen
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.error.light,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    borderRadius: spacing.borderRadius.input,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.error.main,
+    flex: 1,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success.light,
+    borderWidth: 1,
+    borderColor: colors.success.main,
+    borderRadius: spacing.borderRadius.input,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  successText: {
+    ...typography.body,
+    color: colors.success.dark,
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.12)',
+  },
+  errorIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  errorModalButton: {
+    alignSelf: 'center',
+    minWidth: 120,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+});
+
 const Verification = ({ navigation }) => {
-  const { user, updateUser, isNewUser } = useAuth();
+  const { isNewUser } = useAuth();
   const { t } = useLanguage();
+
+
   const [status, setStatus] = useState(null); // null, 'pending', 'approved', 'rejected'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -269,7 +705,7 @@ const Verification = ({ navigation }) => {
           value={aadhaarNumber}
           onChangeText={(v) => setAadhaarNumber(String(v || '').replace(/\D/g, '').slice(0, 12))}
           placeholder="12-digit Aadhaar"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.text.muted}
           keyboardType="number-pad"
           editable={!aadhaarVerified && !submitting && !aadhaarRefId}
           style={[styles.input, (aadhaarVerified || aadhaarRefId) && styles.inputDisabled]}
@@ -332,18 +768,14 @@ const Verification = ({ navigation }) => {
 
   const renderPanStep = () => (
     <View>
-      <View style={styles.stepHeaderRow}>
-        {/* Back handled by bottom-left floating arrow */}
-      </View>
-
-      <Text style={styles.stepHeaderTitle}>PAN Verification</Text>
+      <Text style={styles.stepHeaderTitle}>PAN verification</Text>
 
       <View style={styles.stepBlock}>
         <TextInput
           value={panNumber}
           onChangeText={(v) => setPanNumber(String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
           placeholder="PAN Number (ABCDE1234F)"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.text.muted}
           autoCapitalize="characters"
           editable={!panVerified && !submitting}
           style={[styles.input, panVerified && styles.inputDisabled]}
@@ -384,16 +816,6 @@ const Verification = ({ navigation }) => {
   // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
     <View style={styles.formContainer}>
-      <View style={styles.headerRow}>
-        <MaterialIcons name="verified-user" size={20} color={colors.primary.main} />
-        <Text style={styles.statusTitleInline}>Verification Required</Text>
-      </View>
-      <Text style={styles.statusMessage}>
-        {isNewUser
-          ? 'You don’t have an existing account. Verify Aadhaar & PAN to create your account.'
-          : 'Complete Aadhaar & PAN verification to continue.'}
-      </Text>
-
       {renderProgress()}
       {step === 0 ? renderAadhaarStep() : renderPanStep()}
 
@@ -424,57 +846,119 @@ const Verification = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <LoadingSpinner />
-      </View>
+      <SafeAreaView style={styles.screenRoot} edges={['top', 'bottom']}>
+        <View style={styles.colorWash} pointerEvents="none">
+          <View style={styles.blobBlue} />
+          <View style={styles.blobGreen} />
+        </View>
+        <View style={[styles.flex, { justifyContent: 'center', alignItems: 'center' }]}>
+          <LoadingSpinner />
+        </View>
+      </SafeAreaView>
     );
   }
 
+  const showForm =
+    status == null ||
+    status === VERIFICATION_STATUS.PENDING ||
+    (status === VERIFICATION_STATUS.REJECTED && showResubmitForm);
+  const showRejectedOnly =
+    status === VERIFICATION_STATUS.REJECTED && !showResubmitForm;
+
+  const cardStripe = (
+    <View style={styles.cardStripeRow}>
+      <View style={styles.cardStripeBlue} />
+      <View style={styles.cardStripeGreen} />
+    </View>
+  );
+
+  const alertsBlock = (
+    <>
+      {error ? (
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="error-outline" size={20} color={colors.error.main} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+      {successMessage ? (
+        <View style={styles.successContainer}>
+          <MaterialIcons name="check-circle" size={20} color={colors.success.main} />
+          <Text style={styles.successText}>{successMessage}</Text>
+        </View>
+      ) : null}
+    </>
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.screenRoot} edges={['top', 'bottom']}>
+      <View style={styles.colorWash} pointerEvents="none">
+        <View style={styles.blobBlue} />
+        <View style={styles.blobGreen} />
+      </View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Back to Login */}
-        <View style={styles.topAction}>
-          <Button variant="ghost" onPress={() => navigation.replace('Login')} style={styles.backButton}>
-            Back to Login
-          </Button>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.page}>
+            <TouchableOpacity
+              onPress={() => navigation.replace('Login')}
+              style={styles.backToLoginRow}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="arrow-back" size={18} color={colors.primary.main} />
+              <Text style={styles.backToLoginText}>Back to Login</Text>
+            </TouchableOpacity>
 
-        <Card style={styles.card}>
-          <CardContent>
-            {/* Error Display */}
-            {error && (
-              <View style={styles.errorContainer}>
-                <MaterialIcons name="error-outline" size={20} color={colors.error.main} />
-                <Text style={styles.errorText}>{error}</Text>
+            {showForm ? (
+              <>
+                <View style={styles.brandBlock}>
+                  <Text style={styles.brandTitle}>Verification required</Text>
+                  <View style={styles.brandAccent}>
+                    <View style={styles.brandAccentBlue} />
+                    <View style={styles.brandAccentGreen} />
+                  </View>
+                  <Text style={styles.brandSubtitle}>
+                    {isNewUser ? (
+                      <>
+                        You don’t have an existing account. Verify{' '}
+                        <Text style={styles.brandSubtitleAccent}>Aadhaar</Text>
+                        {' & '}
+                        <Text style={styles.brandSubtitleAccentGreen}>PAN</Text>
+                        {' to create your account.'}
+                      </>
+                    ) : (
+                      <>
+                        Complete <Text style={styles.brandSubtitleAccent}>Aadhaar</Text>
+                        {' & '}
+                        <Text style={styles.brandSubtitleAccentGreen}>PAN</Text>
+                        {' verification to continue.'}
+                      </>
+                    )}
+                  </Text>
+                </View>
+                <View style={styles.authCard}>
+                  {cardStripe}
+                  {alertsBlock}
+                  {renderVerificationForm()}
+                </View>
+              </>
+            ) : null}
+
+            {showRejectedOnly ? (
+              <View style={styles.authCard}>
+                {cardStripe}
+                {alertsBlock}
+                {renderRejectedStatus()}
               </View>
-            )}
-
-            {/* Success Message Display */}
-            {successMessage && (
-              <View style={styles.successContainer}>
-                <MaterialIcons name="check-circle" size={20} color={colors.success.main} />
-                <Text style={styles.successText}>{successMessage}</Text>
-              </View>
-            )}
-
-            {/* Show rejection info (without form) */}
-            {status === VERIFICATION_STATUS.REJECTED && !showResubmitForm && renderRejectedStatus()}
-
-            {/* Show form for new / pending / resubmit */}
-            {((status == null) || (status === VERIFICATION_STATUS.PENDING) || (status === VERIFICATION_STATUS.REJECTED && showResubmitForm)) && renderVerificationForm()}
-          </CardContent>
-        </Card>
-      </ScrollView>
+            ) : null}
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
       {/* Error Modal */}
       <Modal
@@ -507,354 +991,6 @@ const Verification = ({ navigation }) => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    padding: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-  },
-  topAction: {
-    alignItems: 'flex-end',
-    marginBottom: spacing.md,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.lg, // Add padding from top to avoid phone navigation bar
-  },
-  backButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  statusContainer: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.md,
-    width: '100%',
-  },
-  iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    alignSelf: 'center',
-  },
-  // pendingIcon removed (no pending page in new flow)
-  // approvedIcon removed (no approved page)
-  rejectedIcon: {
-    backgroundColor: colors.error.light,
-  },
-  statusTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  statusTitleInline: {
-    ...typography.h2,
-    color: colors.text.primary,
-  },
-  statusMessage: {
-    ...typography.body,
-    color: colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-    lineHeight: 24,
-  },
-  progressContainer: {
-    marginBottom: spacing.lg,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDotActive: {
-    backgroundColor: colors.primary.main,
-  },
-  progressDotText: {
-    ...typography.small,
-    color: colors.text.primary,
-    fontWeight: '700',
-  },
-  progressLine: {
-    height: 3,
-    width: 70,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.sm,
-    borderRadius: 2,
-  },
-  progressLineActive: {
-    backgroundColor: colors.primary.main,
-  },
-  stepHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  stepHeaderTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
-  },
-  arrowButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowButtonDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.5,
-  },
-  floatingArrow: {
-    position: 'absolute',
-    right: spacing.sm,
-    bottom: spacing.sm,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  floatingArrowDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.5,
-  },
-  floatingBack: {
-    position: 'absolute',
-    left: spacing.sm,
-    bottom: spacing.sm,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // backPill/backPillText removed; using floatingBack arrow instead
-  // refreshButton + refreshButtonText removed (no pending page in new flow)
-  // dashboardButton + dashboardButtonText removed (no approved page)
-  resubmitButton: {
-    borderColor: colors.error.main,
-  },
-  resubmitButtonText: {
-    ...typography.button,
-    color: colors.error.main,
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center align content including arrow
-    gap: spacing.sm,
-    minHeight: 50, // Increase height to prevent text from being covered
-    paddingVertical: spacing.md, // Add vertical padding
-    backgroundColor: colors.primary.main,
-    borderRadius: spacing.borderRadius.button,
-    paddingHorizontal: spacing.buttonPadding?.horizontal || spacing.lg,
-  },
-  submitButtonDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.5,
-  },
-  submitButtonText: {
-    ...typography.button,
-    color: '#FFFFFF',
-  },
-  formContainer: {
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.md,
-    width: '100%',
-    paddingBottom: spacing.xl + 54, // extra space for floating arrow
-  },
-  stepBlock: {
-    marginBottom: spacing.md,
-  },
-  stepTitle: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-    fontWeight: '600',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.borderRadius.input,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: '#000',
-    backgroundColor: colors.cardBackground,
-    minHeight: 48,
-  },
-  inputDisabled: {
-    backgroundColor: colors.border,
-    borderColor: colors.border,
-    color: '#000',
-  },
-  secondaryButton: {
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.primary.main,
-    borderRadius: spacing.borderRadius.button,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  secondaryButtonText: {
-    ...typography.button,
-    color: colors.primary.main,
-  },
-  secondaryButtonTextSuccess: {
-    ...typography.button,
-    color: colors.success.main,
-  },
-  inlineButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  panNameText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginTop: spacing.sm,
-  },
-  verifiedInline: {
-    ...typography.body,
-    color: colors.success.main,
-    marginTop: spacing.sm,
-  },
-  mismatchInline: {
-    ...typography.body,
-    color: colors.error.main,
-    marginTop: spacing.sm,
-  },
-  // Terms & Conditions styles moved to FaceVerification screen
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.borderRadius.input,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.error.main,
-    flex: 1,
-  },
-  successContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.success.light,
-    borderWidth: 1,
-    borderColor: colors.success.main,
-    borderRadius: spacing.borderRadius.input,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  successText: {
-    ...typography.body,
-    color: colors.success.dark,
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  errorIconContainer: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  modalActionsCentered: {
-    justifyContent: 'center',
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    minWidth: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  errorModalButton: {
-    alignSelf: 'center',
-    minWidth: 120,
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
 
 export default Verification;
 

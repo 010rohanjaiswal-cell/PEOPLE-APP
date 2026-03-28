@@ -3,7 +3,7 @@
  * Displays list of notifications with actions
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,11 +15,126 @@ import {
   RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { translateNotificationToHindi } from '../../utils/translate';
 import EmptyState from '../common/EmptyState';
+
+function createNotificationModalStyles(colors) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modal: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: spacing.lg,
+      borderTopRightRadius: spacing.lg,
+      height: '85%',
+      width: '100%',
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    title: {
+      ...typography.h2,
+      color: colors.text.primary,
+    },
+    closeButton: {
+      padding: spacing.xs,
+    },
+    contentWrapper: {
+      flex: 1,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.xxl,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      padding: spacing.md,
+    },
+    notificationItem: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: spacing.md,
+      padding: spacing.md,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      position: 'relative',
+    },
+    unreadNotification: {
+      borderLeftWidth: 4,
+      borderLeftColor: colors.primary.main,
+      backgroundColor: colors.primary.light + '10',
+    },
+    notificationContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: spacing.md,
+    },
+    notificationText: {
+      flex: 1,
+    },
+    notificationTitle: {
+      ...typography.body,
+      fontWeight: '600',
+      color: colors.text.primary,
+      marginBottom: spacing.xs,
+    },
+    notificationMessage: {
+      ...typography.body,
+      color: colors.text.secondary,
+      marginBottom: spacing.xs,
+    },
+    unreadText: {
+      fontWeight: '500',
+      color: colors.text.primary,
+    },
+    notificationTime: {
+      ...typography.small,
+      color: colors.text.muted,
+    },
+    deleteButton: {
+      padding: spacing.xs,
+      marginLeft: spacing.sm,
+    },
+    unreadDot: {
+      position: 'absolute',
+      top: spacing.md,
+      right: spacing.md,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.primary.main,
+    },
+  });
+}
 
 const NotificationModal = ({ visible, onClose }) => {
   const { t, locale } = useLanguage();
@@ -35,6 +150,8 @@ const NotificationModal = ({ visible, onClose }) => {
   } = useNotifications();
 
   const [translatedNotifications, setTranslatedNotifications] = useState({});
+  const { colors } = useTheme();
+  const styles = useMemo(() => createNotificationModalStyles(colors), [colors]);
 
   // When locale is Hindi, translate notification title and message for display
   useEffect(() => {
@@ -118,7 +235,7 @@ const NotificationModal = ({ visible, onClose }) => {
       case 'application_rejected':
         return colors.error.main;
       case 'chat_message':
-        return colors.info?.main || colors.primary.main;
+        return colors.primary.main;
       default:
         return colors.text.secondary;
     }
@@ -273,118 +390,6 @@ const NotificationModal = ({ visible, onClose }) => {
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modal: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: spacing.lg,
-    borderTopRightRadius: spacing.lg,
-    height: '85%',
-    width: '100%',
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: {
-    ...typography.h2,
-    color: colors.text.primary,
-  },
-  closeButton: {
-    padding: spacing.xs,
-  },
-  contentWrapper: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xxl,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: spacing.md,
-  },
-  notificationItem: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    position: 'relative',
-  },
-  unreadNotification: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary.main,
-    backgroundColor: colors.primary.light + '10',
-  },
-  notificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  notificationText: {
-    flex: 1,
-  },
-  notificationTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  notificationMessage: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  unreadText: {
-    fontWeight: '500',
-    color: colors.text.primary,
-  },
-  notificationTime: {
-    ...typography.small,
-    color: colors.text.muted,
-  },
-  deleteButton: {
-    padding: spacing.xs,
-    marginLeft: spacing.sm,
-  },
-  unreadDot: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primary.main,
-  },
-});
 
 export default NotificationModal;
 

@@ -3,16 +3,98 @@
  * Displays basic freelancer profile information
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 
+function createFreelancerProfileStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+  },
+  card: {
+    width: '100%',
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  profilePhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: spacing.md,
+  },
+  profilePhotoPlaceholder: {
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  name: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  role: {
+    ...typography.body,
+    color: colors.text.secondary,
+  },
+  loadingContainer: {
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  infoSection: {
+    marginTop: spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  infoLabel: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+    minWidth: 70,
+  },
+  infoText: {
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  infoMessage: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.primary.light,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  infoMessageText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    flex: 1,
+  },
+});
+}
+
 const Profile = () => {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createFreelancerProfileStyles(colors), [colors]);
+
+
   const [verification, setVerification] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -192,81 +274,6 @@ const Profile = () => {
     </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-  },
-  card: {
-    width: '100%',
-  },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  profilePhoto: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: spacing.md,
-  },
-  profilePhotoPlaceholder: {
-    backgroundColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  name: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  role: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  loadingContainer: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  infoSection: {
-    marginTop: spacing.lg,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  infoLabel: {
-    ...typography.body,
-    color: colors.text.secondary,
-    fontWeight: '500',
-    minWidth: 70,
-  },
-  infoText: {
-    ...typography.body,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  infoMessage: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.primary.light,
-    borderWidth: 1,
-    borderColor: colors.primary.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  infoMessageText: {
-    ...typography.small,
-    color: colors.text.secondary,
-    flex: 1,
-  },
-});
 
 export default Profile;
 

@@ -10,6 +10,14 @@ const { authenticate } = require('../middleware/auth');
 const Notification = require('../models/Notification');
 const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 
+/** In-app notifications older than this are removed (per user). */
+const NOTIFICATION_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+async function pruneExpiredNotifications(userId) {
+  const cutoff = new Date(Date.now() - NOTIFICATION_RETENTION_MS);
+  await Notification.deleteMany({ user: userId, createdAt: { $lt: cutoff } });
+}
+
 /**
  * GET /api/notifications
  * Get all notifications for the authenticated user
@@ -22,6 +30,8 @@ router.get('/', authenticate, async (req, res) => {
     if (VERBOSE_NOTIF_LOGS) {
       console.log(`📬 Fetching notifications for user: ${userId}`);
     }
+
+    await pruneExpiredNotifications(userId);
 
     const query = { user: userId };
     if (unreadOnly === 'true') {
@@ -70,6 +80,7 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/unread-count', authenticate, async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+    await pruneExpiredNotifications(userId);
     const count = await Notification.countDocuments({ user: userId, read: false });
 
     if (VERBOSE_NOTIF_LOGS) {
@@ -135,10 +146,13 @@ router.put('/read-all', authenticate, async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
 
+    await pruneExpiredNotifications(userId);
+    const cutoff = new Date(Date.now() - NOTIFICATION_RETENTION_MS);
+
     const result = await Notification.updateMany(
-      { user: userId, read: false },
-      { 
-        $set: { 
+      { user: userId, read: false, createdAt: { $gte: cutoff } },
+      {
+        $set: {
           read: true,
           readAt: new Date(),
         },

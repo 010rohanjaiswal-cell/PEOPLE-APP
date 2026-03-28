@@ -3,7 +3,7 @@
  * Display active jobs for client with all features from documentation
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import {
   Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
@@ -32,8 +33,296 @@ import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+function createClientMyJobsStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    margin: spacing.lg,
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.error.main,
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+  },
+  jobCard: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: SCREEN_WIDTH * 0.97,
+    alignSelf: 'center',
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  jobHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  jobTitle: {
+    ...typography.body,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    flex: 1,
+    marginRight: 4,
+  },
+  editDeleteButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconButton: {
+    padding: 4,
+    borderRadius: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jobBudget: {
+    ...typography.body,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.xs,
+  },
+  statusText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  jobAddress: {
+    ...typography.small,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  jobMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  jobMetaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  jobMetaText: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  viewFreelancerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  viewFreelancerMetaText: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '500',
+  },
+  jobDescription: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  /** Non-delivery open jobs: View Offers + View Applications side by side, 98% screen, ~50% each */
+  actionsRowOpenPair: {
+    width: '98%',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+  },
+  openJobActionHalf: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  /** Delivery open jobs: single View Offers button */
+  viewOffersButtonDeliveryWide: {
+    width: '95%',
+    alignSelf: 'center',
+    justifyContent: 'center',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+  },
+  viewOffersButton: {
+    borderColor: colors.primary.main,
+    backgroundColor: 'transparent',
+  },
+  viewApplicationsButton: {
+    borderColor: colors.primary.main,
+    backgroundColor: 'transparent',
+  },
+  viewFreelancerButton: {
+    borderColor: colors.success.main,
+    backgroundColor: 'transparent',
+  },
+  payButton: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.main,
+    width: '98%',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButton: {
+    borderColor: colors.primary.main,
+    backgroundColor: 'transparent',
+  },
+  deleteButton: {
+    borderColor: colors.error.main,
+    backgroundColor: 'transparent',
+  },
+  actionButtonText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  completedText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalIcon: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+  },
+  successModalButton: {
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.cardBackground,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  deleteModalButton: {
+    backgroundColor: colors.error.main,
+  },
+});
+}
+
 const MyJobs = () => {
   const { t, locale } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createClientMyJobsStyles(colors), [colors]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -472,7 +761,12 @@ const MyJobs = () => {
           renderItem={renderJobItem}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary.main} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary.main]}
+              tintColor={colors.primary.main}
+            />
           }
         />
       )}
@@ -593,289 +887,5 @@ const MyJobs = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    margin: spacing.lg,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  listContent: {
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-  },
-  jobCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: SCREEN_WIDTH * 0.97,
-    alignSelf: 'center',
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  jobHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  jobTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  jobTitle: {
-    ...typography.body,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.primary,
-    flex: 1,
-    marginRight: 4,
-  },
-  editDeleteButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  iconButton: {
-    padding: 4,
-    borderRadius: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  jobBudget: {
-    ...typography.body,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-  },
-  statusText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  jobAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
-  },
-  jobAddress: {
-    ...typography.small,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  jobMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  jobMetaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  jobMetaText: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  viewFreelancerMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  viewFreelancerMetaText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '500',
-  },
-  jobDescription: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  /** Non-delivery open jobs: View Offers + View Applications side by side, 98% screen, ~50% each */
-  actionsRowOpenPair: {
-    width: '98%',
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: spacing.sm,
-  },
-  openJobActionHalf: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  /** Delivery open jobs: single View Offers button */
-  viewOffersButtonDeliveryWide: {
-    width: '95%',
-    alignSelf: 'center',
-    justifyContent: 'center',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-  },
-  viewOffersButton: {
-    borderColor: colors.primary.main,
-    backgroundColor: 'transparent',
-  },
-  viewApplicationsButton: {
-    borderColor: colors.primary.main,
-    backgroundColor: 'transparent',
-  },
-  viewFreelancerButton: {
-    borderColor: colors.success.main,
-    backgroundColor: 'transparent',
-  },
-  payButton: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.main,
-    width: '98%',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editButton: {
-    borderColor: colors.primary.main,
-    backgroundColor: 'transparent',
-  },
-  deleteButton: {
-    borderColor: colors.error.main,
-    backgroundColor: 'transparent',
-  },
-  actionButtonText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  completedText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalIcon: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-  },
-  successModalButton: {
-    alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 120,
-  },
-  modalCancelButton: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.cardBackground,
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  modalCancelText: {
-    ...typography.body,
-    color: colors.text.primary,
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  deleteModalButton: {
-    backgroundColor: colors.error.main,
-  },
-});
 
 export default MyJobs;

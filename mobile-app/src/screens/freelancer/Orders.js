@@ -15,15 +15,198 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock } from '../../components/job/JobLocationBlock';
 
+function createOrdersStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.error.main,
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingTop: 0,
+    paddingBottom: spacing.lg,
+  },
+  orderCard: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  orderTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.xs,
+    backgroundColor: colors.success.light,
+  },
+  completedText: {
+    ...typography.small,
+    color: colors.success.main,
+    fontWeight: '600',
+  },
+  orderCategory: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  orderMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  orderMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  orderMetaText: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  orderDate: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+  },
+  clientInfo: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+  },
+  filterBar: {
+    marginBottom: spacing.xs,
+    paddingBottom: 0,
+  },
+  filterBarContent: {
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+    paddingBottom: 0,
+  },
+  filterButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    height: 28,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    marginRight: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  filterButtonText: {
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 12,
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paginationContainer: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  paginationButton: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  paginationButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  paginationButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  paginationButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+});
+}
+
 const Orders = () => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createOrdersStyles(colors), [colors]);
+
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -305,182 +488,6 @@ const Orders = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  listContent: {
-    paddingTop: 0,
-    paddingBottom: spacing.lg,
-  },
-  orderCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  orderTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-    backgroundColor: colors.success.light,
-  },
-  completedText: {
-    ...typography.small,
-    color: colors.success.main,
-    fontWeight: '600',
-  },
-  orderCategory: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  orderMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  orderMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  orderMetaText: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  orderDate: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  clientInfo: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  filterBar: {
-    marginBottom: spacing.xs,
-    paddingBottom: 0,
-  },
-  filterBarContent: {
-    paddingHorizontal: spacing.sm,
-    gap: spacing.xs,
-    paddingBottom: 0,
-  },
-  filterButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    height: 28,
-    borderRadius: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    marginRight: spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  filterButtonText: {
-    ...typography.small,
-    color: colors.text.primary,
-    fontWeight: '500',
-    fontSize: 12,
-  },
-  filterButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paginationContainer: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  paginationButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  paginationButton: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  paginationButtonActive: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  paginationButtonText: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: '500',
-    fontSize: 14,
-  },
-  paginationButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
 
 export default Orders;
 

@@ -52,7 +52,10 @@
     "plugins": [
       [
         "expo-notifications",
-        { "android": { "defaultChannel": "default" } }
+        {
+          "android": { "defaultChannel": "default" },
+          "sounds": ["./assets/sounds/notification_sound.wav"]
+        }
       ],
       "expo-location",
       [

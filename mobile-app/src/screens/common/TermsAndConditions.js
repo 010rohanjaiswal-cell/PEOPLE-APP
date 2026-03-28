@@ -4,15 +4,26 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
 
 const TermsAndConditions = ({ onClose }) => {
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
+    <View style={[styles.root, { height: windowHeight }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + spacing.sm,
+            paddingBottom: spacing.md,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={onClose} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
@@ -20,7 +31,17 @@ const TermsAndConditions = ({ onClose }) => {
         <View style={styles.backButtonPlaceholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={true} contentContainerStyle={styles.contentInner}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.xl },
+        ]}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        bounces
+      >
         <Text style={styles.lastUpdated}>Last updated: August 2025</Text>
 
         <View style={styles.noticeBox}>
@@ -285,21 +306,28 @@ const TermsAndConditions = ({ onClose }) => {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  root: {
+    width: '100%',
     backgroundColor: colors.background,
+  },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.cardBackground,
@@ -314,13 +342,6 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: colors.text.primary,
     fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    padding: spacing.lg,
-  },
-  contentInner: {
-    paddingBottom: spacing.xl,
   },
   lastUpdated: {
     ...typography.small,

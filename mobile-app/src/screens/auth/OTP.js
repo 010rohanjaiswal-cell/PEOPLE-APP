@@ -15,9 +15,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
-import { Button, Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/common';
 import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../../api';
@@ -29,14 +29,14 @@ const OTP = ({ navigation, route }) => {
   const { phoneNumber, selectedRole } = route?.params || {};
   const { loginWithToken } = useAuth();
   const { t } = useLanguage();
-  
+
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
+  // Start at 60s: OTP was just sent from Login; resend only after cooldown.
+  const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
 
-  // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => {
@@ -47,7 +47,6 @@ const OTP = ({ navigation, route }) => {
   }, [resendCooldown]);
 
   const handleOTPChange = (text) => {
-    // Only allow digits, max 6
     const digits = text.replace(/\D/g, '').slice(0, 6);
     setOtp(digits);
     setError('');
@@ -82,7 +81,6 @@ const OTP = ({ navigation, route }) => {
 
       if (result.success) {
         await loginWithToken(result.token, result.user);
-        console.log('✅ User authenticated, navigation will be handled by AppNavigator');
       } else if (result.code === 'ALREADY_LOGGED_IN_ELSEWHERE') {
         setLoading(false);
         Alert.alert(
@@ -102,24 +100,24 @@ const OTP = ({ navigation, route }) => {
       }
 
       setLoading(false);
-    } catch (error) {
-      console.error('❌ Error verifying OTP:', error);
-      
-      // Better error handling
+    } catch (err) {
+      console.error('❌ Error verifying OTP:', err);
+
       let errorMessage = 'Failed to verify OTP. Please try again.';
-      
-      if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message?.includes('Network Error') || error.code === 'ERR_NETWORK') {
-        errorMessage = 'Network error: Could not connect to server. Please check your internet connection.';
-      } else if (error.response?.status === 401) {
+
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message?.includes('Network Error') || err.code === 'ERR_NETWORK') {
+        errorMessage =
+          'Network error: Could not connect to server. Please check your internet connection.';
+      } else if (err.response?.status === 401) {
         errorMessage = 'Invalid OTP. Please check and try again.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
       setLoading(false);
     }
@@ -133,28 +131,28 @@ const OTP = ({ navigation, route }) => {
         setError('Phone number not found. Please go back and try again.');
         return;
       }
-      
+
       const formattedPhone = phoneNumber.replace(/\s/g, '');
-      const storedRole = selectedRole || await AsyncStorage.getItem('selectedRole');
-      
+      const storedRole = selectedRole || (await AsyncStorage.getItem('selectedRole'));
+
       if (!storedRole) {
         setError('Role not found. Please go back and try again.');
         return;
       }
-      
-      // Call backend API to resend OTP
+
       const result = await authAPI.sendOTP(formattedPhone, storedRole);
-      
+
       if (result.success) {
         setResendCooldown(60);
         setError('');
-        console.log('✅ OTP resent successfully!');
       } else {
         throw new Error(result.error || 'Failed to resend OTP');
       }
-    } catch (error) {
-      console.error('Error resending OTP:', error);
-      setError(error.response?.data?.error || error.message || 'Failed to resend OTP. Please try again.');
+    } catch (err) {
+      console.error('Error resending OTP:', err);
+      setError(
+        err.response?.data?.error || err.message || 'Failed to resend OTP. Please try again.'
+      );
     }
   };
 
@@ -162,330 +160,284 @@ const OTP = ({ navigation, route }) => {
     navigation.goBack();
   };
 
-  // Get phone number from route params or AsyncStorage
   const displayPhone = phoneNumber || 'your phone';
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.screenRoot} edges={['top', 'left', 'right']}>
+      <View style={styles.colorWash} pointerEvents="none">
+        <View style={styles.blobBlue} />
+        <View style={styles.blobGreen} />
+      </View>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <MaterialIcons name="security" size={32} color="#FFFFFF" />
-            </View>
-            <Text style={styles.title}>Verify OTP</Text>
-            <Text style={styles.description}>
-              Enter the 6-digit code sent to {displayPhone}
-            </Text>
-          </View>
-
-          {/* Card — elevated panel, no harsh outline */}
-          <Card style={styles.authCard}>
-            <CardContent>
-              {/* OTP Input — 3D lifted field */}
-              <View style={styles.otpContainer}>
-                <TextInput
-                  ref={otpInputRef}
-                  style={styles.otpInput}
-                  value={otp}
-                  onChangeText={handleOTPChange}
-                  placeholder="000000"
-                  placeholderTextColor={colors.text.muted}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoFocus
-                  selectTextOnFocus
-                />
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.page}>
+            <View style={styles.brandBlock}>
+              <Text style={styles.screenTitle}>Enter verification code</Text>
+              <View style={styles.brandAccent}>
+                <View style={styles.brandAccentBlue} />
+                <View style={styles.brandAccentGreen} />
               </View>
+              <Text style={styles.subtitle}>
+                Code sent to{' '}
+                <Text style={styles.subtitleEmphasis}>{displayPhone}</Text>
+              </Text>
+            </View>
 
-              {/* Submit Button with Error */}
+            <View style={styles.card}>
+              <View style={styles.cardStripeRow}>
+                <View style={styles.cardStripeBlue} />
+                <View style={styles.cardStripeGreen} />
+              </View>
+              <Text style={styles.fieldLabel}>6-digit code</Text>
+              <TextInput
+                ref={otpInputRef}
+                style={styles.otpInput}
+                value={otp}
+                onChangeText={handleOTPChange}
+                placeholder="• • • • • •"
+                placeholderTextColor={colors.text.muted}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+                selectTextOnFocus
+              />
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
               <TouchableOpacity
                 onPress={() => handleVerifyOTP(false)}
                 disabled={!validateOTP(otp) || loading}
-                style={[styles.submitButton, (!validateOTP(otp) || loading) && styles.submitButtonDisabled]}
-                activeOpacity={0.7}
+                style={[
+                  styles.primaryButton,
+                  (!validateOTP(otp) || loading) && styles.primaryButtonDisabled,
+                ]}
+                activeOpacity={0.9}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
-                  <View style={styles.buttonContent}>
-                    <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
-                    <Text style={styles.buttonText}>Verify OTP</Text>
-                    {error ? (
-                      <>
-                        <View style={styles.buttonDivider} />
-                        <View style={styles.errorInline}>
-                          <MaterialIcons name="error-outline" size={16} color="#FFFFFF" />
-                          <Text style={styles.errorTextInline} numberOfLines={1}>
-                            {error}
-                          </Text>
-                        </View>
-                      </>
-                    ) : null}
-                  </View>
+                  <Text style={styles.primaryButtonText}>Verify and continue</Text>
                 )}
               </TouchableOpacity>
 
-              {/* Resend OTP */}
-              <View style={styles.resendContainer}>
-                <Text style={styles.resendText}>Didn't receive the code?</Text>
+              <View style={styles.resendRow}>
+                <Text style={styles.resendLabel}>Didn’t receive it?</Text>
                 {resendCooldown > 0 ? (
                   <Text style={styles.cooldownText}>Resend in {resendCooldown}s</Text>
                 ) : (
-                  <Button
-                    variant="ghost"
-                    onPress={handleResendOTP}
-                    style={styles.resendButton}
-                  >
-                    Resend OTP
-                  </Button>
+                  <TouchableOpacity onPress={handleResendOTP} hitSlop={{ top: 8, bottom: 8 }}>
+                    <Text style={styles.resendLink}>Resend code</Text>
+                  </TouchableOpacity>
                 )}
               </View>
 
-              {/* Back Button */}
               <TouchableOpacity
                 onPress={handleBack}
-                style={styles.backButton}
+                style={styles.backRow}
                 activeOpacity={0.7}
               >
-                <View style={styles.backButtonContent}>
-                  <MaterialIcons name="arrow-back" size={16} color={colors.primary.main} />
-                  <Text style={styles.backButtonText}>Back to Login</Text>
-                </View>
+                <MaterialIcons name="arrow-back" size={18} color={colors.primary.main} />
+                <Text style={styles.backText}>Back to sign in</Text>
               </TouchableOpacity>
-            </CardContent>
-          </Card>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  screenRoot: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#EEF3FA',
+    overflow: 'hidden',
+  },
+  colorWash: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  blobBlue: {
+    position: 'absolute',
+    top: -64,
+    right: -40,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+  },
+  blobGreen: {
+    position: 'absolute',
+    bottom: '18%',
+    left: -48,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+  },
+  flex: {
+    flex: 1,
+    zIndex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
-  content: {
+  page: {
     maxWidth: 400,
     width: '100%',
     alignSelf: 'center',
   },
-  header: {
-    alignItems: 'center',
+  brandBlock: {
     marginBottom: spacing.xl,
   },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.primary.main,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#1e3a8a',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 8,
-      },
-      default: {},
-    }),
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+    letterSpacing: -0.3,
   },
-  title: {
-    ...typography.h1,
+  brandAccent: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+    gap: 6,
+  },
+  brandAccentBlue: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary.main,
+  },
+  brandAccentGreen: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.success.main,
+  },
+  subtitle: {
+    marginTop: spacing.md,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.text.secondary,
+  },
+  subtitleEmphasis: {
+    fontWeight: '600',
+    color: colors.primary.main,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(22, 163, 74, 0.14)',
+    padding: spacing.lg,
+    overflow: 'hidden',
+    shadowColor: colors.success.main,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  cardStripeRow: {
+    flexDirection: 'row',
+    marginHorizontal: -spacing.lg,
+    marginTop: -spacing.lg,
+    marginBottom: spacing.md,
+    height: 4,
+  },
+  cardStripeBlue: {
+    flex: 1,
+    backgroundColor: colors.primary.main,
+  },
+  cardStripeGreen: {
+    flex: 1,
+    backgroundColor: colors.success.main,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.text.primary,
     marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  description: {
-    ...typography.body,
-    color: colors.muted,
-    textAlign: 'center',
-  },
-  authCard: {
-    width: '100%',
-    borderWidth: 0,
-    backgroundColor: colors.cardBackground,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.14,
-        shadowRadius: 20,
-      },
-      android: {
-        elevation: 10,
-      },
-      default: {},
-    }),
-  },
-  otpContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    width: '100%',
-    borderRadius: spacing.md,
-    backgroundColor: colors.cardBackground,
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-      default: {},
-    }),
   },
   otpInput: {
     width: '100%',
-    height: 64,
-    fontSize: 32,
-    fontWeight: 'bold',
+    height: 52,
+    fontSize: 22,
+    fontWeight: '600',
     textAlign: 'center',
-    letterSpacing: 8,
-    borderWidth: 0,
-    borderRadius: spacing.md,
-    backgroundColor: colors.cardBackground,
+    letterSpacing: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.35)',
+    borderRadius: 8,
+    backgroundColor: colors.primary.light,
     color: colors.text.primary,
     paddingHorizontal: spacing.md,
-  },
-  submitButton: {
-    width: '100%',
-    minHeight: 52,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
+  },
+  errorText: {
+    fontSize: typography.small.fontSize,
+    color: colors.error.main,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 8,
     backgroundColor: colors.primary.main,
-    borderRadius: spacing.borderRadius.button,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#1e40af',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 6,
-      },
-      default: {},
-    }),
   },
-  submitButtonDisabled: {
+  primaryButtonDisabled: {
     backgroundColor: colors.text.muted,
-    opacity: 0.7,
+    opacity: 0.55,
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  buttonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: typography.button.fontSize,
-    fontWeight: typography.button.fontWeight,
-  },
-  buttonDivider: {
-    width: 1,
-    height: '80%',
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    marginHorizontal: spacing.sm,
-  },
-  errorInline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    flexShrink: 1,
-  },
-  errorTextInline: {
-    ...typography.small,
-    color: '#FFFFFF',
-    fontSize: 11,
-    flexShrink: 1,
-  },
-  buttonIcon: {
-    marginRight: spacing.sm,
-  },
-  resendContainer: {
-    alignItems: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
-  },
-  resendText: {
-    ...typography.small,
-    color: colors.muted,
-    marginBottom: spacing.xs,
-  },
-  cooldownText: {
-    ...typography.small,
-    color: colors.primary,
+    fontSize: 16,
     fontWeight: '600',
   },
-  resendButton: {
-    marginTop: spacing.xs,
-  },
-  backButton: {
-    width: '100%',
-    minHeight: 52,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.borderRadius.button,
+  resendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-      default: {},
-    }),
+    gap: spacing.xs,
+    marginTop: spacing.lg,
   },
-  backButtonContent: {
+  resendLabel: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  cooldownText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text.muted,
+  },
+  resendLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary.main,
+  },
+  backRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+    marginTop: spacing.xl,
+    paddingVertical: spacing.sm,
   },
-  backButtonText: {
+  backText: {
+    fontSize: 15,
     color: colors.primary.main,
-    fontSize: typography.button.fontSize,
-    fontWeight: typography.button.fontWeight,
-  },
-  backIcon: {
-    marginRight: spacing.xs,
+    fontWeight: '600',
   },
 });
 

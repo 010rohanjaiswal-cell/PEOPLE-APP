@@ -3,7 +3,7 @@
  * Display open jobs that freelancers can see
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import EmptyState from '../../components/common/EmptyState';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { walletAPI } from '../../api';
@@ -29,10 +30,403 @@ import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
+function createAvailableJobsStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.error.main,
+    textAlign: 'center',
+  },
+  /** Small side inset so the card can be ~98% of screen; old `spacing.lg` made the list feel ~90% wide. */
+  listContent: {
+    paddingBottom: spacing.lg,
+    paddingHorizontal: '1%',
+    width: '100%',
+  },
+  jobCard: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  jobTitle: {
+    ...typography.body,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    flex: 1,
+    minWidth: 0,
+    marginRight: spacing.xs,
+  },
+  jobBudget: {
+    ...typography.body,
+    color: colors.primary.main,
+    fontWeight: '600',
+    flexShrink: 0,
+  },
+  jobCategory: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  jobAddress: {
+    ...typography.small,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  jobMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    gap: spacing.sm,
+  },
+  jobMetaMainInner: {
+    flex: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
+  },
+  jobMetaDistance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 0,
+    marginLeft: spacing.xs,
+  },
+  jobMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  jobMetaText: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  descriptionBlock: {
+    position: 'relative',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  jobDescription: {
+    ...typography.small,
+    color: colors.text.secondary,
+    paddingRight: 0,
+  },
+  viewMoreButton: {
+    paddingVertical: 2,
+  },
+  viewMoreButtonInline: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.cardBackground,
+    paddingLeft: spacing.sm,
+  },
+  viewMoreButtonBlock: {
+    marginTop: spacing.xs,
+    width: '100%',
+  },
+  viewMoreText: {
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  actionsRow: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    width: '100%',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    flex: 1,
+  },
+  pickupButton: {
+    backgroundColor: colors.success.main,
+    borderColor: colors.success.main,
+  },
+  applyButton: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  makeOfferButton: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  actionButtonDisabled: {
+    backgroundColor: 'transparent',
+    borderColor: colors.text.muted,
+  },
+  actionButtonText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  /** On primary/success fills, always white (light theme used `background` = white; dark `background` is near-black). */
+  pickupButtonText: {
+    color: '#FFFFFF',
+  },
+  applyButtonText: {
+    color: '#FFFFFF',
+  },
+  makeOfferButtonText: {
+    color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  applySuccessModalContent: {
+    alignItems: 'stretch',
+    paddingVertical: spacing.xl,
+  },
+  applySuccessText: {
+    ...typography.body,
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  applySuccessOkButton: {
+    alignSelf: 'stretch',
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalLabel: {
+    ...typography.body,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text.primary,
+  },
+  modalTextarea: {
+    height: 90,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.cardBackground,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  pickupButtonModal: {
+    backgroundColor: colors.success.main,
+  },
+  successIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  errorIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  successModalButton: {
+    backgroundColor: colors.success.main,
+  },
+  offerSubmittedModalContent: {
+    alignItems: 'stretch',
+  },
+  offerSubmittedModalActions: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  offerSubmittedOkButton: {
+    alignSelf: 'stretch',
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterBar: {
+    backgroundColor: colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 0,
+    paddingBottom: spacing.xs,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  filterButtonActive: {
+    color: colors.primary.main,
+  },
+  filterButtonText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: colors.primary.main,
+  },
+  filterOptions: {
+    marginTop: 0,
+    paddingBottom: spacing.xs,
+  },
+  filterScrollContent: {
+    gap: spacing.sm,
+  },
+  filterOption: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginRight: spacing.sm,
+  },
+  filterOptionActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  filterOptionText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  filterOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  gpsMessageCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  gpsMessageTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  gpsMessageText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
+});
+}
+
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
   const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords } = useLocation();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createAvailableJobsStyles(colors), [colors]);
+
+
   const freelancerId = user?.id || user?._id || null;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -514,13 +908,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           <MaterialIcons
             name="check-circle"
             size={18}
-            color={canPickup && !isPickedUp ? colors.background : colors.text.muted}
+            color={canPickup && !isPickedUp ? '#FFFFFF' : colors.text.muted}
           />
           <Text
             style={[
               styles.actionButtonText,
               styles.pickupButtonText,
-              { color: canPickup ? colors.background : colors.text.muted },
+              { color: canPickup ? '#FFFFFF' : colors.text.muted },
             ]}
           >
             {!canWork 
@@ -541,19 +935,19 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           disabled={!canApply || isPickedUp || applyingThis}
         >
           {applyingThis ? (
-            <ActivityIndicator size="small" color={colors.background} />
+            <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <MaterialIcons
               name="assignment"
               size={18}
-              color={canApply && !isPickedUp ? colors.background : colors.text.muted}
+              color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
             />
           )}
           <Text
             style={[
               styles.actionButtonText,
               styles.applyButtonText,
-              { color: canApply && !isPickedUp ? colors.background : colors.text.muted },
+              { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
             ]}
           >
             {!canWork
@@ -581,13 +975,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           <MaterialIcons
             name="local-offer"
             size={18}
-            color={canMakeOffer && !isPickedUp ? colors.background : colors.text.muted}
+            color={canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted}
           />
           <Text
             style={[
               styles.actionButtonText,
               styles.makeOfferButtonText,
-              { color: canMakeOffer && !isPickedUp ? colors.background : colors.text.muted },
+              { color: canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted },
             ]}
           >
             {!canWork
@@ -616,7 +1010,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     return (
       <View style={styles.container}>
         <View style={styles.gpsMessageCard}>
-          <MaterialIcons name="location-off" size={48} color={colors.text.muted} />
+          <MaterialIcons name="location-off" size={48} color={colors.text.primary} />
           <Text style={styles.gpsMessageTitle}>{t('jobs.gpsOff')}</Text>
           <Text style={styles.gpsMessageText}>{t('jobs.gpsOffMessage')}</Text>
         </View>
@@ -628,7 +1022,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     return (
       <View style={styles.container}>
         <EmptyState
-          icon={<MaterialIcons name="work" size={64} color={colors.text.muted} />}
+          icon={<MaterialIcons name="work" size={64} color={colors.text.primary} />}
           title={t('jobs.noAvailableJobs')}
           description={t('jobs.noAvailableJobsDesc')}
         />
@@ -918,7 +1312,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         onRequestClose={() => setOfferSuccessModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, styles.offerSubmittedModalContent]}>
             <View style={styles.successIconContainer}>
               <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
             </View>
@@ -926,9 +1320,14 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             <Text style={styles.modalSubtitle}>
               {t('jobs.offerSubmittedMsg')}
             </Text>
-            <View style={[styles.modalActions, styles.modalActionsCentered]}>
+            <View style={[styles.modalActions, styles.modalActionsCentered, styles.offerSubmittedModalActions]}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
+                style={[
+                  styles.modalButton,
+                  styles.modalSubmitButton,
+                  styles.successModalButton,
+                  styles.offerSubmittedOkButton,
+                ]}
                 onPress={() => setOfferSuccessModalVisible(false)}
               >
                 <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
@@ -968,376 +1367,6 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingVertical: spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  /** Small side inset so the card can be ~98% of screen; old `spacing.lg` made the list feel ~90% wide. */
-  listContent: {
-    paddingBottom: spacing.lg,
-    paddingHorizontal: '1%',
-    width: '100%',
-  },
-  jobCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: '100%',
-    alignSelf: 'stretch',
-    overflow: 'hidden',
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
-    gap: spacing.sm,
-  },
-  jobTitle: {
-    ...typography.body,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.primary,
-    flex: 1,
-    minWidth: 0,
-    marginRight: spacing.xs,
-  },
-  jobBudget: {
-    ...typography.body,
-    color: colors.primary.main,
-    fontWeight: '600',
-    flexShrink: 0,
-  },
-  jobCategory: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  jobAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
-  },
-  jobAddress: {
-    ...typography.small,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  jobMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-    gap: spacing.sm,
-  },
-  jobMetaMainInner: {
-    flex: 1,
-    minWidth: 0,
-    flexWrap: 'wrap',
-  },
-  jobMetaDistance: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    flexShrink: 0,
-    marginLeft: spacing.xs,
-  },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  jobMetaText: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  descriptionBlock: {
-    position: 'relative',
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  jobDescription: {
-    ...typography.small,
-    color: colors.text.secondary,
-    paddingRight: 0,
-  },
-  viewMoreButton: {
-    paddingVertical: 2,
-  },
-  viewMoreButtonInline: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.cardBackground,
-    paddingLeft: spacing.sm,
-  },
-  viewMoreButtonBlock: {
-    marginTop: spacing.xs,
-    width: '100%',
-  },
-  viewMoreText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  actionsRow: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
-    width: '100%',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    flex: 1,
-  },
-  pickupButton: {
-    backgroundColor: colors.success.main,
-    borderColor: colors.success.main,
-  },
-  applyButton: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  makeOfferButton: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  actionButtonDisabled: {
-    backgroundColor: 'transparent',
-    borderColor: colors.text.muted,
-  },
-  actionButtonText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  pickupButtonText: {
-    color: colors.background,
-  },
-  applyButtonText: {
-    color: colors.background,
-  },
-  makeOfferButtonText: {
-    color: colors.background,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  applySuccessModalContent: {
-    alignItems: 'stretch',
-    paddingVertical: spacing.xl,
-  },
-  applySuccessText: {
-    ...typography.body,
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  applySuccessOkButton: {
-    alignSelf: 'stretch',
-    width: '100%',
-    minHeight: 52,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalLabel: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    color: colors.text.primary,
-  },
-  modalTextarea: {
-    height: 90,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  modalActionsCentered: {
-    justifyContent: 'center',
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-  },
-  modalCancelButton: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.cardBackground,
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  modalCancelText: {
-    ...typography.body,
-    color: colors.text.primary,
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  pickupButtonModal: {
-    backgroundColor: colors.success.main,
-  },
-  successIconContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  errorIconContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  successModalButton: {
-    backgroundColor: colors.success.main,
-  },
-  filterBar: {
-    backgroundColor: colors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 0,
-    paddingBottom: spacing.xs,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.xs,
-  },
-  filterButtonActive: {
-    color: colors.primary.main,
-  },
-  filterButtonText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    color: colors.primary.main,
-  },
-  filterOptions: {
-    marginTop: 0,
-    paddingBottom: spacing.xs,
-  },
-  filterScrollContent: {
-    gap: spacing.sm,
-  },
-  filterOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    marginRight: spacing.sm,
-  },
-  filterOptionActive: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  filterOptionText: {
-    ...typography.small,
-    color: colors.text.secondary,
-    fontWeight: '500',
-  },
-  filterOptionTextActive: {
-    color: colors.background,
-  },
-  gpsMessageCard: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-  },
-  gpsMessageTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  gpsMessageText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    textAlign: 'center',
-  },
-});
 
 export default AvailableJobs;
 

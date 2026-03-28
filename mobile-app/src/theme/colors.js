@@ -47,6 +47,7 @@ export const colors = {
   },
   border: '#E5E7EB', // gray-200
   inputBorder: '#D1D5DB', // gray-300
+  inputBackground: '#FFFFFF',
 
   // Additional colors for gradients
   gradient: {

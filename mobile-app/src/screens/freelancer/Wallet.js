@@ -21,7 +21,8 @@ import {
   TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { walletAPI, paymentAPI, cashfreeWalletAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -34,10 +35,407 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const RECENT_ACTIVITY_PER_PAGE = 7;
 
+function createWalletStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  contentContainer: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+    gap: spacing.lg,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.error.main,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  duesCard: {
+    padding: spacing.lg,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  cardTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+  },
+  iconButton: {
+    padding: spacing.xs,
+  },
+  /** Outlined pill for “Add Bank Account” only — edit uses pencilBox only (single border). */
+  bankButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+  },
+  bankPencilTouch: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  bankButtonText: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  pencilBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  amountRow: {
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  duesAmount: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.error.dark,
+  },
+  duesLabel: {
+    ...typography.body,
+    color: colors.error.main,
+    marginTop: spacing.xs,
+  },
+  payDuesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.error.main,
+    borderRadius: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  payDuesButtonText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  inlineHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  bankNameInline: {
+    ...typography.small,
+    marginTop: spacing.xs,
+    fontWeight: '600',
+  },
+  bankNameOk: {
+    color: colors.success.main,
+  },
+  bankNameBad: {
+    color: colors.error.main,
+  },
+  bankVerifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  bankVerifyHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  bankVerifyErr: {
+    ...typography.small,
+    color: colors.error.main,
+    marginTop: spacing.xs,
+  },
+  modalSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  withdrawProcessingBox: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  withdrawProcessingTitle: {
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  withdrawFullBalanceLink: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  activityCard: {
+    marginBottom: 0,
+  },
+  wdLedgerTitle: {
+    ...typography.small,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  wdLedgerAmount: {
+    ...typography.small,
+    fontWeight: '700',
+    alignSelf: 'center',
+  },
+  wdLedgerCredit: {
+    color: colors.success.dark,
+  },
+  wdWithdrawalProcessingAmount: {
+    color: colors.warning.main,
+  },
+  lockedBalanceHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: spacing.xs,
+  },
+  emptyWithdrawalsText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    fontStyle: 'italic',
+  },
+  wdRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  wdLeft: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  wdDate: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    color: colors.text.primary,
+    backgroundColor: colors.cardBackground,
+    minHeight: 48,
+  },
+  noDuesAmount: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: colors.success.dark,
+  },
+  noDuesLabel: {
+    ...typography.body,
+    color: colors.success.main,
+    marginTop: spacing.xs,
+  },
+  paginationContainer: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  paginationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  paginationButton: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  paginationButtonActive: {
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
+  },
+  paginationButtonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  paginationButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalOverlayTop: {
+    justifyContent: 'flex-start',
+  },
+  kbAvoid: {
+    width: '100%',
+  },
+  kbAvoidCentered: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  kbAvoidTop: {
+    flex: 1,
+    width: '100%',
+  },
+  modalSheetWrap: {
+    width: '100%',
+    paddingBottom: spacing.lg,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  modalScroll: {
+    width: '100%',
+  },
+  modalScrollContentCentered: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  modalScrollContentTop: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    // keep modal stable during keyboard resize (avoid flexGrow/center)
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  successIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  successModalButton: {
+    alignSelf: 'center',
+    minWidth: 120,
+  },
+  errorIconContainer: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  errorModalButton: {
+    alignSelf: 'center',
+    minWidth: 120,
+    backgroundColor: colors.error.main,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+});
+}
+
 const Wallet = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const { height: windowHeight } = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createWalletStyles(colors), [colors]);
+
+
   const [wallet, setWallet] = useState(null); // legacy dues wallet summary
   const [realWallet, setRealWallet] = useState(null); // real earnings wallet
   const [realLedger, setRealLedger] = useState([]);
@@ -856,397 +1254,6 @@ const Wallet = () => {
     </>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  contentContainer: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-    gap: spacing.lg,
-    flexGrow: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  card: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  duesCard: {
-    padding: spacing.lg,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  cardTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-  },
-  iconButton: {
-    padding: spacing.xs,
-  },
-  /** Outlined pill for “Add Bank Account” only — edit uses pencilBox only (single border). */
-  bankButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.primary.main,
-  },
-  bankPencilTouch: {
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
-  },
-  bankButtonText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  pencilBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  amountRow: {
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-  duesAmount: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.error.dark,
-  },
-  duesLabel: {
-    ...typography.body,
-    color: colors.error.main,
-    marginTop: spacing.xs,
-  },
-  payDuesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.error.main,
-    borderRadius: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  payDuesButtonText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  inlineHint: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.sm,
-    textAlign: 'center',
-  },
-  bankNameInline: {
-    ...typography.small,
-    marginTop: spacing.xs,
-    fontWeight: '600',
-  },
-  bankNameOk: {
-    color: colors.success.main,
-  },
-  bankNameBad: {
-    color: colors.error.main,
-  },
-  bankVerifyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  bankVerifyHint: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  bankVerifyErr: {
-    ...typography.small,
-    color: colors.error.main,
-    marginTop: spacing.xs,
-  },
-  modalSubmitButtonDisabled: {
-    opacity: 0.5,
-  },
-  withdrawProcessingBox: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-  },
-  withdrawProcessingTitle: {
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  withdrawFullBalanceLink: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  activityCard: {
-    marginBottom: 0,
-  },
-  wdLedgerTitle: {
-    ...typography.small,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  wdLedgerAmount: {
-    ...typography.small,
-    fontWeight: '700',
-    alignSelf: 'center',
-  },
-  wdLedgerCredit: {
-    color: colors.success.dark,
-  },
-  wdWithdrawalProcessingAmount: {
-    color: colors.warning.main,
-  },
-  lockedBalanceHint: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-  },
-  emptyWithdrawalsText: {
-    ...typography.small,
-    color: colors.text.secondary,
-    fontStyle: 'italic',
-  },
-  wdRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  wdLeft: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  wdDate: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: 2,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: colors.text.primary,
-    backgroundColor: colors.cardBackground,
-    minHeight: 48,
-  },
-  noDuesAmount: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.success.dark,
-  },
-  noDuesLabel: {
-    ...typography.body,
-    color: colors.success.main,
-    marginTop: spacing.xs,
-  },
-  paginationContainer: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  paginationButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  paginationButton: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  paginationButtonActive: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  paginationButtonText: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: '500',
-    fontSize: 14,
-  },
-  paginationButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlayTop: {
-    justifyContent: 'flex-start',
-  },
-  kbAvoid: {
-    width: '100%',
-  },
-  kbAvoidCentered: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  kbAvoidTop: {
-    flex: 1,
-    width: '100%',
-  },
-  modalSheetWrap: {
-    width: '100%',
-    paddingBottom: spacing.lg,
-  },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-  },
-  modalScroll: {
-    width: '100%',
-  },
-  modalScrollContentCentered: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-  },
-  modalScrollContentTop: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-    // keep modal stable during keyboard resize (avoid flexGrow/center)
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalIconContainer: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  successIconContainer: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  modalActionsCentered: {
-    justifyContent: 'center',
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    minWidth: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCancelButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  successModalButton: {
-    alignSelf: 'center',
-    minWidth: 120,
-  },
-  errorIconContainer: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  errorModalButton: {
-    alignSelf: 'center',
-    minWidth: 120,
-    backgroundColor: colors.error.main,
-  },
-  modalCancelText: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: '600',
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
 
 export default Wallet;
 

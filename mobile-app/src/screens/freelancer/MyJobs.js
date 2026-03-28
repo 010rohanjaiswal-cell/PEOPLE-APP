@@ -4,7 +4,7 @@
  * assigned -> work_done -> waiting for payment -> completed -> fully completed
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
@@ -29,8 +30,293 @@ import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+function createFreelancerMyJobsStyles(colors) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.error.main,
+    textAlign: 'center',
+  },
+  listContent: {
+    paddingBottom: spacing.lg,
+  },
+  jobCard: {
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    width: SCREEN_WIDTH * 0.97,
+    alignSelf: 'center',
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  jobHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobTitle: {
+    ...typography.body,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    flex: 1,
+  },
+  jobBudget: {
+    ...typography.body,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.xs,
+  },
+  statusText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  jobAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  jobAddress: {
+    ...typography.small,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  jobMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  jobMetaLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  jobMetaText: {
+    ...typography.small,
+    color: colors.text.secondary,
+  },
+  viewClientMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  viewClientMetaText: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '500',
+  },
+  descriptionBlock: {
+    position: 'relative',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  jobDescription: {
+    ...typography.small,
+    color: colors.text.secondary,
+    paddingRight: 0,
+  },
+  viewMoreButton: {
+    paddingVertical: 2,
+  },
+  viewMoreButtonInline: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.cardBackground,
+    paddingLeft: spacing.sm,
+  },
+  viewMoreButtonBlock: {
+    marginTop: spacing.xs,
+    width: '100%',
+  },
+  viewMoreText: {
+    ...typography.small,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+  },
+  workDoneButton: {
+    borderColor: colors.success.main,
+    backgroundColor: colors.success.main,
+    width: '96%',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workDoneButtonText: {
+    color: '#FFFFFF',
+  },
+  completedButton: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.main,
+    width: '98%',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  waitingPaymentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    width: '96%',
+    alignSelf: 'center',
+  },
+  waitingPaymentText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalIcon: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  modalActionsCentered: {
+    justifyContent: 'center',
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelButton: {
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.cardBackground,
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  workDoneModalButton: {
+    backgroundColor: colors.success.main,
+  },
+  completeJobModalButton: {
+    backgroundColor: colors.primary.main,
+  },
+  successModalButton: {
+    backgroundColor: colors.success.main,
+  },
+  errorModalButton: {
+    backgroundColor: colors.error.main,
+  },
+  successIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  errorIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+});
+}
+
 const MyJobs = () => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createFreelancerMyJobsStyles(colors), [colors]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -232,8 +518,8 @@ const MyJobs = () => {
               style={[styles.actionButton, styles.workDoneButton]}
               onPress={() => handleWorkDone(item)}
             >
-              <MaterialIcons name="check-circle" size={18} color={colors.background} />
-              <Text style={[styles.actionButtonText, styles.workDoneButtonText, { color: colors.background }]}>
+              <MaterialIcons name="check-circle" size={18} color="#FFFFFF" />
+              <Text style={[styles.actionButtonText, styles.workDoneButtonText]}>
                 {t('status.work_done')}
               </Text>
             </TouchableOpacity>
@@ -478,287 +764,6 @@ const MyJobs = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  listContent: {
-    paddingBottom: spacing.lg,
-  },
-  jobCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    width: SCREEN_WIDTH * 0.97,
-    alignSelf: 'center',
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  jobHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  jobTitle: {
-    ...typography.body,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.primary,
-    flex: 1,
-  },
-  jobBudget: {
-    ...typography.body,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-  },
-  statusText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  jobAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
-  },
-  jobAddress: {
-    ...typography.small,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  jobMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  jobMetaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  jobMetaText: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  viewClientMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  viewClientMetaText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '500',
-  },
-  descriptionBlock: {
-    position: 'relative',
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  jobDescription: {
-    ...typography.small,
-    color: colors.text.secondary,
-    paddingRight: 0,
-  },
-  viewMoreButton: {
-    paddingVertical: 2,
-  },
-  viewMoreButtonInline: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.cardBackground,
-    paddingLeft: spacing.sm,
-  },
-  viewMoreButtonBlock: {
-    marginTop: spacing.xs,
-    width: '100%',
-  },
-  viewMoreText: {
-    ...typography.small,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-  },
-  workDoneButton: {
-    borderColor: colors.success.main,
-    backgroundColor: colors.success.main,
-    width: '96%',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  workDoneButtonText: {
-    color: colors.background,
-  },
-  completedButton: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.main,
-    width: '98%',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  waitingPaymentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    width: '96%',
-    alignSelf: 'center',
-  },
-  waitingPaymentText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalIcon: {
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  modalActionsCentered: {
-    justifyContent: 'center',
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    minWidth: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCancelButton: {
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.cardBackground,
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  modalCancelText: {
-    ...typography.body,
-    color: colors.text.primary,
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  workDoneModalButton: {
-    backgroundColor: colors.success.main,
-  },
-  completeJobModalButton: {
-    backgroundColor: colors.primary.main,
-  },
-  successModalButton: {
-    backgroundColor: colors.success.main,
-  },
-  errorModalButton: {
-    backgroundColor: colors.error.main,
-  },
-  successIconContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  errorIconContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-});
 
 export default MyJobs;
 

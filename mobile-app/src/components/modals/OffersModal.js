@@ -3,7 +3,7 @@
  * Modal for viewing and managing job offers
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,13 +16,15 @@ import {
   RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { Button } from '../common';
 import { clientJobsAPI } from '../../api/clientJobs';
 
 const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createOffersStyles(colors), [colors]);
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -175,17 +177,6 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     setRejectSuccessVisible(false);
   };
 
-  const getOfferStatusColor = (status) => {
-    switch (status) {
-      case 'accepted':
-        return colors.success.main;
-      case 'rejected':
-        return colors.error.main;
-      default:
-        return colors.pending.main;
-    }
-  };
-
   return (
     <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -251,26 +242,10 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
                           </Text>
                         </View>
                       </View>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          { backgroundColor: getOfferStatusColor(offer.status) + '20' },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.statusText,
-                            { color: getOfferStatusColor(offer.status) },
-                          ]}
-                        >
-                          {offer.status?.toUpperCase() || 'PENDING'}
-                        </Text>
+                      <View style={styles.amountHeader}>
+                        <Text style={styles.amountHeaderLabel}>{t('offers.offeredAmount')}</Text>
+                        <Text style={styles.amountHeaderValue}>₹{offer.amount || 0}</Text>
                       </View>
-                    </View>
-
-                    <View style={styles.offerAmount}>
-                      <Text style={styles.amountLabel}>Offer Amount</Text>
-                      <Text style={styles.amountValue}>₹{offer.amount || 0}</Text>
                     </View>
 
                     {offer.message ? (
@@ -307,12 +282,6 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
                 })}
               </ScrollView>
             )}
-          </View>
-
-          <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
-              Close
-            </Button>
           </View>
         </View>
       </View>
@@ -467,7 +436,8 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
   );
 };
 
-const styles = StyleSheet.create({
+function createOffersStyles(colors) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -552,8 +522,8 @@ const styles = StyleSheet.create({
   offerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   freelancerInfo: {
     flexDirection: 'row',
@@ -583,23 +553,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
   },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
+  amountHeader: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
   },
-  statusText: {
-    ...typography.small,
-    fontWeight: '600',
-  },
-  offerAmount: {
-    marginBottom: spacing.sm,
-  },
-  amountLabel: {
+  amountHeaderLabel: {
     ...typography.small,
     color: colors.text.secondary,
+    marginBottom: 2,
   },
-  amountValue: {
+  amountHeaderValue: {
     ...typography.h3,
     color: colors.primary.main,
     fontWeight: '700',
@@ -730,16 +694,8 @@ const styles = StyleSheet.create({
   errorIconContainer: {
     marginBottom: spacing.md,
   },
-  footer: {
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  closeButtonFooter: {
-    minHeight: 50,
-    paddingVertical: spacing.md,
-  },
 });
+}
 
 export default OffersModal;
 

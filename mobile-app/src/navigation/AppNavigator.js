@@ -3,8 +3,9 @@
  * Main navigation structure
  */
 
-import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -26,7 +27,24 @@ const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const { isAuthenticated, user, loading } = useAuth();
+  const { isDark, colors: themeColors } = useTheme();
   const navigationRef = useRef(null);
+
+  const navigationTheme = useMemo(
+    () => ({
+      ...(isDark ? DarkTheme : DefaultTheme),
+      colors: {
+        ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+        primary: themeColors.primary.main,
+        background: themeColors.background,
+        card: themeColors.cardBackground,
+        text: themeColors.text.primary,
+        border: themeColors.border,
+        notification: themeColors.primary.main,
+      },
+    }),
+    [isDark, themeColors]
+  );
 
   // Determine initial route based on auth state and user data
   const getInitialRouteName = () => {
@@ -112,7 +130,7 @@ const AppNavigator = () => {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer theme={navigationTheme} ref={navigationRef}>
       <Stack.Navigator 
         screenOptions={{ headerShown: false }}
         initialRouteName={getInitialRouteName()}

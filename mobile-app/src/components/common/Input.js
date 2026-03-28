@@ -2,9 +2,86 @@
  * Input Component - People App
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, TextInput, Text, StyleSheet, Platform } from 'react-native';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import lightColors from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
+
+function createInputStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      fontSize: typography.body.fontSize,
+      fontWeight: '500',
+      color: colors.text.primary,
+      marginBottom: spacing.xs,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      borderRadius: spacing.borderRadius.input,
+      backgroundColor: colors.inputBackground ?? colors.background,
+    },
+    inputContainerElevated: {
+      borderWidth: 0,
+      backgroundColor: colors.cardBackground,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+        },
+        android: {
+          elevation: 8,
+        },
+        default: {},
+      }),
+    },
+    input: {
+      flex: 1,
+      fontSize: typography.body.fontSize,
+      color: colors.text.primary,
+      paddingHorizontal: spacing.inputPadding.horizontal,
+      paddingVertical: spacing.inputPadding.vertical,
+      minHeight: 40,
+    },
+    inputWithLeftIcon: {
+      paddingLeft: spacing.xs,
+    },
+    inputWithRightIcon: {
+      paddingRight: spacing.xs,
+    },
+    inputMultiline: {
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    inputError: {
+      borderWidth: 1,
+      borderColor: colors.error.main,
+    },
+    inputDisabled: {
+      backgroundColor: colors.border,
+      opacity: 0.5,
+    },
+    leftIcon: {
+      paddingLeft: spacing.inputPadding.horizontal,
+    },
+    rightIcon: {
+      paddingRight: spacing.inputPadding.horizontal,
+    },
+    errorText: {
+      fontSize: typography.small.fontSize,
+      color: colors.error.main,
+      marginTop: spacing.xs,
+    },
+  });
+}
 
 const Input = ({
   label,
@@ -23,8 +100,14 @@ const Input = ({
   inputStyle,
   /** Soft 3D look: shadow, no hard border (auth screens). */
   elevated = false,
+  /** Use fixed light palette (e.g. login) even when app dark mode is on. */
+  forceLight = false,
   ...props
 }) => {
+  const { colors: themeColors } = useTheme();
+  const colors = forceLight ? lightColors : themeColors;
+  const styles = useMemo(() => createInputStyles(colors), [colors, forceLight]);
+
   return (
     <View style={[styles.container, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -54,6 +137,7 @@ const Input = ({
           numberOfLines={numberOfLines}
           keyboardType={keyboardType}
           secureTextEntry={secureTextEntry}
+          selectionColor={colors.primary.main}
           {...props}
         />
         {rightIcon && <View style={styles.rightIcon}>{rightIcon}</View>}
@@ -63,78 +147,4 @@ const Input = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    fontSize: typography.body.fontSize,
-    fontWeight: '500',
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    borderRadius: spacing.borderRadius.input,
-    backgroundColor: colors.background,
-  },
-  inputContainerElevated: {
-    borderWidth: 0,
-    backgroundColor: colors.cardBackground,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-      default: {},
-    }),
-  },
-  input: {
-    flex: 1,
-    fontSize: typography.body.fontSize,
-    color: colors.text.primary,
-    paddingHorizontal: spacing.inputPadding.horizontal,
-    paddingVertical: spacing.inputPadding.vertical,
-    minHeight: 40,
-  },
-  inputWithLeftIcon: {
-    paddingLeft: spacing.xs,
-  },
-  inputWithRightIcon: {
-    paddingRight: spacing.xs,
-  },
-  inputMultiline: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  inputError: {
-    borderWidth: 1,
-    borderColor: colors.error.main,
-  },
-  inputDisabled: {
-    backgroundColor: colors.border,
-    opacity: 0.5,
-  },
-  leftIcon: {
-    paddingLeft: spacing.inputPadding.horizontal,
-  },
-  rightIcon: {
-    paddingRight: spacing.inputPadding.horizontal,
-  },
-  errorText: {
-    fontSize: typography.small.fontSize,
-    color: colors.error.main,
-    marginTop: spacing.xs,
-  },
-});
-
 export default Input;
-

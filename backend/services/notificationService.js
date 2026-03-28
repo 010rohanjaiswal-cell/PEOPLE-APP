@@ -13,6 +13,9 @@ const { getIO } = require('../config/socketio');
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 
+/** Must match bundled sound basename in mobile app (expo-notifications `sounds` in app.json). */
+const EXPO_PUSH_SOUND = 'notification_sound.wav';
+
 /**
  * Send push notification via Expo Push API (non-blocking)
  */
@@ -31,7 +34,7 @@ async function sendExpoPush(userId, title, body, data = {}) {
       title,
       body,
       data: { ...data },
-      sound: 'default',
+      sound: EXPO_PUSH_SOUND,
       channelId: 'default',
     }));
 

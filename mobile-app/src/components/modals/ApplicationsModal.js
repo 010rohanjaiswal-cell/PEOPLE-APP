@@ -2,7 +2,7 @@
  * Applications Modal - non-delivery jobs: view applicants sorted by rating (high → low)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { userAPI } from '../../api';
@@ -82,14 +83,16 @@ function normalizeGenderLabel(raw, t) {
   const firstToken = (s.split(/[\s,;/|]+/)[0] || s).trim();
   const norm = firstToken.toLowerCase().replace(/[^a-z]/g, '');
 
-  if (norm === 'male' || norm === 'm' || norm === 'man') return t('common.gender.male');
-  if (norm === 'female' || norm === 'f' || norm === 'woman') return t('common.gender.female');
+  if (norm === 'male' || norm === 'm' || norm === 'man') return t('gender.male');
+  if (norm === 'female' || norm === 'f' || norm === 'woman') return t('gender.female');
 
   return notProvided;
 }
 
 const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createApplicationsStyles(colors), [colors]);
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -407,16 +410,6 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                               </View>
                             </TouchableOpacity>
                           </View>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: colors.pending.light },
-                            ]}
-                          >
-                            <Text style={[styles.statusText, { color: colors.pending.main }]}>
-                              {app.status?.toUpperCase() || 'PENDING'}
-                            </Text>
-                          </View>
                         </View>
 
                         {canAct && (
@@ -684,7 +677,8 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   );
 };
 
-const styles = StyleSheet.create({
+function createApplicationsStyles(colors) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -790,7 +784,6 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.sm,
   },
@@ -830,15 +823,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-  },
-  statusText: {
-    ...typography.small,
-    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',
@@ -1053,5 +1037,6 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
 });
+}
 
 export default ApplicationsModal;

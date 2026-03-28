@@ -13,16 +13,26 @@ import { UserProvider } from './src/context/UserContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import { LocationProvider } from './src/context/LocationContext';
 import { LanguageProvider } from './src/context/LanguageContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
 import { warmupBackend } from './src/api/client';
-import { registerPushTokenAsync } from './src/utils/pushNotifications';
+import { registerPushTokenAsync, ensureNotificationChannelAsync } from './src/utils/pushNotifications';
+
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? 'light' : 'dark'} translucent={false} />;
+}
 
 // Inner component to access auth context
 const AppContent = () => {
   const { user } = useAuth();
   const userId = useMemo(() => (user?._id || user?.id || null), [user?._id, user?.id]);
   const phonePeInitRef = useRef({ userId: null });
+
+  useEffect(() => {
+    ensureNotificationChannelAsync();
+  }, []);
 
   // Wake backend from cold start when user is logged in (Render free tier spins down after ~15 min)
   useEffect(() => {
@@ -74,14 +84,16 @@ export default function App() {
       <DigiLockerProvider>
       <AuthProvider>
         <LanguageProvider>
-          <UserProvider>
-            <NotificationProvider>
-              <LocationProvider>
-                <StatusBar style="dark" translucent={false} />
-                <AppContent />
-              </LocationProvider>
-            </NotificationProvider>
-          </UserProvider>
+          <ThemeProvider>
+            <UserProvider>
+              <NotificationProvider>
+                <LocationProvider>
+                  <ThemedStatusBar />
+                  <AppContent />
+                </LocationProvider>
+              </NotificationProvider>
+            </UserProvider>
+          </ThemeProvider>
         </LanguageProvider>
       </AuthProvider>
       </DigiLockerProvider>

@@ -9,6 +9,9 @@ import Constants from 'expo-constants';
 import { userAPI } from '../api/user';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+/** Basename only — must match a file listed under `expo-notifications` → `sounds` in app.json */
+export const NOTIFICATION_SOUND = 'notification_sound.wav';
+
 // Show notification when app is in foreground (optional: banner + sound)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -17,6 +20,21 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+/**
+ * Android 8+: custom sound plays only if the channel is configured with the same filename.
+ * Call once at app startup (before pushes are received).
+ */
+export async function ensureNotificationChannelAsync() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'Default',
+    importance: Notifications.AndroidImportance.MAX,
+    sound: NOTIFICATION_SOUND,
+    vibrationPattern: [0, 250, 250, 250],
+    enableVibrate: true,
+  });
+}
 
 /**
  * Request permission and get Expo push token; register with backend.

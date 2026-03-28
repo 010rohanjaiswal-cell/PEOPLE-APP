@@ -20,8 +20,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
-import { Button, Input, Card, CardContent } from '../../components/common';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
+import { Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
@@ -68,8 +69,270 @@ function createScrollFieldIntoView(scrollViewRef) {
   };
 }
 
+function createPostJobStyles(colors, isDark) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: spacing.sm,
+    paddingBottom: spacing.xxl || 120,
+  },
+  card: {
+    width: '100%',
+  },
+  title: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  fieldContainer: {
+    marginBottom: spacing.xs,
+  },
+  fieldWithErrorWrap: {
+    position: 'relative',
+    padding: 2,
+    borderRadius: spacing.sm,
+  },
+  /** Wrapper for measureLayout + scrollTo (keyboard). No layout change. */
+  measureFieldWrap: {},
+  errorBorderBox: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 2,
+    borderColor: colors.error.main,
+    borderRadius: spacing.sm,
+  },
+  label: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  inputField: {
+    marginBottom: spacing.xs,
+  },
+  inputWrapper: {
+    marginBottom: spacing.xs,
+  },
+  descriptionWrapper: {
+    marginBottom: spacing.xl,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  categoryButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    marginRight: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  categoryButtonActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  categoryText: {
+    ...typography.body,
+    color: isDark ? colors.text.primary : colors.text.secondary,
+  },
+  categoryTextActive: {
+    color: isDark ? colors.text.primary : colors.primary.main,
+    fontWeight: '600',
+  },
+  genderContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  genderButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    alignItems: 'center',
+  },
+  genderButtonActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  genderText: {
+    ...typography.body,
+    color: isDark ? colors.text.primary : colors.text.secondary,
+  },
+  genderTextActive: {
+    color: isDark ? colors.text.primary : colors.primary.main,
+    fontWeight: '600',
+  },
+  submitButton: {
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    backgroundColor: colors.primary.main,
+    borderRadius: spacing.borderRadius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: typography.button.fontSize,
+    fontWeight: typography.button.fontWeight,
+  },
+  buttonIcon: {
+    marginRight: spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    maxWidth: 400,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSubmitButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalSubmitText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  successModalButton: {
+    backgroundColor: colors.success.main,
+  },
+  successIconContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  gpsMessageBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.warning.light,
+    padding: spacing.md,
+    borderRadius: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  gpsMessageBoxText: {
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  deliveryRouteContainer: {
+    marginTop: spacing.sm,
+    gap: spacing.md,
+  },
+  deliveryLegCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.cardBackground,
+  },
+  deliveryLegCardFrom: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary.main,
+  },
+  deliveryLegCardTo: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success.main,
+  },
+  deliveryLegTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 2,
+    gap: spacing.xs,
+  },
+  deliveryLegLabel: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text.primary,
+    letterSpacing: 0.3,
+  },
+  deliveryLegDash: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text.secondary,
+  },
+  deliveryLegHint: {
+    ...typography.small,
+    color: colors.text.secondary,
+    flex: 1,
+    flexShrink: 1,
+  },
+  deliveryMicroHint: {
+    ...typography.small,
+    color: colors.text.muted,
+    marginBottom: spacing.sm,
+  },
+  deliveryPinRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  deliveryPinField: {
+    flex: 1,
+    maxWidth: 240,
+  },
+});
+}
+
 const PostJob = ({ onJobPosted }) => {
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createPostJobStyles(colors, isDark), [colors, isDark]);
   const insets = useSafeAreaInsets();
   const { gpsEnabled, gpsDenied } = useLocation();
   const scrollViewRef = useRef(null);
@@ -633,264 +896,6 @@ const PostJob = ({ onJobPosted }) => {
     </KeyboardAvoidingView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing.sm,
-    paddingBottom: spacing.xxl || 120,
-  },
-  card: {
-    width: '100%',
-  },
-  title: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  fieldContainer: {
-    marginBottom: spacing.xs,
-  },
-  fieldWithErrorWrap: {
-    position: 'relative',
-    padding: 2,
-    borderRadius: spacing.sm,
-  },
-  /** Wrapper for measureLayout + scrollTo (keyboard). No layout change. */
-  measureFieldWrap: {},
-  errorBorderBox: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 2,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-  },
-  label: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-  },
-  inputField: {
-    marginBottom: spacing.xs,
-  },
-  inputWrapper: {
-    marginBottom: spacing.xs,
-  },
-  descriptionWrapper: {
-    marginBottom: spacing.xl,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  categoryButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  categoryButtonActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
-  },
-  categoryText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  categoryTextActive: {
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  genderButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    alignItems: 'center',
-  },
-  genderButtonActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
-  },
-  genderText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  genderTextActive: {
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  submitButton: {
-    width: '100%',
-    minHeight: 52,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    backgroundColor: colors.primary.main,
-    borderRadius: spacing.borderRadius.button,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: typography.button.fontSize,
-    fontWeight: typography.button.fontWeight,
-  },
-  buttonIcon: {
-    marginRight: spacing.sm,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    maxWidth: 400,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.text.primary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  modalButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    minWidth: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalSubmitButton: {
-    backgroundColor: colors.primary.main,
-  },
-  modalSubmitText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  successModalButton: {
-    backgroundColor: colors.success.main,
-  },
-  successIconContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  gpsMessageBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.warning.light,
-    padding: spacing.md,
-    borderRadius: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  gpsMessageBoxText: {
-    ...typography.body,
-    color: colors.text.primary,
-    flex: 1,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  deliveryRouteContainer: {
-    marginTop: spacing.sm,
-    gap: spacing.md,
-  },
-  deliveryLegCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.cardBackground,
-  },
-  deliveryLegCardFrom: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary.main,
-  },
-  deliveryLegCardTo: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.success.main,
-  },
-  deliveryLegTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 2,
-    gap: spacing.xs,
-  },
-  deliveryLegLabel: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.text.primary,
-    letterSpacing: 0.3,
-  },
-  deliveryLegDash: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text.secondary,
-  },
-  deliveryLegHint: {
-    ...typography.small,
-    color: colors.text.secondary,
-    flex: 1,
-    flexShrink: 1,
-  },
-  deliveryMicroHint: {
-    ...typography.small,
-    color: colors.text.muted,
-    marginBottom: spacing.sm,
-  },
-  deliveryPinRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  deliveryPinField: {
-    flex: 1,
-    maxWidth: 240,
-  },
-});
 
 export default PostJob;
 

@@ -3,19 +3,160 @@
  * Display completed jobs for client
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLanguage } from '../../context/LanguageContext';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock } from '../../components/job/JobLocationBlock';
 
+function createHistoryStyles(colors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    errorContainer: {
+      backgroundColor: colors.error.light,
+      borderWidth: 1,
+      borderColor: colors.error.main,
+      borderRadius: spacing.sm,
+      padding: spacing.md,
+      margin: spacing.lg,
+    },
+    errorText: {
+      ...typography.small,
+      color: colors.error.main,
+      textAlign: 'center',
+    },
+    listContent: {
+      padding: spacing.lg,
+      paddingBottom: spacing.lg,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    jobCard: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: spacing.md,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    jobHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.xs,
+    },
+    jobTitle: {
+      ...typography.h3,
+      color: colors.text.primary,
+      flex: 1,
+      marginRight: spacing.sm,
+    },
+    statusBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: spacing.xs,
+      backgroundColor: colors.success.light,
+    },
+    statusText: {
+      ...typography.small,
+      fontWeight: '600',
+      color: colors.success.main,
+    },
+    jobCategory: {
+      ...typography.body,
+      color: colors.text.secondary,
+      marginBottom: spacing.xs,
+    },
+    jobMetaRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+      marginBottom: spacing.xs,
+    },
+    jobMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    jobMetaText: {
+      ...typography.small,
+      color: colors.text.secondary,
+    },
+    jobDescription: {
+      ...typography.small,
+      color: colors.text.secondary,
+      marginTop: spacing.xs,
+      fontStyle: 'italic',
+    },
+    paginationContainer: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    paginationButtons: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    paginationButton: {
+      minWidth: 36,
+      height: 36,
+      borderRadius: spacing.xs,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: spacing.sm,
+    },
+    paginationButtonActive: {
+      backgroundColor: colors.primary.main,
+      borderColor: colors.primary.main,
+    },
+    paginationButtonText: {
+      ...typography.body,
+      color: colors.text.primary,
+      fontWeight: '500',
+      fontSize: 14,
+    },
+    paginationButtonTextActive: {
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
+  });
+}
+
 const History = () => {
   const { t } = useLanguage();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createHistoryStyles(colors), [colors]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -187,142 +328,6 @@ const History = () => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    margin: spacing.lg,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  listContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  jobCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: spacing.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  jobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  jobTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.xs,
-    backgroundColor: colors.success.light,
-  },
-  statusText: {
-    ...typography.small,
-    fontWeight: '600',
-    color: colors.success.main,
-  },
-  jobCategory: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing.xs,
-  },
-  jobMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  jobMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  jobMetaText: {
-    ...typography.small,
-    color: colors.text.secondary,
-  },
-  jobDescription: {
-    ...typography.small,
-    color: colors.text.secondary,
-    marginTop: spacing.xs,
-    fontStyle: 'italic',
-  },
-  paginationContainer: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  paginationButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  paginationButton: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  paginationButtonActive: {
-    backgroundColor: colors.primary.main,
-    borderColor: colors.primary.main,
-  },
-  paginationButtonText: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: '500',
-    fontSize: 14,
-  },
-  paginationButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-});
 
 export default History;
 
