@@ -1,26 +1,25 @@
 /**
- * Payment API - Cashfree Integration
+ * Payment API — PhonePe (job + dues) and legacy Cashfree helpers where still used
  */
 
 import apiClient from './client';
 
 export const paymentAPI = {
   /**
-   * Create Cashfree payment session for freelancer dues
-   * @returns {Promise} { orderId, paymentSessionId, amount, currency }
+   * Create PhonePe SDK order for freelancer commission dues (money settles to merchant account)
+   * @returns {Promise} merchantOrderId, orderToken, orderId, merchantId, checkSum, amount
    */
   createDuesOrder: async () => {
-    const response = await apiClient.post('/api/cashfree/dues/create-order');
+    const response = await apiClient.post('/api/payment/create-dues-order');
     return response.data;
   },
 
   /**
-   * Confirm dues payment (poll-friendly)
-   * @param {string} orderId - Cashfree order id
-   * @returns {Promise} { paid: boolean, wallet? }
+   * Confirm PhonePe dues payment after SDK checkout (poll-friendly)
+   * @param {string} merchantOrderId - from createDuesOrder (DUES_...)
    */
-  confirmDuesPayment: async (orderId) => {
-    const response = await apiClient.post('/api/cashfree/dues/confirm', { orderId });
+  confirmDuesPayment: async (merchantOrderId) => {
+    const response = await apiClient.post('/api/payment/confirm-dues-payment', { merchantOrderId });
     return response.data;
   },
 

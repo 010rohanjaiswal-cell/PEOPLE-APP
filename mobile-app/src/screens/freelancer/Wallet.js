@@ -25,7 +25,7 @@ import { colors, spacing, typography } from '../../theme';
 import { walletAPI, paymentAPI, cashfreeWalletAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import PaymentWebView from '../../components/PaymentWebView';
+import { startPhonePeTransaction } from '../../config/phonepe';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -50,10 +50,6 @@ const Wallet = () => {
   const [paymentSuccessModalVisible, setPaymentSuccessModalVisible] = useState(false);
   const [paymentErrorModalVisible, setPaymentErrorModalVisible] = useState(false);
   const [paymentErrorMessage, setPaymentErrorMessage] = useState('');
-  const [paymentWebViewVisible, setPaymentWebViewVisible] = useState(false);
-  const [cashfreeOrderId, setCashfreeOrderId] = useState(null);
-  const [cashfreePaymentSessionId, setCashfreePaymentSessionId] = useState(null);
-
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   /** loading (API) → submitted (confirmation) */
   const [withdrawPhase, setWithdrawPhase] = useState('idle');
@@ -217,23 +213,33 @@ const Wallet = () => {
 
       const orderResponse = await paymentAPI.createDuesOrder();
 
-      if (!orderResponse.success || !orderResponse.orderId || !orderResponse.paymentSessionId) {
+      if (
+        !orderResponse.success ||
+        !orderResponse.merchantOrderId ||
+        !orderResponse.orderToken ||
+        !orderResponse.orderId ||
+        !orderResponse.merchantId
+      ) {
         setPaymentErrorMessage(orderResponse.error || t('wallet.failedCreateOrder'));
         setPaymentErrorModalVisible(true);
         setPaying(false);
         return;
       }
 
-      setCashfreeOrderId(orderResponse.orderId);
-      setCashfreePaymentSessionId(orderResponse.paymentSessionId);
-      setPaymentWebViewVisible(true);
+      await startPhonePeTransaction({
+        orderToken: orderResponse.orderToken,
+        orderId: orderResponse.orderId,
+        merchantId: orderResponse.merchantId,
+        checkSum: orderResponse.checkSum,
+        appSchema: 'people-app',
+      });
+
+      await confirmDuesAfterCallback(orderResponse.merchantOrderId);
     } catch (err) {
       console.error('Error paying dues:', err);
       setPaymentErrorMessage(err.response?.data?.error || err.message || t('wallet.failedProcessPayment'));
       setPaymentErrorModalVisible(true);
       setPaying(false);
-    } finally {
-      setConfirmPayModalVisible(false);
     }
   };
 
@@ -324,9 +330,6 @@ const Wallet = () => {
             <>
               <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
               <Text style={styles.noDuesLabel}>Available balance</Text>
-              <Text style={[styles.lockedBalanceHint, { marginTop: spacing.xs }]}>
-                Withdrawable after dues: ₹{withdrawableAfterDues.toFixed(2)}
-              </Text>
             </>
           )}
           {Number(realWallet?.lockedBalance || 0) > 0 ? (
@@ -691,18 +694,6 @@ const Wallet = () => {
           </View>
         </View>
       </Modal>
-
-      <PaymentWebView
-        visible={paymentWebViewVisible}
-        paymentSessionId={cashfreePaymentSessionId}
-        cashfreeMode={'production'}
-        orderId={cashfreeOrderId}
-        onClose={() => {
-          setPaymentWebViewVisible(false);
-          setPaying(false);
-        }}
-        onPaymentComplete={(orderId) => confirmDuesAfterCallback(orderId)}
-      />
 
       {/* Withdraw: amount → loading (API) → submitted */}
       <Modal

@@ -86,6 +86,70 @@ async function creditFreelancerWalletForJob({ jobPayment, job }) {
   return { alreadyProcessed: false, amountReceived, platformCommission };
 }
 
+/** Same shape as GET /api/freelancer/wallet (commission/dues summary). */
+async function buildFreelancerCommissionWallet(freelancerId) {
+  const transactions = await CommissionTransaction.find({
+    freelancer: freelancerId,
+  })
+    .sort({ createdAt: -1 })
+    .populate('job', 'title')
+    .lean();
+
+  const totalDues = transactions
+    .filter((t) => !t.duesPaid)
+    .reduce((sum, t) => sum + (t.platformCommission || 0), 0);
+
+  const DUES_THRESHOLD = 450;
+  const canWork = totalDues < DUES_THRESHOLD;
+
+  const mappedTransactions = transactions.map((t) => ({
+    id: t._id.toString(),
+    jobId: t.job?._id || t.job,
+    jobTitle: t.jobTitle || t.job?.title || 'Job',
+    clientName: t.clientName || null,
+    jobAmount: t.jobAmount,
+    platformCommission: t.platformCommission,
+    amountReceived: t.amountReceived,
+    duesPaid: t.duesPaid,
+    duesPaidAt: t.duesPaidAt,
+    duesPaymentOrderId: t.duesPaymentOrderId,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    status: t.duesPaid ? 'paid' : 'pending',
+  }));
+
+  const paymentTransactionsMap = new Map();
+  transactions
+    .filter((t) => t.duesPaid && t.duesPaymentOrderId)
+    .forEach((t) => {
+      const orderId = t.duesPaymentOrderId;
+      if (!paymentTransactionsMap.has(orderId)) {
+        paymentTransactionsMap.set(orderId, {
+          id: orderId,
+          orderId: orderId,
+          paymentDate: t.duesPaidAt || t.updatedAt,
+          amount: 0,
+          transactionCount: 0,
+          createdAt: t.duesPaidAt || t.updatedAt,
+        });
+      }
+      const paymentTx = paymentTransactionsMap.get(orderId);
+      paymentTx.amount += t.platformCommission || 0;
+      paymentTx.transactionCount += 1;
+    });
+
+  const paymentTransactions = Array.from(paymentTransactionsMap.values()).sort(
+    (a, b) => new Date(b.paymentDate) - new Date(a.paymentDate)
+  );
+
+  return {
+    totalDues,
+    canWork,
+    transactions: mappedTransactions,
+    paymentTransactions,
+  };
+}
+
 // ============================================================================
 // PHONEPE SDK INITIALIZATION
 // ============================================================================
@@ -422,6 +486,69 @@ router.post('/confirm-job-payment', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error confirming job payment:', error);
     return res.status(500).json({ success: false, error: error.message || 'Failed to confirm job payment' });
+  }
+});
+
+/**
+ * Confirm PhonePe dues payment (poll after SDK checkout)
+ * POST /api/payment/confirm-dues-payment
+ * Body: { merchantOrderId } — must match DUES_{freelancerId}_... from create-dues-order
+ */
+router.post('/confirm-dues-payment', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'Only freelancers can confirm dues payments' });
+    }
+
+    const { merchantOrderId } = req.body || {};
+    if (!merchantOrderId) {
+      return res.status(400).json({ success: false, error: 'merchantOrderId is required' });
+    }
+
+    const freelancerId = (user._id || user.id).toString();
+    const match = String(merchantOrderId).match(/^DUES_([^_]+)_/);
+    if (!match || match[1] !== freelancerId) {
+      return res.status(403).json({ success: false, error: 'This order does not belong to you' });
+    }
+
+    const client = getPhonePeClient();
+    const statusResponse = await client.getOrderStatus(merchantOrderId);
+    const state = statusResponse?.state || statusResponse?.orderStatus || null;
+    const isSuccess = state === 'COMPLETED';
+
+    if (!isSuccess) {
+      return res.json({
+        success: true,
+        paid: false,
+        status: state || 'PENDING',
+      });
+    }
+
+    await CommissionTransaction.updateMany(
+      { freelancer: freelancerId, duesPaid: false },
+      {
+        $set: {
+          duesPaid: true,
+          duesPaidAt: new Date(),
+          duesPaymentOrderId: merchantOrderId,
+        },
+      }
+    );
+
+    const wallet = await buildFreelancerCommissionWallet(freelancerId);
+
+    return res.json({
+      success: true,
+      paid: true,
+      wallet,
+    });
+  } catch (error) {
+    console.error('Error confirming dues payment:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to confirm dues payment',
+    });
   }
 });
 

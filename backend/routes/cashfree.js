@@ -24,6 +24,18 @@ function toRupees(n) {
   return Math.round(x * 100) / 100;
 }
 
+/**
+ * Cashfree `order_meta.return_url` must be a valid http(s) URL. Custom app schemes
+ * (e.g. people-app://) are rejected. Mobile dues flow still works via payment session + confirm poll.
+ */
+function cashfreeHttpsReturnUrl() {
+  const u = process.env.CASHFREE_DUES_RETURN_URL || process.env.CASHFREE_PAYMENTS_RETURN_URL;
+  if (!u || typeof u !== 'string') return null;
+  const t = u.trim();
+  if (!/^https?:\/\//i.test(t)) return null;
+  return t;
+}
+
 async function getOrCreateWallet(userId) {
   let wallet = await Wallet.findOne({ user: userId });
   if (!wallet) wallet = await Wallet.create({ user: userId });
@@ -772,7 +784,7 @@ router.post('/dues/create-order', authenticate, requireRole('freelancer'), async
 
     const payments = createPaymentsClient();
 
-    const returnUrl = `people-app://payment/callback?orderId=${encodeURIComponent(cfOrderId)}`;
+    const httpsReturn = cashfreeHttpsReturnUrl();
     const createResp = await payments.post('/orders', {
       order_id: cfOrderId,
       order_amount: amount,
@@ -783,9 +795,7 @@ router.post('/dues/create-order', authenticate, requireRole('freelancer'), async
         customer_email: freelancer?.email || 'na@example.com',
         customer_phone: customerPhone || '+910000000000',
       },
-      order_meta: {
-        return_url: returnUrl,
-      },
+      order_meta: httpsReturn ? { return_url: httpsReturn } : {},
       order_note: 'Dues payment',
     });
 
