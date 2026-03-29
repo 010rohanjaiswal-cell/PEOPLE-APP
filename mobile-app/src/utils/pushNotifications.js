@@ -84,3 +84,24 @@ export function addNotificationResponseListener(onNotificationTapped) {
     onNotificationTapped(data);
   });
 }
+
+/** Current OS notification permission; 'granted' | 'denied' | 'undetermined' */
+export async function getNotificationPermissionStatus() {
+  if (Platform.OS === 'web') return 'denied';
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    return status;
+  } catch {
+    return 'denied';
+  }
+}
+
+export async function requestNotificationPermissionFromSettingsFlow() {
+  if (Platform.OS === 'web') return false;
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+}

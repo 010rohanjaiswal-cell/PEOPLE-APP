@@ -56,6 +56,22 @@ export const verificationAPI = {
     const response = await apiClient.get('/api/freelancer/verification/status');
     return response.data;
   },
+
+  // Referral (optional verification step)
+  getMyReferralCode: async () => {
+    const response = await apiClient.get('/api/freelancer/referral/my-code');
+    return response.data;
+  },
+
+  validateReferralCode: async (code) => {
+    const response = await apiClient.post('/api/freelancer/referral/validate', { code });
+    return response.data;
+  },
+
+  applyReferralCode: async (code) => {
+    const response = await apiClient.post('/api/freelancer/referral/apply', { code });
+    return response.data;
+  },
 };
 
 export default verificationAPI;

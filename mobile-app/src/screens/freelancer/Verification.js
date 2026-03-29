@@ -307,6 +307,27 @@ const styles = StyleSheet.create({
   stepBlock: {
     marginBottom: spacing.md,
   },
+  referralIntro: {
+    ...typography.body,
+    color: colors.text.secondary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  referralFormatHint: {
+    ...typography.small,
+    color: colors.text.muted,
+    marginTop: spacing.xs,
+  },
+  referralSkipTouch: {
+    alignSelf: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  referralSkipText: {
+    ...typography.body,
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
   stepTitle: {
     ...typography.body,
     color: colors.text.primary,
@@ -491,7 +512,14 @@ const Verification = ({ navigation }) => {
   const [isVerifyingPan, setIsVerifyingPan] = useState(false);
   const [panNameMatchOk, setPanNameMatchOk] = useState(null);
   const [panNameMatchScore, setPanNameMatchScore] = useState(null);
-  const [step, setStep] = useState(0); // 0 = Aadhaar, 1 = PAN
+  const [step, setStep] = useState(0); // 0 = Aadhaar, 1 = PAN, 2 = Referral (optional)
+
+  // Referral (optional)
+  const [referralCode, setReferralCode] = useState('');
+  const [referralValidating, setReferralValidating] = useState(false);
+  const [referralValid, setReferralValid] = useState(null); // null | true | false
+  const [referralApplied, setReferralApplied] = useState(false);
+  const referralValidateSeq = React.useRef(0);
 
   useEffect(() => {
     checkVerificationStatus();
@@ -669,10 +697,13 @@ const Verification = ({ navigation }) => {
     panVerified === true &&
     panNameMatchOk !== false &&
     aadhaarMobileMatchesSignup !== false;
+  const referralRequiredValid = referralCode.trim().length > 0;
+  const canGoNextFromReferral = !referralRequiredValid || referralValid === true;
 
   const renderProgress = () => {
     const aadhaarDone = aadhaarVerified === true;
     const panDone = panVerified === true && panNameMatchOk !== false;
+    const referralDone = !referralRequiredValid ? true : referralApplied === true;
     // Face step is completed on the next screen; we show it as the final step indicator here.
     return (
       <View style={styles.progressContainer}>
@@ -685,13 +716,43 @@ const Verification = ({ navigation }) => {
             {panDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>2</Text>}
           </View>
           <View style={[styles.progressLine, panDone && styles.progressLineActive]} />
+          <View style={[styles.progressDot, (step === 2 || referralDone) && styles.progressDotActive]}>
+            {referralDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>3</Text>}
+          </View>
+          <View style={[styles.progressLine, referralDone && styles.progressLineActive]} />
           <View style={styles.progressDot}>
-            <Text style={styles.progressDotText}>3</Text>
+            <Text style={styles.progressDotText}>4</Text>
           </View>
         </View>
       </View>
     );
   };
+
+  useEffect(() => {
+    const code = referralCode.trim();
+    if (!code) {
+      setReferralValid(null);
+      setReferralValidating(false);
+      return;
+    }
+    const seq = ++referralValidateSeq.current;
+    setReferralValidating(true);
+    const tmr = setTimeout(() => {
+      (async () => {
+        try {
+          const resp = await verificationAPI.validateReferralCode(code);
+          if (seq !== referralValidateSeq.current) return;
+          setReferralValid(resp?.success && resp?.valid === true);
+        } catch (e) {
+          if (seq !== referralValidateSeq.current) return;
+          setReferralValid(false);
+        } finally {
+          if (seq === referralValidateSeq.current) setReferralValidating(false);
+        }
+      })();
+    }, 450);
+    return () => clearTimeout(tmr);
+  }, [referralCode]);
 
   const renderAadhaarStep = () => (
     <View>
@@ -813,22 +874,113 @@ const Verification = ({ navigation }) => {
     </View>
   );
 
+  const renderReferralStep = () => (
+    <View>
+      <Text style={styles.stepHeaderTitle}>{t('referral.enterTitle')}</Text>
+      <Text style={styles.referralIntro}>{t('referral.stepIntro')}</Text>
+
+      <View style={styles.stepBlock}>
+        <TextInput
+          value={referralCode}
+          onChangeText={(v) => {
+            setReferralApplied(false);
+            const upper = String(v || '').toUpperCase();
+            const filtered = upper
+              .split('')
+              .filter((ch) => /[A-Z2-9@_-]/.test(ch))
+              .join('')
+              .slice(0, 18);
+            setReferralCode(filtered);
+          }}
+          placeholder={t('referral.enterPlaceholder')}
+          placeholderTextColor={colors.text.muted}
+          autoCapitalize="characters"
+          editable={!submitting && !referralApplied}
+          style={[styles.input, referralApplied && styles.inputDisabled]}
+        />
+        <Text style={styles.referralFormatHint}>{t('referral.stepFormatHint')}</Text>
+
+        {referralCode.trim().length > 0 ? (
+          <View style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            {referralValidating ? (
+              <>
+                <ActivityIndicator color={colors.primary.main} size="small" />
+                <Text style={{ ...typography.small, color: colors.text.secondary }}>{t('referral.validating')}</Text>
+              </>
+            ) : referralValid === true ? (
+              <>
+                <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
+                <Text style={{ ...typography.small, color: colors.success.main, fontWeight: '700' }}>{t('referral.valid')}</Text>
+              </>
+            ) : referralValid === false ? (
+              <>
+                <MaterialIcons name="cancel" size={18} color={colors.error.main} />
+                <Text style={{ ...typography.small, color: colors.error.main, fontWeight: '700' }}>{t('referral.invalid')}</Text>
+              </>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={{ ...typography.small, color: colors.text.secondary, marginTop: spacing.sm }}>
+            {t('referral.codeHint')}
+          </Text>
+        )}
+      </View>
+
+      <TouchableOpacity
+        onPress={() => !submitting && navigation.navigate('FaceVerification')}
+        disabled={!!submitting}
+        style={styles.referralSkipTouch}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.referralSkipText}>{t('referral.skipForNow')}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
     <View style={styles.formContainer}>
       {renderProgress()}
-      {step === 0 ? renderAadhaarStep() : renderPanStep()}
+      {step === 0 ? renderAadhaarStep() : step === 1 ? renderPanStep() : renderReferralStep()}
 
       {/* Bottom-right Next arrow */}
       <TouchableOpacity
-        onPress={() => {
-          if (step === 0) setStep(1);
-          else navigation.navigate('FaceVerification');
+        onPress={async () => {
+          if (step === 0) {
+            setStep(1);
+            return;
+          }
+          if (step === 1) {
+            setStep(2);
+            return;
+          }
+          // step === 2 (Referral - optional)
+          const code = referralCode.trim();
+          if (!code) {
+            navigation.navigate('FaceVerification');
+            return;
+          }
+          if (referralValid !== true) return;
+          if (referralApplied) {
+            navigation.navigate('FaceVerification');
+            return;
+          }
+          try {
+            setSubmitting(true);
+            const resp = await verificationAPI.applyReferralCode(code);
+            if (!resp?.success) throw new Error(resp?.error || 'Failed to apply referral code');
+            setReferralApplied(true);
+            navigation.navigate('FaceVerification');
+          } catch (e) {
+            showErrorModal('Referral code', e?.response?.data?.error || e?.message || 'Failed to apply referral code');
+          } finally {
+            setSubmitting(false);
+          }
         }}
-        disabled={step === 0 ? !canGoNextFromAadhaar : !canGoNextFromPan}
+        disabled={step === 0 ? !canGoNextFromAadhaar : step === 1 ? !canGoNextFromPan : !canGoNextFromReferral}
         style={[
           styles.floatingArrow,
-          (step === 0 ? !canGoNextFromAadhaar : !canGoNextFromPan) && styles.floatingArrowDisabled,
+          (step === 0 ? !canGoNextFromAadhaar : step === 1 ? !canGoNextFromPan : !canGoNextFromReferral) && styles.floatingArrowDisabled,
         ]}
         activeOpacity={0.85}
       >
@@ -836,8 +988,12 @@ const Verification = ({ navigation }) => {
       </TouchableOpacity>
 
       {/* Bottom-left Back arrow (PAN -> Aadhaar) */}
-      {step === 1 ? (
-        <TouchableOpacity onPress={() => setStep(0)} style={styles.floatingBack} activeOpacity={0.85}>
+      {step > 0 ? (
+        <TouchableOpacity
+          onPress={() => setStep((s) => Math.max(0, s - 1))}
+          style={styles.floatingBack}
+          activeOpacity={0.85}
+        >
           <MaterialIcons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
       ) : null}

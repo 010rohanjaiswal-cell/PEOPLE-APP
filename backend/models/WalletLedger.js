@@ -8,6 +8,7 @@ const walletLedgerSchema = new mongoose.Schema(
       required: true,
       enum: [
         'CREDIT_JOB_PAYMENT',
+        'CREDIT_REFERRAL_REWARD',
         'DEBIT_COMMISSION',
         'WITHDRAW_REQUESTED',
         'WITHDRAW_PAID',

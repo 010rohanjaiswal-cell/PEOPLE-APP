@@ -553,6 +553,14 @@ const Wallet = () => {
           amount: Number(row.amount),
           date: row.createdAt,
         });
+      } else if (row.type === 'CREDIT_REFERRAL_REWARD') {
+        items.push({
+          key: `ledger-${row._id}`,
+          kind: 'referralReward',
+          title: t('wallet.referralRewardCredited'),
+          amount: Number(row.amount),
+          date: row.createdAt,
+        });
       }
     });
     (wallet?.paymentTransactions || []).forEach((pt) => {

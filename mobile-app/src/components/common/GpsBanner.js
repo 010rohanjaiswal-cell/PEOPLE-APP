@@ -3,54 +3,62 @@
  * Does not block navigation; user can use the app.
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLocation } from '../../context/LocationContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function GpsBanner() {
-  const { gpsDenied, gpsUnknown, requestPermission, checkPermission } = useLocation();
+  const { t } = useLanguage();
+  const { gpsDenied, gpsUnknown } = useLocation();
 
-  // Ask once when banner would be shown (permission not granted)
-  useEffect(() => {
-    if (gpsUnknown) return;
-    if (!gpsDenied) return;
-    // Already denied or not granted - no auto request; user can tap Open Settings
-  }, [gpsDenied, gpsUnknown]);
-
-  const showBanner = gpsDenied === true; // gpsUnknown = still checking, don't show banner yet
+  const showBanner = gpsDenied === true;
 
   if (!showBanner) return null;
 
   return (
-    <View style={styles.banner}>
-      <MaterialIcons name="location-off" size={18} color={colors.background} />
-      <Text style={styles.text}>Please turn on GPS</Text>
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => Linking.openSettings()}
-      >
-        <Text style={styles.settingsText}>Open Settings</Text>
-      </TouchableOpacity>
+    <View style={styles.wrapper}>
+      <View style={styles.banner}>
+        <MaterialIcons name="location-off" size={18} color={colors.background} />
+        <Text style={styles.text} numberOfLines={3}>
+          {t('permissions.locationBanner')}
+        </Text>
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => Linking.openSettings()}
+        >
+          <Text style={styles.settingsText}>{t('permissions.openSettings')}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.xs,
+    maxWidth: '100%',
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: colors.warning?.main || '#E65100',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   text: {
     ...typography.small,
     color: colors.background,
     fontWeight: '600',
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   settingsButton: {
     paddingVertical: 2,

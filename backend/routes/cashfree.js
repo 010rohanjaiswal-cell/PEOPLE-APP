@@ -193,6 +193,45 @@ async function creditWalletFromJobPayment({ jobPayment, job, clientUser }) {
   jobPayment.processedToWallet = true;
   await jobPayment.save();
 
+  // Referral reward (lifetime): credit 10% of platformCommission to the referrer if bound.
+  // Idempotent: one ledger row per (referrer, jobPayment).
+  try {
+    const freelancerUser = await User.findById(freelancerId).select('referredBy referralLockedAt role').lean();
+    const referrerId = freelancerUser?.referredBy || null;
+    const locked = !!freelancerUser?.referralLockedAt;
+    if (referrerId && locked) {
+      const reward = toRupees(platformCommission * 0.1);
+      if (reward > 0) {
+        const existing = await WalletLedger.findOne({
+          walletUser: referrerId,
+          type: 'CREDIT_REFERRAL_REWARD',
+          refType: 'JobPayment',
+          refId: jobPayment._id.toString(),
+        }).select('_id').lean();
+        if (!existing) {
+          const refWallet = await getOrCreateWallet(referrerId);
+          await WalletLedger.create({
+            walletUser: referrerId,
+            type: 'CREDIT_REFERRAL_REWARD',
+            amount: reward,
+            refType: 'JobPayment',
+            refId: jobPayment._id.toString(),
+            meta: {
+              jobId: job._id.toString(),
+              cfOrderId: jobPayment.cfOrderId,
+              referredFreelancerId: freelancerId.toString(),
+              rewardRule: '10% of platformCommission',
+            },
+          });
+          refWallet.availableBalance = toRupees(refWallet.availableBalance + reward);
+          await refWallet.save();
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Referral reward credit failed (Cashfree):', e?.message || e);
+  }
+
   // Payment confirmed -> job completed (replaces old "Paid" manual confirmation)
   if (job && job.status === 'work_done') {
     job.status = 'completed';

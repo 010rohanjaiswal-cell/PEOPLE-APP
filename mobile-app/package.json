@@ -22,6 +22,7 @@
     "babel-preset-expo": "~54.0.10",
     "cashfree-pg-api-contract": "^2.1.0",
     "expo": "~54.0.33",
+    "expo-clipboard": "~8.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-font": "~14.0.11",
     "expo-image-manipulator": "~14.0.8",
@@ -49,5 +50,15 @@
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
     "react-refresh": "^0.18.0"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-cashfree-pg-sdk",
+          "react-native-phonepe-pg"
+        ]
+      }
+    }
   }
 }

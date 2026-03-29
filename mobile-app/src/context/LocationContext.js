@@ -1,6 +1,7 @@
 /**
  * LocationContext - People App
- * Tracks GPS/location permission. Does not block app if denied.
+ * Tracks location permission AND device location services (GPS) on/off.
+ * gpsEnabled = permission granted AND Location.hasServicesEnabledAsync().
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -9,14 +10,20 @@ import * as Location from 'expo-location';
 
 const LocationContext = createContext(null);
 
+async function computeLocationReady() {
+  const { status } = await Location.getForegroundPermissionsAsync();
+  if (status !== 'granted') return false;
+  return Location.hasServicesEnabledAsync();
+}
+
 export function LocationProvider({ children }) {
   const [gpsEnabled, setGpsEnabled] = useState(null); // null = not checked yet
 
   const checkPermission = useCallback(async () => {
     try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      setGpsEnabled(status === 'granted');
-      return status === 'granted';
+      const ok = await computeLocationReady();
+      setGpsEnabled(ok);
+      return ok;
     } catch (err) {
       console.error('LocationContext checkPermission:', err);
       setGpsEnabled(false);
@@ -31,8 +38,13 @@ export function LocationProvider({ children }) {
       if (status !== 'granted') {
         status = (await Location.requestForegroundPermissionsAsync()).status;
       }
-      setGpsEnabled(status === 'granted');
-      return status === 'granted';
+      if (status !== 'granted') {
+        setGpsEnabled(false);
+        return false;
+      }
+      const servicesOn = await Location.hasServicesEnabledAsync();
+      setGpsEnabled(servicesOn);
+      return servicesOn;
     } catch (err) {
       console.error('LocationContext requestPermission:', err);
       setGpsEnabled(false);
@@ -47,9 +59,9 @@ export function LocationProvider({ children }) {
     let mounted = true;
     (async () => {
       try {
-        const { status } = await Location.getForegroundPermissionsAsync();
+        const ok = await computeLocationReady();
         if (!mounted) return;
-        setGpsEnabled(status === 'granted');
+        setGpsEnabled(ok);
       } catch (err) {
         if (mounted) setGpsEnabled(false);
       }
@@ -57,14 +69,42 @@ export function LocationProvider({ children }) {
     return () => { mounted = false; };
   }, []);
 
-  // Re-check when app comes to foreground (e.g. user enabled in Settings)
+  // Re-check on any app state change (Settings, quick settings, control center) and
+  // poll while foregrounded so GPS / permission toggles update the banner without reload.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
+    let intervalId = null;
+    const POLL_MS = 1500;
+
+    const startPolling = () => {
+      if (intervalId) return;
+      intervalId = setInterval(() => {
         checkPermission();
+      }, POLL_MS);
+    };
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const sub = AppState.addEventListener('change', (nextState) => {
+      checkPermission();
+      if (nextState === 'active') {
+        startPolling();
+      } else {
+        stopPolling();
       }
     });
-    return () => sub?.remove();
+
+    if (AppState.currentState === 'active') {
+      startPolling();
+    }
+
+    return () => {
+      sub?.remove();
+      stopPolling();
+    };
   }, [checkPermission]);
 
   /** Get current coordinates (for filtering jobs by state). Returns null if permission denied or error. */
@@ -72,6 +112,8 @@ export function LocationProvider({ children }) {
     try {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return null;
+      const servicesOn = await Location.hasServicesEnabledAsync();
+      if (!servicesOn) return null;
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
         maximumAge: 60000,

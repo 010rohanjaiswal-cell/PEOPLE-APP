@@ -17,6 +17,7 @@ import NotificationBell from '../../components/common/NotificationBell';
 import LanguageSelector from '../../components/common/LanguageSelector';
 import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
+import NotificationPermissionBanner from '../../components/common/NotificationPermissionBanner';
 import { useLocation } from '../../context/LocationContext';
 import { userAPI, verificationAPI } from '../../api';
 
@@ -30,6 +31,7 @@ import WalletScreen from './Wallet';
 import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
 import SettingsScreen from './Settings';
+import ReferralScreen from './Referral';
 
 function createFreelancerDashboardStyles(colors) {
   return StyleSheet.create({
@@ -327,13 +329,12 @@ const FreelancerDashboard = () => {
 
   const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
 
-  // Re-check GPS on/off every 10 seconds so we show or hide jobs correctly
-  useEffect(() => {
-    const interval = setInterval(() => {
+  // Re-check when this screen gains focus (LocationContext also polls + AppState globally).
+  useFocusEffect(
+    useCallback(() => {
       checkPermission();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [checkPermission]);
+    }, [checkPermission])
+  );
 
   const refreshUserProfile = useCallback(async () => {
     try {
@@ -386,6 +387,7 @@ const FreelancerDashboard = () => {
     Orders: OrdersScreen,
     Profile: ProfileScreen,
     Settings: SettingsScreen,
+    Referral: ReferralScreen,
   };
 
   // Determine which screen to show
@@ -507,6 +509,7 @@ const FreelancerDashboard = () => {
       </View>
 
       <GpsBanner />
+      <NotificationPermissionBanner />
 
         {/* Error Message */}
         {logoutError ? (
@@ -662,6 +665,14 @@ const FreelancerDashboard = () => {
                 >
                   <MaterialIcons name="settings" size={24} color={colors.text.primary} />
                   <Text style={styles.drawerMenuItemText}>{t('dashboard.settings')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDrawerNavigation('Referral')}
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="card-giftcard" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>{t('referral.title')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />

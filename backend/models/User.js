@@ -65,6 +65,26 @@ const userSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  /** Referral system: the referrer (freelancer) who invited this user (locked after verification milestone). */
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true,
+  },
+  /** Referral code owned by this user (shared with others). */
+  referralCode: {
+    type: String,
+    default: null,
+    trim: true,
+    uppercase: true,
+    index: true,
+  },
+  /** Once set, referral binding is immutable. */
+  referralLockedAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -80,6 +100,7 @@ const userSchema = new mongoose.Schema({
 // Index for faster queries
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
 
 const User = mongoose.model('User', userSchema);
 

@@ -17,6 +17,7 @@ const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
 const axios = require('axios');
 const FormData = require('form-data');
+const crypto = require('crypto');
 const {
   notifyOfferReceived,
   notifyJobAssigned,
@@ -77,6 +78,45 @@ function getCashfreeVrsHeaders(extra = {}) {
 
 function digitsOnly(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function generateReferralCode(length = 16) {
+  // 15–18 chars as requested; keep it user-typeable while still including special chars.
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789-@_';
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += charset[bytes[i] % charset.length];
+  }
+  return out;
+}
+
+async function ensureUserReferralCode(userId) {
+  const user = await User.findById(userId).select('referralCode role').lean();
+  if (!user) throw new Error('User not found');
+  if (user.role !== 'freelancer') throw new Error('This endpoint is only for freelancers');
+  if (user.referralCode) return user.referralCode;
+
+  // Try a few times in case of rare unique collision.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = generateReferralCode(16);
+    try {
+      const updated = await User.findOneAndUpdate(
+        { _id: userId, referralCode: { $in: [null, ''] } },
+        { referralCode: code },
+        { new: true }
+      ).select('referralCode');
+      if (updated?.referralCode) return updated.referralCode;
+      // Someone else set it concurrently; re-read.
+      const reread = await User.findById(userId).select('referralCode').lean();
+      if (reread?.referralCode) return reread.referralCode;
+    } catch (e) {
+      // Duplicate key -> retry
+      if (String(e?.code) === '11000') continue;
+      throw e;
+    }
+  }
+  throw new Error('Failed to generate a unique referral code');
 }
 
 function last4Digits(value) {
@@ -846,6 +886,10 @@ router.post('/verification/face-match', authenticate, upload.single('image'), as
 
     // Use selfie as profile photo
     user.profilePhoto = selfieUrl;
+    // Lock referral binding after face verification succeeds (one-time binding milestone).
+    if (user.referredBy && !user.referralLockedAt) {
+      user.referralLockedAt = new Date();
+    }
     await user.save();
 
     return res.json({ success: true, score: scorePct, selfieUrl });
@@ -855,6 +899,99 @@ router.post('/verification/face-match', authenticate, upload.single('image'), as
       success: false,
       error: error?.response?.data?.message || error.message || 'Failed to run face match',
     });
+  }
+});
+
+/**
+ * Get (or generate) my referral code
+ * GET /api/freelancer/referral/my-code
+ */
+router.get('/referral/my-code', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('role referralCode referredBy referralLockedAt').lean();
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    if (user.role !== 'freelancer') return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+
+    const code = await ensureUserReferralCode(user._id);
+    return res.json({
+      success: true,
+      referral: {
+        code,
+        referredBy: user.referredBy ? String(user.referredBy) : null,
+        lockedAt: user.referralLockedAt || null,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || 'Failed to get referral code' });
+  }
+});
+
+/**
+ * Validate a referral code (does not bind)
+ * POST /api/freelancer/referral/validate
+ * body: { code: string }
+ */
+router.post('/referral/validate', authenticate, async (req, res) => {
+  try {
+    const me = await User.findById(req.user.id).select('role _id').lean();
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    if (me.role !== 'freelancer') return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ success: false, error: 'Referral code is required' });
+
+    const referrer = await User.findOne({ referralCode: code, role: 'freelancer' }).select('_id fullName').lean();
+    if (!referrer) return res.json({ success: true, valid: false });
+    if (String(referrer._id) === String(me._id)) return res.json({ success: true, valid: false });
+
+    return res.json({
+      success: true,
+      valid: true,
+      referrer: {
+        id: String(referrer._id),
+        name: referrer.fullName || null,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || 'Failed to validate referral code' });
+  }
+});
+
+/**
+ * Apply a referral code (one-time binding; lock happens after face verification success)
+ * POST /api/freelancer/referral/apply
+ * body: { code: string }
+ */
+router.post('/referral/apply', authenticate, async (req, res) => {
+  try {
+    const me = await User.findById(req.user.id).select('role _id referredBy referralLockedAt').lean();
+    if (!me) return res.status(404).json({ success: false, error: 'User not found' });
+    if (me.role !== 'freelancer') return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
+    if (me.referralLockedAt) return res.status(400).json({ success: false, error: 'Referral code is locked and cannot be changed' });
+    if (me.referredBy) return res.status(400).json({ success: false, error: 'Referral code already applied' });
+
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ success: false, error: 'Referral code is required' });
+
+    const referrer = await User.findOne({ referralCode: code, role: 'freelancer' }).select('_id').lean();
+    if (!referrer) return res.status(400).json({ success: false, error: 'Invalid referral code' });
+    if (String(referrer._id) === String(me._id)) return res.status(400).json({ success: false, error: 'You cannot use your own referral code' });
+
+    const updated = await User.findOneAndUpdate(
+      { _id: me._id, referredBy: null, referralLockedAt: null },
+      { referredBy: referrer._id },
+      { new: true }
+    ).select('referredBy referralLockedAt referralCode');
+
+    return res.json({
+      success: true,
+      referral: {
+        referredBy: updated?.referredBy ? String(updated.referredBy) : null,
+        lockedAt: updated?.referralLockedAt || null,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e?.message || 'Failed to apply referral code' });
   }
 });
 

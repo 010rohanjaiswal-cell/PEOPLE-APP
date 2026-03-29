@@ -25,6 +25,40 @@ export default {
     success: 'सफल',
     phoneNumberNotAvailable: 'फ़ोन नंबर उपलब्ध नहीं',
     unableToOpenDialer: 'फ़ोन डायलर खोलने में असमर्थ',
+    retry: 'फिर से प्रयास करें',
+  },
+  referral: {
+    title: 'रेफरल',
+    subtitle:
+      'अपने दोस्तों को फ्रीलांसर बनने के लिए इनवाइट करें। जब वे जॉब पूरे करेंगे, आपको लाइफटाइम रिवॉर्ड मिलता रहेगा।',
+    yourCode: 'आपका रेफरल कोड',
+    codeHint: 'यह कोड अपने दोस्त को शेयर करें। वे इसे वेरिफिकेशन के दौरान (वैकल्पिक) दर्ज कर सकते हैं।',
+    bulletLifetime: 'जब आपका रेफर किया हुआ दोस्त जॉब पूरे करेगा, आपको लाइफटाइम रिवॉर्ड मिलेगा।',
+    bulletVerification: 'जब वे वेरिफिकेशन के दौरान कोड डालते हैं तो सबसे अच्छा काम करता है।',
+    bulletOneTime: 'रेफरल कोड केवल एक बार इस्तेमाल किया जा सकता है (सबके लिए फेयर रखने के लिए)।',
+    enterTitle: 'रेफरल कोड (वैकल्पिक)',
+    enterPlaceholder: 'रेफरल कोड दर्ज करें',
+    validating: 'जांच हो रही है…',
+    valid: 'कोड वैध है',
+    invalid: 'अमान्य रेफरल कोड',
+    applyAndContinue: 'लागू करें और आगे बढ़ें',
+    skip: 'स्किप करें',
+    skipForNow: 'अभी स्किप करें',
+    stepIntro:
+      'किसी दोस्त का रेफरल कोड है? यहाँ दर्ज करें — यह पूरी तरह वैकल्पिक है।',
+    stepFormatHint: 'अक्षर, अंक और - @ _ का उपयोग करें (15–18 वर्ण)।',
+    copyCode: 'कोड कॉपी करें',
+    copied: 'क्लिपबोर्ड पर कॉपी हो गया',
+    shareCode: 'कोड शेयर करें',
+    shareMessage:
+      'People पर फ्रीलांसर बनकर मेरे साथ जुड़ें! वेरिफिकेशन में मेरा रेफरल कोड लगाएं: {code}',
+  },
+  permissions: {
+    locationBanner:
+      'निकट की नौकरियों के लिए GPS / लोकेशन चालू करें और ऐप को एक्सेस दें।',
+    notificationsBanner: 'जॉब अलर्ट और अपडेट के लिए सूचनाएँ चालू करें।',
+    openSettings: 'सेटिंग्स खोलें',
+    allowNotifications: 'अनुमति दें',
   },
   auth: {
     permissionDenied: 'अनुमति अस्वीकृत',
@@ -260,6 +294,7 @@ export default {
     page: 'पृष्ठ',
     recentActivityEmpty: 'अभी कोई हाल की गतिविधि नहीं।',
     earningsCredited: 'कमाई जमा की गई',
+    referralRewardCredited: 'रेफरल रिवॉर्ड जमा हुआ',
     withdrawalProcessing: 'निकासी प्रक्रिया में',
     duesPaidActivity: 'बकाया भुगतान',
   },
