@@ -35,7 +35,7 @@ export default {
     codeHint: 'Share this code with your friend. They can enter it during verification (optional).',
     bulletLifetime: 'Lifetime rewards when your referred friend completes jobs.',
     bulletVerification: 'Works best when they enter your code during verification.',
-    bulletOneTime: 'A referral code can be used only once (to keep it fair for everyone).',
+    bulletOneTime: 'You can refer unlimited freelancers. Each freelancer can apply a referral code only once.',
     enterTitle: 'Referral code (optional)',
     enterPlaceholder: 'Enter referral code',
     validating: 'Validating…',
@@ -357,11 +357,19 @@ export default {
     genderPreference: 'Gender Preference',
     jobDescriptionOptional: 'Job Description (Optional)',
     jobDescriptionPlaceholder: 'Describe the job requirements...',
+    alphanumericTitleHint:
+      'Letters and numbers only (English A–Z, a–z, 0–9). No spaces, punctuation, or symbols.',
+    alphanumericDescriptionHint:
+      'Same rules as title: letters and numbers only. Leave blank if not needed.',
+    titleInvalidAlphanumeric: 'Please use only English letters, numbers, and spaces in the job title.',
+    descriptionInvalidAlphanumeric: 'Description may only contain English letters, numbers, and spaces.',
     postJobButton: 'Post Job',
     jobPostedSuccessfully: 'Job Posted Successfully',
     jobPostedSuccessMessage: 'Your job has been posted successfully!',
     failedToPostJob: 'Failed to post job',
     failedToPostJobTryAgain: 'Failed to post job. Please try again.',
+    jobModerationRejected:
+      'This job cannot be posted because it may violate our community guidelines. Please edit the title or description and try again.',
     fromAddress: 'From address',
     fromPincode: 'From pincode',
     toAddress: 'To address',

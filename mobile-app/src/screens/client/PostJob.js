@@ -24,6 +24,13 @@ import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Input, Card, CardContent } from '../../components/common';
 import { validateRequired, validatePincode } from '../../utils/validation';
+import {
+  sanitizeJobTextInput,
+  MAX_JOB_TITLE_LEN,
+  MAX_JOB_DESCRIPTION_LEN,
+  isValidJobTitle,
+  isValidJobDescription,
+} from '../../utils/jobTextPolicy';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -426,6 +433,16 @@ const PostJob = ({ onJobPosted }) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleTitleChange = (value) => {
+    const cleaned = sanitizeJobTextInput(value).slice(0, MAX_JOB_TITLE_LEN);
+    setFormData((prev) => ({ ...prev, title: cleaned }));
+  };
+
+  const handleDescriptionChange = (value) => {
+    const cleaned = sanitizeJobTextInput(value).slice(0, MAX_JOB_DESCRIPTION_LEN);
+    setFormData((prev) => ({ ...prev, description: cleaned }));
+  };
+
   const runErrorBorderAnimation = (animValue) => {
     animValue.setValue(1);
     Animated.sequence([
@@ -447,6 +464,15 @@ const PostJob = ({ onJobPosted }) => {
     }
     if (!validateRequired(formData.title)) {
       runErrorBorderAnimation(borderOpacity.title);
+      return;
+    }
+    if (!isValidJobTitle(formData.title)) {
+      runErrorBorderAnimation(borderOpacity.title);
+      Alert.alert(t('common.error'), t('postJob.titleInvalidAlphanumeric'));
+      return;
+    }
+    if (!isDelivery && !isValidJobDescription(formData.description)) {
+      Alert.alert(t('common.error'), t('postJob.descriptionInvalidAlphanumeric'));
       return;
     }
     if (!formData.category) {
@@ -528,7 +554,11 @@ const PostJob = ({ onJobPosted }) => {
       }
     } catch (err) {
       console.error('Error posting job:', err);
-      const msg = err.response?.data?.error || err.message || t('postJob.failedToPostJobTryAgain');
+      const code = err.response?.data?.code;
+      const msg =
+        code === 'JOB_MODERATION_REJECTED'
+          ? t('postJob.jobModerationRejected')
+          : err.response?.data?.error || err.message || t('postJob.failedToPostJobTryAgain');
       Alert.alert(t('common.error'), msg);
     } finally {
       setLoading(false);
@@ -568,7 +598,7 @@ const PostJob = ({ onJobPosted }) => {
               label={t('postJob.jobTitle')}
               placeholder={t('postJob.enterJobTitle')}
               value={formData.title}
-              onChangeText={(value) => handleChange('title', value)}
+              onChangeText={handleTitleChange}
               style={styles.inputField}
             />
           </View>
@@ -796,7 +826,7 @@ const PostJob = ({ onJobPosted }) => {
                   label={t('postJob.jobDescriptionOptional')}
                   placeholder={t('postJob.jobDescriptionPlaceholder')}
                   value={formData.description}
-                  onChangeText={(value) => handleChange('description', value)}
+                  onChangeText={handleDescriptionChange}
                   multiline
                   numberOfLines={2}
                   style={styles.inputField}

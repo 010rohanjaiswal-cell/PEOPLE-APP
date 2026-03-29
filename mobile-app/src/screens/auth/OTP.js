@@ -13,7 +13,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -33,6 +33,7 @@ const OTP = ({ navigation, route }) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [forceLoginModalVisible, setForceLoginModalVisible] = useState(false);
   // Start at 60s: OTP was just sent from Login; resend only after cooldown.
   const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
@@ -83,17 +84,7 @@ const OTP = ({ navigation, route }) => {
         await loginWithToken(result.token, result.user);
       } else if (result.code === 'ALREADY_LOGGED_IN_ELSEWHERE') {
         setLoading(false);
-        Alert.alert(
-          null,
-          t('auth.alreadyLoggedInElsewhere'),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            {
-              text: t('auth.logoutFromOtherDevice'),
-              onPress: () => handleVerifyOTP(true),
-            },
-          ]
-        );
+        setForceLoginModalVisible(true);
         return;
       } else {
         throw new Error(result.error || 'Verification failed');
@@ -250,6 +241,42 @@ const OTP = ({ navigation, route }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={forceLoginModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setForceLoginModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconCircle}>
+              <MaterialIcons name="devices" size={34} color={colors.primary.main} />
+            </View>
+            <Text style={styles.modalTitle}>Login on this device?</Text>
+            <Text style={styles.modalSubtitle}>{t('auth.alreadyLoggedInElsewhere')}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setForceLoginModalVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalPrimaryButton]}
+                onPress={() => {
+                  setForceLoginModalVisible(false);
+                  handleVerifyOTP(true);
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.modalPrimaryText}>{t('auth.logoutFromOtherDevice')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -438,6 +465,80 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.primary.main,
     fontWeight: '600',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.12)',
+    shadowColor: colors.primary.main,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 5,
+  },
+  modalIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(37, 99, 235, 0.10)',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  modalButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  modalCancelButton: {
+    backgroundColor: 'rgba(15, 23, 42, 0.06)',
+  },
+  modalCancelText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  modalPrimaryButton: {
+    backgroundColor: colors.primary.main,
+  },
+  modalPrimaryText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
 

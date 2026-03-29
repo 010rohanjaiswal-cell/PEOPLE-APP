@@ -30,6 +30,8 @@ const {
   evaluateAutoPick,
   clearAutoPickTimer,
 } = require('../services/autoPickApplications');
+const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils/jobTextPolicy');
+const { moderateJobContent } = require('../services/jobModerationService');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -102,6 +104,12 @@ router.post('/jobs', authenticate, async (req, res) => {
       deliveryToPincode,
     } = req.body || {};
 
+    const titleCheck = assertJobTitleAllowed(title);
+    if (!titleCheck.ok) {
+      return res.status(400).json({ success: false, error: titleCheck.error });
+    }
+    const titleNormalized = titleCheck.normalized;
+
     const catTrim = String(category || '').trim();
     const hasDeliveryPayload =
       String(deliveryFromAddress || '').trim().length > 0 &&
@@ -168,7 +176,11 @@ router.post('/jobs', authenticate, async (req, res) => {
       }
       addressStr = String(address).trim();
       pincodeStr = String(pincode).trim();
-      descriptionStr = description ? String(description).trim() : null;
+      const descCheck = assertJobDescriptionAllowed(description);
+      if (!descCheck.ok) {
+        return res.status(400).json({ success: false, error: descCheck.error });
+      }
+      descriptionStr = descCheck.normalized;
     }
 
     let state = null;
@@ -188,9 +200,21 @@ router.post('/jobs', authenticate, async (req, res) => {
       console.warn('Could not resolve state/coords for pincode:', pincodeStr, e.message);
     }
 
+    const moderation = await moderateJobContent({
+      title: titleNormalized,
+      description: descriptionStr,
+    });
+    if (!moderation.allowed) {
+      return res.status(400).json({
+        success: false,
+        code: 'JOB_MODERATION_REJECTED',
+        error: moderation.error || 'This job cannot be posted under our community guidelines.',
+      });
+    }
+
     const job = await Job.create({
       client: user._id || user.id,
-      title: String(title).trim(),
+      title: titleNormalized,
       category: categoryStored,
       address: addressStr,
       pincode: pincodeStr,
@@ -439,7 +463,13 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
       deliveryToPincode,
     } = req.body || {};
 
-    if (title) job.title = String(title).trim();
+    if (title !== undefined && title !== null && String(title).length > 0) {
+      const titleCheck = assertJobTitleAllowed(title);
+      if (!titleCheck.ok) {
+        return res.status(400).json({ success: false, error: titleCheck.error });
+      }
+      job.title = titleCheck.normalized;
+    }
     if (category) job.category = String(category).trim();
 
     const catNow = job.category;
@@ -521,10 +551,28 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
         }
         job.gender = normalizedGender;
       }
-      if (description !== undefined) job.description = description ? String(description).trim() : null;
+      if (description !== undefined) {
+        const descCheck = assertJobDescriptionAllowed(description);
+        if (!descCheck.ok) {
+          return res.status(400).json({ success: false, error: descCheck.error });
+        }
+        job.description = descCheck.normalized;
+      }
     }
 
     if (budget !== undefined) job.budget = Number(budget);
+
+    const moderation = await moderateJobContent({
+      title: job.title,
+      description: job.description,
+    });
+    if (!moderation.allowed) {
+      return res.status(400).json({
+        success: false,
+        code: 'JOB_MODERATION_REJECTED',
+        error: moderation.error || 'This job cannot be posted under our community guidelines.',
+      });
+    }
 
     await job.save();
 

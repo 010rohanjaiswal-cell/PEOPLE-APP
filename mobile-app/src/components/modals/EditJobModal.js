@@ -18,6 +18,13 @@ import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button, Input } from '../common';
 import { validateRequired, validatePincode } from '../../utils/validation';
+import {
+  sanitizeJobTextInput,
+  MAX_JOB_TITLE_LEN,
+  MAX_JOB_DESCRIPTION_LEN,
+  isValidJobTitle,
+  isValidJobDescription,
+} from '../../utils/jobTextPolicy';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
 
@@ -59,13 +66,13 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   useEffect(() => {
     if (job && visible) {
       setFormData({
-        title: job.title || '',
+        title: sanitizeJobTextInput(job.title || '').slice(0, MAX_JOB_TITLE_LEN),
         category: job.category || '',
         address: job.address || '',
         pincode: job.pincode || '',
         budget: job.budget?.toString() || '',
         gender: job.gender ? job.gender.charAt(0).toUpperCase() + job.gender.slice(1) : '',
-        description: job.description || '',
+        description: sanitizeJobTextInput(job.description || '').slice(0, MAX_JOB_DESCRIPTION_LEN),
         deliveryFromAddress: job.deliveryFromAddress || '',
         deliveryFromPincode: job.deliveryFromPincode || '',
         deliveryToAddress: job.deliveryToAddress || '',
@@ -76,7 +83,13 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   }, [job, visible]);
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    let next = value;
+    if (field === 'title') {
+      next = sanitizeJobTextInput(value).slice(0, MAX_JOB_TITLE_LEN);
+    } else if (field === 'description') {
+      next = sanitizeJobTextInput(value).slice(0, MAX_JOB_DESCRIPTION_LEN);
+    }
+    setFormData((prev) => ({ ...prev, [field]: next }));
     setError('');
   };
 
@@ -86,6 +99,14 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     // Validation
     if (!validateRequired(formData.title)) {
       setError(t('jobs.pleaseEnterJobTitle'));
+      return;
+    }
+    if (!isValidJobTitle(formData.title)) {
+      setError(t('postJob.titleInvalidAlphanumeric'));
+      return;
+    }
+    if (!delivery && !isValidJobDescription(formData.description)) {
+      setError(t('postJob.descriptionInvalidAlphanumeric'));
       return;
     }
     if (!formData.category) {
@@ -166,7 +187,12 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       }
     } catch (err) {
       console.error('Error updating job:', err);
-      setError(err.response?.data?.error || err.message || t('jobs.failedUpdateJob'));
+      const code = err.response?.data?.code;
+      if (code === 'JOB_MODERATION_REJECTED') {
+        setError(t('postJob.jobModerationRejected'));
+      } else {
+        setError(err.response?.data?.error || err.message || t('jobs.failedUpdateJob'));
+      }
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,65 @@
+/**
+ * Job title / description: ASCII letters, digits, and spaces only (no punctuation or Unicode).
+ * Keeps text clean for downstream ML moderation.
+ */
+
+const MAX_TITLE_LEN = 120;
+const MAX_DESCRIPTION_LEN = 4000;
+
+/** Keep only A–Z, a–z, 0–9, and space; trim ends; collapse repeated spaces to one. */
+function normalizeJobTextField(input) {
+  let s = String(input ?? '').replace(/[^A-Za-z0-9 ]/g, '');
+  s = s.trim().replace(/ +/g, ' ');
+  return s;
+}
+
+/**
+ * @param {string} title
+ * @returns {{ ok: true, normalized: string } | { ok: false, error: string }}
+ */
+function assertJobTitleAllowed(title) {
+  const normalized = normalizeJobTextField(title);
+  if (!normalized) {
+    return {
+      ok: false,
+      error:
+        'Job title may only contain English letters (A–Z, a–z), digits (0–9), and spaces. No other characters are allowed.',
+    };
+  }
+  if (normalized.length > MAX_TITLE_LEN) {
+    return {
+      ok: false,
+      error: `Job title must be at most ${MAX_TITLE_LEN} characters after removing invalid characters.`,
+    };
+  }
+  return { ok: true, normalized };
+}
+
+/**
+ * @param {string|null|undefined} description
+ * @returns {{ ok: true, normalized: string|null } | { ok: false, error: string }}
+ */
+function assertJobDescriptionAllowed(description) {
+  if (description === undefined || description === null || String(description).trim() === '') {
+    return { ok: true, normalized: null };
+  }
+  const normalized = normalizeJobTextField(description);
+  if (!normalized) {
+    return { ok: true, normalized: null };
+  }
+  if (normalized.length > MAX_DESCRIPTION_LEN) {
+    return {
+      ok: false,
+      error: `Job description must be at most ${MAX_DESCRIPTION_LEN} characters after removing invalid characters.`,
+    };
+  }
+  return { ok: true, normalized };
+}
+
+module.exports = {
+  normalizeJobTextField,
+  assertJobTitleAllowed,
+  assertJobDescriptionAllowed,
+  MAX_TITLE_LEN,
+  MAX_DESCRIPTION_LEN,
+};
