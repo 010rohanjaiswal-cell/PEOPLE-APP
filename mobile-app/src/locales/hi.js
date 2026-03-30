@@ -371,6 +371,11 @@ export default {
     failedToPostJobTryAgain: 'नौकरी पोस्ट करने में विफल। कृपया पुनः प्रयास करें।',
     jobModerationRejected:
       'यह नौकरी सामुदायिक दिशानिर्देशों के अनुरूप नहीं लगती। कृपया शीर्षक या विवरण बदलकर पुनः प्रयास करें।',
+    verifyModalTitle: 'आपकी नौकरी जाँची जा रही है',
+    verifyReviewingPost: 'आपकी पोस्ट सत्यापित की जा रही है…',
+    verifyAnalyzingDetails: 'काम का विवरण विश्लेषित किया जा रहा है…',
+    verifyCommunityGuidelines: 'सामुदायिक दिशानिर्देश जाँचे जा रहे हैं…',
+    verifyLegalCheck: 'यह नौकरी सूचीबद्ध करने योग्य है या नहीं, यह जाँचा जा रहा है…',
     fromAddress: 'स्रोत पता',
     fromPincode: 'स्रोत पिन कोड',
     toAddress: 'गंतव्य पता',

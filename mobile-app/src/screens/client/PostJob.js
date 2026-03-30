@@ -31,9 +31,17 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
+import { isJobTextHardBlocked } from '../../utils/jobContentHardBlock';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
+
+const VERIFY_STATUS_KEYS = [
+  'verifyReviewingPost',
+  'verifyAnalyzingDetails',
+  'verifyCommunityGuidelines',
+  'verifyLegalCheck',
+];
 
 const CATEGORY_KEYS = {
   'Delivery': 'Delivery',
@@ -260,6 +268,44 @@ function createPostJobStyles(colors, isDark) {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  verifyModalContent: {
+    width: '88%',
+    maxWidth: 400,
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  verifyModalTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  verifyStatusText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    minHeight: 48,
+    paddingHorizontal: spacing.xs,
+  },
+  verifyProgressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  verifyProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: colors.primary.main,
+  },
+  verifySpinnerWrap: {
+    marginTop: spacing.xs,
+  },
   gpsMessageBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,6 +419,39 @@ const PostJob = ({ onJobPosted }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!verifyModalVisible) {
+      verifySlowAnimRef.current?.stop?.();
+      verifySlowAnimRef.current = null;
+      verifyProgressAnim.setValue(0);
+      return;
+    }
+    verifyProgressAnim.setValue(0);
+    const anim = Animated.timing(verifyProgressAnim, {
+      toValue: 0.92,
+      duration: 22000,
+      useNativeDriver: false,
+    });
+    verifySlowAnimRef.current = anim;
+    anim.start();
+    return () => {
+      anim.stop();
+      verifySlowAnimRef.current = null;
+    };
+  }, [verifyModalVisible, verifyProgressAnim]);
+
+  useEffect(() => {
+    if (!verifyModalVisible) {
+      setVerifyStep(0);
+      return;
+    }
+    setVerifyStep(0);
+    const id = setInterval(() => {
+      setVerifyStep((s) => (s + 1) % 4);
+    }, 2400);
+    return () => clearInterval(id);
+  }, [verifyModalVisible]);
+
   const focusScrollToField = (ref) => scrollFieldIntoView(ref);
   const [formData, setFormData] = useState({
     title: '',
@@ -387,8 +466,12 @@ const PostJob = ({ onJobPosted }) => {
     gender: '',
     description: '',
   });
-  const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
+  const [verifyStep, setVerifyStep] = useState(0);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const verifyProgressAnim = useRef(new Animated.Value(0)).current;
+  const verifySlowAnimRef = useRef(null);
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
   const addressBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -518,9 +601,36 @@ const PostJob = ({ onJobPosted }) => {
       return;
     }
 
-    setLoading(true);
+    const closeVerifyModal = () => {
+      setVerifyModalVisible(false);
+      verifyProgressAnim.setValue(0);
+    };
+
+    const finishVerifyBar = () =>
+      new Promise((resolve) => {
+        verifySlowAnimRef.current?.stop?.();
+        verifySlowAnimRef.current = null;
+        Animated.timing(verifyProgressAnim, {
+          toValue: 1,
+          duration: 380,
+          useNativeDriver: false,
+        }).start(() => resolve());
+      });
+
+    setVerifying(true);
+    setVerifyModalVisible(true);
 
     try {
+      await new Promise((r) => setTimeout(r, 120));
+
+      if (isJobTextHardBlocked(formData.title, formData.description)) {
+        verifySlowAnimRef.current?.stop?.();
+        closeVerifyModal();
+        runErrorBorderAnimation(borderOpacity.title);
+        Alert.alert(t('common.error'), t('postJob.jobModerationRejected'));
+        return;
+      }
+
       const categoryTrimmed = String(formData.category || '').trim();
       const base = {
         title: String(formData.title || '').trim(),
@@ -547,21 +657,28 @@ const PostJob = ({ onJobPosted }) => {
       const result = await clientJobsAPI.postJob(jobData);
 
       if (result.success) {
-        setLoading(false);
+        await finishVerifyBar();
+        closeVerifyModal();
         setSuccessModalVisible(true);
       } else {
         throw new Error(result.error || t('postJob.failedToPostJob'));
       }
     } catch (err) {
       console.error('Error posting job:', err);
+      verifySlowAnimRef.current?.stop?.();
+      closeVerifyModal();
       const code = err.response?.data?.code;
+      const serverErr = err.response?.data?.error;
       const msg =
-        code === 'JOB_MODERATION_REJECTED'
+        serverErr ||
+        (code === 'JOB_MODERATION_REJECTED' ||
+        code === 'JOB_CONTENT_HARD_BLOCK' ||
+        code === 'JOB_LEGITIMACY_REJECTED'
           ? t('postJob.jobModerationRejected')
-          : err.response?.data?.error || err.message || t('postJob.failedToPostJobTryAgain');
+          : err.message || t('postJob.failedToPostJobTryAgain'));
       Alert.alert(t('common.error'), msg);
     } finally {
-      setLoading(false);
+      setVerifying(false);
     }
   };
 
@@ -839,21 +956,47 @@ const PostJob = ({ onJobPosted }) => {
           {/* Submit Button */}
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={loading || gpsDenied}
-            style={[styles.submitButton, gpsDenied && styles.submitButtonDisabled]}
+            disabled={verifying || gpsDenied}
+            style={[
+              styles.submitButton,
+              (gpsDenied || verifying) && styles.submitButtonDisabled,
+            ]}
             activeOpacity={0.7}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <View style={styles.buttonContent}>
-                <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-                <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
-              </View>
-            )}
+            <View style={styles.buttonContent}>
+              <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+              <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
+            </View>
           </TouchableOpacity>
         </CardContent>
       </Card>
+
+      <Modal visible={verifyModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.verifyModalContent}>
+            <Text style={styles.verifyModalTitle}>{t('postJob.verifyModalTitle')}</Text>
+            <Text style={styles.verifyStatusText}>
+              {t(`postJob.${VERIFY_STATUS_KEYS[verifyStep]}`)}
+            </Text>
+            <View style={styles.verifyProgressTrack}>
+              <Animated.View
+                style={[
+                  styles.verifyProgressFill,
+                  {
+                    width: verifyProgressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.verifySpinnerWrap}>
+              <ActivityIndicator size="large" color={colors.primary.main} />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Success Modal */}
       <Modal

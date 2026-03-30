@@ -37,6 +37,9 @@ yarn-error.*
 .env*.local
 .env.example
 
+# Local credentials (do not commit)
+credentials.json
+
 # typescript
 *.tsbuildinfo
 

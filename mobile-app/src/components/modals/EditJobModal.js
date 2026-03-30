@@ -3,7 +3,7 @@
  * Modal for editing job details
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -25,8 +27,16 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
+import { isJobTextHardBlocked } from '../../utils/jobContentHardBlock';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
+
+const VERIFY_STATUS_KEYS = [
+  'verifyReviewingPost',
+  'verifyAnalyzingDetails',
+  'verifyCommunityGuidelines',
+  'verifyLegalCheck',
+];
 
 const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const { t } = useLanguage();
@@ -43,8 +53,12 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     deliveryToAddress: '',
     deliveryToPincode: '',
   });
-  const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
+  const [verifyStep, setVerifyStep] = useState(0);
   const [error, setError] = useState('');
+  const verifyProgressAnim = useRef(new Animated.Value(0)).current;
+  const verifySlowAnimRef = useRef(null);
 
   const categories = [
     'Delivery',
@@ -81,6 +95,49 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       setError('');
     }
   }, [job, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setVerifying(false);
+      setVerifyModalVisible(false);
+      verifySlowAnimRef.current?.stop?.();
+      verifySlowAnimRef.current = null;
+      verifyProgressAnim.setValue(0);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!verifyModalVisible) {
+      verifySlowAnimRef.current?.stop?.();
+      verifySlowAnimRef.current = null;
+      verifyProgressAnim.setValue(0);
+      return;
+    }
+    verifyProgressAnim.setValue(0);
+    const anim = Animated.timing(verifyProgressAnim, {
+      toValue: 0.92,
+      duration: 22000,
+      useNativeDriver: false,
+    });
+    verifySlowAnimRef.current = anim;
+    anim.start();
+    return () => {
+      anim.stop();
+      verifySlowAnimRef.current = null;
+    };
+  }, [verifyModalVisible, verifyProgressAnim]);
+
+  useEffect(() => {
+    if (!verifyModalVisible) {
+      setVerifyStep(0);
+      return;
+    }
+    setVerifyStep(0);
+    const id = setInterval(() => {
+      setVerifyStep((s) => (s + 1) % 4);
+    }, 2400);
+    return () => clearInterval(id);
+  }, [verifyModalVisible]);
 
   const handleChange = (field, value) => {
     let next = value;
@@ -150,10 +207,36 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       }
     }
 
-    setLoading(true);
+    const closeVerifyModal = () => {
+      setVerifyModalVisible(false);
+      verifyProgressAnim.setValue(0);
+    };
+
+    const finishVerifyBar = () =>
+      new Promise((resolve) => {
+        verifySlowAnimRef.current?.stop?.();
+        verifySlowAnimRef.current = null;
+        Animated.timing(verifyProgressAnim, {
+          toValue: 1,
+          duration: 380,
+          useNativeDriver: false,
+        }).start(() => resolve());
+      });
+
+    setVerifying(true);
+    setVerifyModalVisible(true);
     setError('');
 
     try {
+      await new Promise((r) => setTimeout(r, 120));
+
+      if (isJobTextHardBlocked(formData.title, formData.description)) {
+        verifySlowAnimRef.current?.stop?.();
+        closeVerifyModal();
+        setError(t('postJob.jobModerationRejected'));
+        return;
+      }
+
       const jobData = delivery
         ? {
             title: formData.title,
@@ -179,32 +262,54 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       const result = await clientJobsAPI.updateJob(job._id, jobData);
 
       if (result.success) {
+        await finishVerifyBar();
+        closeVerifyModal();
         Alert.alert(t('common.success'), t('jobs.jobUpdatedSuccess'));
         if (onSuccess) onSuccess();
         onClose();
       } else {
+        verifySlowAnimRef.current?.stop?.();
+        closeVerifyModal();
         setError(result.error || t('jobs.failedUpdateJob'));
       }
     } catch (err) {
       console.error('Error updating job:', err);
+      verifySlowAnimRef.current?.stop?.();
+      closeVerifyModal();
       const code = err.response?.data?.code;
-      if (code === 'JOB_MODERATION_REJECTED') {
-        setError(t('postJob.jobModerationRejected'));
+      const serverErr = err.response?.data?.error;
+      if (
+        code === 'JOB_MODERATION_REJECTED' ||
+        code === 'JOB_CONTENT_HARD_BLOCK' ||
+        code === 'JOB_LEGITIMACY_REJECTED'
+      ) {
+        setError(serverErr || t('postJob.jobModerationRejected'));
       } else {
-        setError(err.response?.data?.error || err.message || t('jobs.failedUpdateJob'));
+        setError(serverErr || err.message || t('jobs.failedUpdateJob'));
       }
     } finally {
-      setLoading(false);
+      setVerifying(false);
     }
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        if (!verifying) onClose();
+      }}
+    >
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.title}>Edit Job</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              disabled={verifying}
+            >
               <MaterialIcons name="close" size={24} color={colors.text.primary} />
             </TouchableOpacity>
           </View>
@@ -350,15 +455,47 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
           </ScrollView>
 
           <View style={styles.footer}>
-            <Button variant="outline" onPress={onClose} style={styles.cancelButton}>
+            <Button
+              variant="outline"
+              onPress={onClose}
+              style={styles.cancelButton}
+              disabled={verifying}
+            >
               Cancel
             </Button>
-            <Button onPress={handleSubmit} loading={loading} style={styles.submitButton}>
+            <Button onPress={handleSubmit} loading={verifying} style={styles.submitButton}>
               Update Job
             </Button>
           </View>
         </View>
       </View>
+
+      <Modal visible={verifyModalVisible} transparent animationType="fade">
+        <View style={styles.verifyOverlay}>
+          <View style={styles.verifyCard}>
+            <Text style={styles.verifyTitle}>{t('postJob.verifyModalTitle')}</Text>
+            <Text style={styles.verifyStatusText}>
+              {t(`postJob.${VERIFY_STATUS_KEYS[verifyStep]}`)}
+            </Text>
+            <View style={styles.verifyProgressTrack}>
+              <Animated.View
+                style={[
+                  styles.verifyProgressFill,
+                  {
+                    width: verifyProgressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.verifySpinnerWrap}>
+              <ActivityIndicator size="large" color={colors.primary.main} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -463,6 +600,50 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 52,
     paddingVertical: spacing.md,
+  },
+  verifyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifyCard: {
+    width: '88%',
+    maxWidth: 400,
+    backgroundColor: colors.background,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  verifyTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  verifyStatusText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    minHeight: 48,
+    paddingHorizontal: spacing.xs,
+  },
+  verifyProgressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  verifyProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: colors.primary.main,
+  },
+  verifySpinnerWrap: {
+    marginTop: spacing.xs,
   },
 });
 

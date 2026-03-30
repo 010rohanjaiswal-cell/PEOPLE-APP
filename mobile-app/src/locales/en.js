@@ -370,6 +370,11 @@ export default {
     failedToPostJobTryAgain: 'Failed to post job. Please try again.',
     jobModerationRejected:
       'This job cannot be posted because it may violate our community guidelines. Please edit the title or description and try again.',
+    verifyModalTitle: 'Verifying your job',
+    verifyReviewingPost: 'Verifying your post…',
+    verifyAnalyzingDetails: 'Analyzing the work details…',
+    verifyCommunityGuidelines: 'Checking community guidelines…',
+    verifyLegalCheck: 'Making sure this job is appropriate to list…',
     fromAddress: 'From address',
     fromPincode: 'From pincode',
     toAddress: 'To address',

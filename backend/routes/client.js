@@ -203,11 +203,17 @@ router.post('/jobs', authenticate, async (req, res) => {
     const moderation = await moderateJobContent({
       title: titleNormalized,
       description: descriptionStr,
+      category: categoryStored,
     });
     if (!moderation.allowed) {
+      const code = moderation.hardBlock
+        ? 'JOB_CONTENT_HARD_BLOCK'
+        : moderation.legitimacyBlock
+          ? 'JOB_LEGITIMACY_REJECTED'
+          : 'JOB_MODERATION_REJECTED';
       return res.status(400).json({
         success: false,
-        code: 'JOB_MODERATION_REJECTED',
+        code,
         error: moderation.error || 'This job cannot be posted under our community guidelines.',
       });
     }
@@ -565,11 +571,17 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     const moderation = await moderateJobContent({
       title: job.title,
       description: job.description,
+      category: job.category,
     });
     if (!moderation.allowed) {
+      const code = moderation.hardBlock
+        ? 'JOB_CONTENT_HARD_BLOCK'
+        : moderation.legitimacyBlock
+          ? 'JOB_LEGITIMACY_REJECTED'
+          : 'JOB_MODERATION_REJECTED';
       return res.status(400).json({
         success: false,
-        code: 'JOB_MODERATION_REJECTED',
+        code,
         error: moderation.error || 'This job cannot be posted under our community guidelines.',
       });
     }
