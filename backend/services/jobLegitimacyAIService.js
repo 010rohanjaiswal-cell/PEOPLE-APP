@@ -43,6 +43,39 @@ function coerceAllowed(value) {
   return null;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** OpenAI returns 429 when RPM/TPM limits are hit; short retries help transient bursts. */
+const CHAT_MAX_ATTEMPTS = 3;
+
+async function postChatCompletion(body, headers, timeoutMs) {
+  let lastResp = null;
+  for (let attempt = 0; attempt < CHAT_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0 && lastResp?.status === 429) {
+      const ra = parseInt(lastResp.headers?.['retry-after'], 10);
+      const waitMs = Number.isFinite(ra) && ra > 0
+        ? Math.min(60000, ra * 1000)
+        : Math.min(12000, 2000 * 2 ** (attempt - 1));
+      console.warn(`[jobChatGate] OpenAI rate limit (429), retry ${attempt + 1}/${CHAT_MAX_ATTEMPTS} after ${waitMs}ms`);
+      await sleep(waitMs);
+    }
+    lastResp = await axios.post(CHAT_URL, body, {
+      headers,
+      timeout: timeoutMs,
+      validateStatus: (s) => s < 500,
+    });
+    if (lastResp.status === 200 && lastResp.data?.choices?.[0]?.message?.content) {
+      return lastResp;
+    }
+    if (lastResp.status !== 429) {
+      return lastResp;
+    }
+  }
+  return lastResp;
+}
+
 /**
  * @param {{ title: string, description: string|null, category: string }} params
  * @returns {Promise<{ allowed: boolean, error?: string, skipped?: boolean, reason?: 'policy'|'verification_error' }>}
@@ -90,28 +123,23 @@ or
 
   const userMsg = `Is this OK to post as a job?\n${JSON.stringify(payload)}`;
 
+  const requestBody = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: userMsg },
+    ],
+    temperature: 0.15,
+    max_tokens: 200,
+    response_format: { type: 'json_object' },
+  };
+  const requestHeaders = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+
   try {
-    const resp = await axios.post(
-      CHAT_URL,
-      {
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: userMsg },
-        ],
-        temperature: 0.15,
-        max_tokens: 200,
-        response_format: { type: 'json_object' },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 28000,
-        validateStatus: (s) => s < 500,
-      }
-    );
+    const resp = await postChatCompletion(requestBody, requestHeaders, 28000);
 
     if (resp.status !== 200 || !resp.data?.choices?.[0]?.message?.content) {
       console.error('[jobChatGate] unexpected response', { status: resp.status });
