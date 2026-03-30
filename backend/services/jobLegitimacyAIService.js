@@ -1,13 +1,12 @@
 /**
- * Tier B job review: OpenAI Chat Completions (structured JSON).
- * Interprets title + description + category for legitimate domestic/service work.
- * Catches evasions that keyword moderation misses (e.g. "bring drugs", vague "i want a girl").
+ * Single ChatGPT gate for job posts: title + description (+ category) only.
+ * Works with English, Hindi, Hinglish, and mixed text.
  *
- * Env (same key as moderation):
- *   OPENAI_API_KEY
- *   JOB_LEGITIMACY_ENABLED     — default enabled when key is set; "false" to skip
- *   OPENAI_JOB_LEGITIMACY_MODEL — default gpt-4o-mini
- *   JOB_LEGITIMACY_FAIL_OPEN    — "true" = allow post if the LLM call fails (default "false")
+ * Env:
+ *   OPENAI_API_KEY           — required (no posts verified without it, unless gate disabled)
+ *   JOB_CHAT_GATE_ENABLED    — "false" to skip and allow all (dev only)
+ *   OPENAI_JOB_CHAT_MODEL    — default gpt-4o-mini (fast)
+ *   JOB_CHAT_GATE_FAIL_OPEN  — "true" = allow post if OpenAI call fails (default "false")
  */
 
 const axios = require('axios');
@@ -15,31 +14,46 @@ const axios = require('axios');
 const CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 
-const USER_FACING =
-  'This job cannot be posted because it may violate our community guidelines. Please edit the title or description and try again.';
+const GENERIC_REJECT =
+  'This job cannot be posted. Please edit the title or description and try again.';
 
-function isLegitimacyEnabled() {
+const VERIFICATION_ERROR_MESSAGE =
+  'We could not verify this job right now. Please try again in a moment.';
+
+function isChatGateEnabled() {
+  if (String(process.env.JOB_CHAT_GATE_ENABLED || '').toLowerCase() === 'false') {
+    return false;
+  }
   const key = process.env.OPENAI_API_KEY;
-  if (!key || !String(key).trim()) return false;
-  if (String(process.env.JOB_LEGITIMACY_ENABLED || '').toLowerCase() === 'false') return false;
-  return true;
+  return Boolean(key && String(key).trim());
 }
 
-function failOpenOnLegitimacyError() {
-  return String(process.env.JOB_LEGITIMACY_FAIL_OPEN || 'false').toLowerCase() === 'true';
+function failOpenOnError() {
+  return String(process.env.JOB_CHAT_GATE_FAIL_OPEN || 'false').toLowerCase() === 'true';
+}
+
+function sanitizeAiUserMessage(s) {
+  if (!s || typeof s !== 'string') return '';
+  return s.replace(/[\r\n<>]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 280);
+}
+
+function coerceAllowed(value) {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return null;
 }
 
 /**
  * @param {{ title: string, description: string|null, category: string }} params
- * @returns {Promise<{ allowed: boolean, error?: string, skipped?: boolean, apiError?: boolean }>}
+ * @returns {Promise<{ allowed: boolean, error?: string, skipped?: boolean, reason?: 'policy'|'verification_error' }>}
  */
-async function assessJobPostingLegitimacy({ title, description, category }) {
-  if (!isLegitimacyEnabled()) {
+async function assessJobPostingWithChatGPT({ title, description, category }) {
+  if (!isChatGateEnabled()) {
     return { allowed: true, skipped: true };
   }
 
   const apiKey = process.env.OPENAI_API_KEY.trim();
-  const model = process.env.OPENAI_JOB_LEGITIMACY_MODEL || DEFAULT_MODEL;
+  const model = process.env.OPENAI_JOB_CHAT_MODEL || DEFAULT_MODEL;
 
   const payload = {
     title: String(title || '').trim(),
@@ -48,24 +62,33 @@ async function assessJobPostingLegitimacy({ title, description, category }) {
     category: String(category || '').trim(),
   };
 
-  const system = `You are a safety reviewer for a domestic and local services marketplace in India (cleaning, cooking, delivery, plumbing, electrical, drivers, care workers, tailors, barbers, laundry, mechanics, etc.).
+  const system = `You are the only approval step for job posts on a local services app in India (home help, cleaning, cooking, plumbing, electrical, driver, delivery, mechanic, tailor, barber, care taker, laundry, etc.).
 
-Decide if this job posting describes LEGITIMATE, LEGAL work appropriate for that platform.
+You receive JSON with:
+- "title" (what the client typed)
+- "description" (optional, may be empty string)
+- "category" (app category name)
 
-REJECT (allowed=false) if it suggests or could reasonably mean:
-- Illegal drugs, controlled substances, drug dealing, or asking someone to bring/buy/sell drugs
-- Sexual services, escorting, prostitution, or coded "companionship" when there is no real service job
-- Violence, weapons, harm to people, or other illegal activity
-- Human trafficking, exploitation, or coercion
-- Scams, money laundering, or requests that are clearly not genuine paid service work
+The client may write in English, Hindi (Devanagari), Roman Hindi (Hinglish), or any mix. Understand slang, typos, and short informal lines.
 
-ALLOW (allowed=true) for ordinary lawful service work. A stated gender preference for a real role (e.g. female caretaker, male driver) together with a clear service category is ALLOWED.
+Your job: decide if it is LEGAL and OK to publish this as a job listing on such an app.
 
-Vague or minimal titles with no legitimate service context (for example only "i want a girl" or "need a girl" with category Other and no real job description) must be REJECTED.
+ALLOW (allowed: true) when:
+- It is normal hiring or booking of a service worker, OR it could reasonably be that, OR the text is messy/short but clearly about domestic/local service work.
+- When unsure but nothing clearly illegal, choose ALLOW.
 
-Respond with ONLY a JSON object: {"allowed":true} or {"allowed":false}. No other text.`;
+REJECT (allowed: false) ONLY when it is CLEARLY:
+- Illegal (drugs, weapons, violence, fraud, scams, trafficking, sexual services / prostitution, etc.), OR
+- Obviously not a real job request at all.
 
-  const user = `Classify this posting:\n${JSON.stringify(payload)}`;
+If you reject, include "message": one short, polite sentence for the user in the SAME language style they used (English, Hindi, or Hinglish as in their title/description).
+
+Reply with ONLY valid JSON (no markdown):
+{"allowed":true}
+or
+{"allowed":false,"message":"..."}`;
+
+  const userMsg = `Is this OK to post as a job?\n${JSON.stringify(payload)}`;
 
   try {
     const resp = await axios.post(
@@ -74,10 +97,10 @@ Respond with ONLY a JSON object: {"allowed":true} or {"allowed":false}. No other
         model,
         messages: [
           { role: 'system', content: system },
-          { role: 'user', content: user },
+          { role: 'user', content: userMsg },
         ],
-        temperature: 0.1,
-        max_tokens: 80,
+        temperature: 0.15,
+        max_tokens: 200,
         response_format: { type: 'json_object' },
       },
       {
@@ -85,20 +108,18 @@ Respond with ONLY a JSON object: {"allowed":true} or {"allowed":false}. No other
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        timeout: 45000,
+        timeout: 28000,
         validateStatus: (s) => s < 500,
       }
     );
 
     if (resp.status !== 200 || !resp.data?.choices?.[0]?.message?.content) {
-      console.error('[jobLegitimacy] unexpected response', { status: resp.status });
-      if (failOpenOnLegitimacyError()) {
-        return { allowed: true, apiError: true };
-      }
+      console.error('[jobChatGate] unexpected response', { status: resp.status });
+      if (failOpenOnError()) return { allowed: true, skipped: true };
       return {
         allowed: false,
-        error:
-          'We could not verify this job right now. Please try again in a moment.',
+        error: VERIFICATION_ERROR_MESSAGE,
+        reason: 'verification_error',
       };
     }
 
@@ -106,51 +127,52 @@ Respond with ONLY a JSON object: {"allowed":true} or {"allowed":false}. No other
     let parsed;
     try {
       parsed = JSON.parse(raw);
-    } catch {
-      console.error('[jobLegitimacy] invalid JSON', raw?.slice?.(0, 200));
-      if (failOpenOnLegitimacyError()) {
-        return { allowed: true, apiError: true };
-      }
+    } catch (e) {
+      console.error('[jobChatGate] invalid JSON', raw?.slice?.(0, 200));
+      if (failOpenOnError()) return { allowed: true, skipped: true };
       return {
         allowed: false,
-        error:
-          'We could not verify this job right now. Please try again in a moment.',
+        error: VERIFICATION_ERROR_MESSAGE,
+        reason: 'verification_error',
       };
     }
 
-    if (typeof parsed.allowed !== 'boolean') {
-      console.error('[jobLegitimacy] missing allowed boolean', parsed);
-      if (failOpenOnLegitimacyError()) {
-        return { allowed: true, apiError: true };
-      }
+    const allowed = coerceAllowed(parsed.allowed);
+    if (allowed === null) {
+      console.error('[jobChatGate] missing allowed boolean', parsed);
+      if (failOpenOnError()) return { allowed: true, skipped: true };
       return {
         allowed: false,
-        error:
-          'We could not verify this job right now. Please try again in a moment.',
+        error: VERIFICATION_ERROR_MESSAGE,
+        reason: 'verification_error',
       };
     }
 
-    if (!parsed.allowed) {
-      console.warn('[jobLegitimacy] LLM rejected job text');
-      return { allowed: false, error: USER_FACING };
+    if (!allowed) {
+      const msg = sanitizeAiUserMessage(parsed.message);
+      console.warn('[jobChatGate] rejected by model');
+      return {
+        allowed: false,
+        error: msg || GENERIC_REJECT,
+        reason: 'policy',
+      };
     }
 
     return { allowed: true };
   } catch (err) {
-    console.error('[jobLegitimacy] request failed', err.message || err);
-    if (failOpenOnLegitimacyError()) {
-      return { allowed: true, apiError: true };
-    }
+    console.error('[jobChatGate] request failed', err.message || err);
+    if (failOpenOnError()) return { allowed: true, skipped: true };
     return {
       allowed: false,
-      error:
-        'We could not verify this job right now. Please try again in a moment.',
+      error: VERIFICATION_ERROR_MESSAGE,
+      reason: 'verification_error',
     };
   }
 }
 
 module.exports = {
-  assessJobPostingLegitimacy,
-  isLegitimacyEnabled,
-  USER_FACING,
+  assessJobPostingWithChatGPT,
+  isChatGateEnabled,
+  GENERIC_REJECT,
+  VERIFICATION_ERROR_MESSAGE,
 };

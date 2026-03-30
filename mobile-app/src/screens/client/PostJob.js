@@ -31,7 +31,6 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
-import { isJobTextHardBlocked } from '../../utils/jobContentHardBlock';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -621,15 +620,7 @@ const PostJob = ({ onJobPosted }) => {
     setVerifyModalVisible(true);
 
     try {
-      await new Promise((r) => setTimeout(r, 120));
-
-      if (isJobTextHardBlocked(formData.title, formData.description)) {
-        verifySlowAnimRef.current?.stop?.();
-        closeVerifyModal();
-        runErrorBorderAnimation(borderOpacity.title);
-        Alert.alert(t('common.error'), t('postJob.jobModerationRejected'));
-        return;
-      }
+      await new Promise((r) => setTimeout(r, 50));
 
       const categoryTrimmed = String(formData.category || '').trim();
       const base = {
@@ -669,13 +660,20 @@ const PostJob = ({ onJobPosted }) => {
       closeVerifyModal();
       const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      const msg =
-        serverErr ||
-        (code === 'JOB_MODERATION_REJECTED' ||
+      let msg;
+      if (code === 'JOB_VERIFICATION_FAILED') {
+        msg = t('postJob.jobVerificationFailed');
+      } else if (code === 'JOB_AI_REJECTED') {
+        msg = serverErr || t('postJob.jobModerationRejected');
+      } else if (
+        code === 'JOB_MODERATION_REJECTED' ||
         code === 'JOB_CONTENT_HARD_BLOCK' ||
         code === 'JOB_LEGITIMACY_REJECTED'
-          ? t('postJob.jobModerationRejected')
-          : err.message || t('postJob.failedToPostJobTryAgain'));
+      ) {
+        msg = t('postJob.jobModerationRejected');
+      } else {
+        msg = serverErr || err.message || t('postJob.failedToPostJobTryAgain');
+      }
       Alert.alert(t('common.error'), msg);
     } finally {
       setVerifying(false);

@@ -27,7 +27,6 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
-import { isJobTextHardBlocked } from '../../utils/jobContentHardBlock';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
 
@@ -228,14 +227,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     setError('');
 
     try {
-      await new Promise((r) => setTimeout(r, 120));
-
-      if (isJobTextHardBlocked(formData.title, formData.description)) {
-        verifySlowAnimRef.current?.stop?.();
-        closeVerifyModal();
-        setError(t('postJob.jobModerationRejected'));
-        return;
-      }
+      await new Promise((r) => setTimeout(r, 50));
 
       const jobData = delivery
         ? {
@@ -278,12 +270,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       closeVerifyModal();
       const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      if (
+      if (code === 'JOB_VERIFICATION_FAILED') {
+        setError(t('postJob.jobVerificationFailed'));
+      } else if (code === 'JOB_AI_REJECTED') {
+        setError(serverErr || t('postJob.jobModerationRejected'));
+      } else if (
         code === 'JOB_MODERATION_REJECTED' ||
         code === 'JOB_CONTENT_HARD_BLOCK' ||
         code === 'JOB_LEGITIMACY_REJECTED'
       ) {
-        setError(serverErr || t('postJob.jobModerationRejected'));
+        setError(t('postJob.jobModerationRejected'));
       } else {
         setError(serverErr || err.message || t('jobs.failedUpdateJob'));
       }

@@ -206,10 +206,10 @@ router.post('/jobs', authenticate, async (req, res) => {
       category: categoryStored,
     });
     if (!moderation.allowed) {
-      const code = moderation.hardBlock
-        ? 'JOB_CONTENT_HARD_BLOCK'
-        : moderation.legitimacyBlock
-          ? 'JOB_LEGITIMACY_REJECTED'
+      const code = moderation.verificationError
+        ? 'JOB_VERIFICATION_FAILED'
+        : moderation.aiRejected
+          ? 'JOB_AI_REJECTED'
           : 'JOB_MODERATION_REJECTED';
       return res.status(400).json({
         success: false,
@@ -574,10 +574,10 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
       category: job.category,
     });
     if (!moderation.allowed) {
-      const code = moderation.hardBlock
-        ? 'JOB_CONTENT_HARD_BLOCK'
-        : moderation.legitimacyBlock
-          ? 'JOB_LEGITIMACY_REJECTED'
+      const code = moderation.verificationError
+        ? 'JOB_VERIFICATION_FAILED'
+        : moderation.aiRejected
+          ? 'JOB_AI_REJECTED'
           : 'JOB_MODERATION_REJECTED';
       return res.status(400).json({
         success: false,
