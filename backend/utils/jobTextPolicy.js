@@ -1,6 +1,5 @@
 /**
- * Job title / description: ASCII letters, digits, and spaces only (no punctuation or Unicode).
- * Keeps text clean for downstream ML moderation.
+ * Job title / description: English (A–Z), Hindi (Devanagari), digits, and spaces only.
  */
 
 const MAX_TITLE_LEN = 120;
@@ -8,7 +7,7 @@ const MAX_DESCRIPTION_LEN = 4000;
 
 /** Keep only A–Z, a–z, 0–9, and space; trim ends; collapse repeated spaces to one. */
 function normalizeJobTextField(input) {
-  let s = String(input ?? '').replace(/[^A-Za-z0-9 ]/g, '');
+  let s = String(input ?? '').replace(/[^A-Za-z0-9 \u0900-\u097F]/g, '');
   s = s.trim().replace(/ +/g, ' ');
   return s;
 }
@@ -23,7 +22,7 @@ function assertJobTitleAllowed(title) {
     return {
       ok: false,
       error:
-        'Job title may only contain English letters (A–Z, a–z), digits (0–9), and spaces. No other characters are allowed.',
+        'Job title may only contain English letters (A–Z, a–z), Hindi letters, digits (0–9), and spaces. No other characters are allowed.',
     };
   }
   if (normalized.length > MAX_TITLE_LEN) {

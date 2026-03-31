@@ -3,12 +3,13 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function createStyles(colors) {
   return StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      backgroundColor: 'transparent',
       justifyContent: 'flex-end',
     },
     sheet: {
@@ -126,6 +127,7 @@ export default function JobCustomKeyboardModal({
   maxLen = 120,
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [lang, setLang] = useState('en'); // 'en' | 'hi'
 
@@ -170,7 +172,7 @@ export default function JobCustomKeyboardModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: (Platform.OS === 'ios' ? spacing.xl : spacing.lg) + (insets.bottom || 0) + 72 }]}>
           <View style={styles.header}>
             <TouchableOpacity style={styles.headerBtn} onPress={backspace} accessibilityLabel="Backspace">
               <MaterialIcons name="backspace" size={20} color={colors.text.primary} />
