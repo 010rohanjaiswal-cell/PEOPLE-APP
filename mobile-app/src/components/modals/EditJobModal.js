@@ -24,11 +24,11 @@ import {
   MAX_JOB_DESCRIPTION_LEN,
   isValidJobTitle,
   isValidJobDescription,
+  hasUnsupportedJobChars,
 } from '../../utils/jobTextPolicy';
 import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
-import JobCustomKeyboardModal from '../common/JobCustomKeyboardModal';
 
 const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const { t } = useLanguage();
@@ -47,7 +47,6 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   });
   const [loading, setLoading] = useState(false);
   const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
-  const [keyboardTarget, setKeyboardTarget] = useState(null); // 'title' | 'description' | null
   const [error, setError] = useState('');
 
   const categories = [
@@ -116,8 +115,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       setError(t('postJob.titleInvalidAlphanumeric'));
       return;
     }
+    if (hasUnsupportedJobChars(formData.title)) {
+      setError(t('postJob.onlyEnglishHindi'));
+      return;
+    }
     if (!delivery && !isValidJobDescription(formData.description)) {
       setError(t('postJob.descriptionInvalidAlphanumeric'));
+      return;
+    }
+    if (!delivery && hasUnsupportedJobChars(formData.description)) {
+      setError(t('postJob.onlyEnglishHindi'));
       return;
     }
     if (!formData.category) {
@@ -248,13 +255,6 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
               value={formData.title}
               onChangeText={(value) => handleChange('title', value)}
               placeholder="Enter job title"
-              editable={false}
-              contextMenuHidden
-              showSoftInputOnFocus={false}
-              caretHidden
-              selectTextOnFocus={false}
-              onPressIn={() => setKeyboardTarget('title')}
-              rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
             />
 
             <View style={styles.selectContainer}>
@@ -378,13 +378,6 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                   placeholder="Describe the job requirements, tasks, or any additional details..."
                   multiline
                   numberOfLines={3}
-                  editable={false}
-                  contextMenuHidden
-                  showSoftInputOnFocus={false}
-                  caretHidden
-                  selectTextOnFocus={false}
-                  onPressIn={() => setKeyboardTarget('description')}
-                  rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
                 />
               </>
             ) : null}
@@ -427,17 +420,6 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
         </View>
       </Modal>
 
-      <JobCustomKeyboardModal
-        visible={keyboardTarget === 'title' || keyboardTarget === 'description'}
-        title={keyboardTarget === 'description' ? 'Job Description' : 'Job Title'}
-        value={keyboardTarget === 'description' ? formData.description : formData.title}
-        onChange={(next) => {
-          if (keyboardTarget === 'description') handleChange('description', next);
-          else handleChange('title', next);
-        }}
-        onClose={() => setKeyboardTarget(null)}
-        maxLen={keyboardTarget === 'description' ? MAX_JOB_DESCRIPTION_LEN : MAX_JOB_TITLE_LEN}
-      />
     </Modal>
   );
 };

@@ -107,7 +107,7 @@ router.post('/jobs', authenticate, async (req, res) => {
 
     const titleCheck = assertJobTitleAllowed(title);
     if (!titleCheck.ok) {
-      return res.status(400).json({ success: false, error: titleCheck.error });
+      return res.status(400).json({ success: false, code: titleCheck.code, error: titleCheck.error });
     }
     const titleNormalized = titleCheck.normalized;
 
@@ -179,7 +179,7 @@ router.post('/jobs', authenticate, async (req, res) => {
       pincodeStr = String(pincode).trim();
       const descCheck = assertJobDescriptionAllowed(description);
       if (!descCheck.ok) {
-        return res.status(400).json({ success: false, error: descCheck.error });
+        return res.status(400).json({ success: false, code: descCheck.code, error: descCheck.error });
       }
       descriptionStr = descCheck.normalized;
     }
@@ -464,7 +464,7 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     if (title !== undefined && title !== null && String(title).length > 0) {
       const titleCheck = assertJobTitleAllowed(title);
       if (!titleCheck.ok) {
-        return res.status(400).json({ success: false, error: titleCheck.error });
+        return res.status(400).json({ success: false, code: titleCheck.code, error: titleCheck.error });
       }
       job.title = titleCheck.normalized;
     }
@@ -552,7 +552,7 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
       if (description !== undefined) {
         const descCheck = assertJobDescriptionAllowed(description);
         if (!descCheck.ok) {
-          return res.status(400).json({ success: false, error: descCheck.error });
+          return res.status(400).json({ success: false, code: descCheck.code, error: descCheck.error });
         }
         job.description = descCheck.normalized;
       }

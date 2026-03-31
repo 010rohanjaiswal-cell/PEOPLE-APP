@@ -30,12 +30,12 @@ import {
   MAX_JOB_DESCRIPTION_LEN,
   isValidJobTitle,
   isValidJobDescription,
+  hasUnsupportedJobChars,
 } from '../../utils/jobTextPolicy';
 import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
-import JobCustomKeyboardModal from '../../components/common/JobCustomKeyboardModal';
 
 const CATEGORY_KEYS = {
   'Delivery': 'Delivery',
@@ -432,7 +432,6 @@ const PostJob = ({ onJobPosted }) => {
   });
   const [loading, setLoading] = useState(false);
   const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
-  const [keyboardTarget, setKeyboardTarget] = useState(null); // 'title' | 'description' | null
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -516,8 +515,17 @@ const PostJob = ({ onJobPosted }) => {
       Alert.alert(t('common.error'), t('postJob.titleInvalidAlphanumeric'));
       return;
     }
+    if (hasUnsupportedJobChars(formData.title)) {
+      runErrorBorderAnimation(borderOpacity.title);
+      Alert.alert(t('common.error'), t('postJob.onlyEnglishHindi'));
+      return;
+    }
     if (!isDelivery && !isValidJobDescription(formData.description)) {
       Alert.alert(t('common.error'), t('postJob.descriptionInvalidAlphanumeric'));
+      return;
+    }
+    if (!isDelivery && hasUnsupportedJobChars(formData.description)) {
+      Alert.alert(t('common.error'), t('postJob.onlyEnglishHindi'));
       return;
     }
     if (!formData.category) {
@@ -652,13 +660,6 @@ const PostJob = ({ onJobPosted }) => {
               value={formData.title}
               onChangeText={handleTitleChange}
               style={styles.inputField}
-              editable={false}
-              contextMenuHidden
-              showSoftInputOnFocus={false}
-              caretHidden
-              selectTextOnFocus={false}
-              onPressIn={() => setKeyboardTarget('title')}
-              rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
             />
           </View>
 
@@ -889,16 +890,7 @@ const PostJob = ({ onJobPosted }) => {
                   multiline
                   numberOfLines={2}
                   style={styles.inputField}
-                  editable={false}
-                  contextMenuHidden
-                  showSoftInputOnFocus={false}
-                  caretHidden
-                  selectTextOnFocus={false}
-                  onPressIn={() => {
-                    focusScrollToField(descriptionWrapRef);
-                    setKeyboardTarget('description');
-                  }}
-                  rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
+                  onFocus={() => focusScrollToField(descriptionWrapRef)}
                 />
               </View>
             </>
@@ -1018,21 +1010,6 @@ const PostJob = ({ onJobPosted }) => {
           </View>
         </View>
       </Modal>
-      <JobCustomKeyboardModal
-        visible={keyboardTarget === 'title' || keyboardTarget === 'description'}
-        title={
-          keyboardTarget === 'description'
-            ? t('postJob.jobDescriptionOptional')
-            : t('postJob.jobTitle')
-        }
-        value={keyboardTarget === 'description' ? formData.description : formData.title}
-        onChange={(next) => {
-          if (keyboardTarget === 'description') handleDescriptionChange(next);
-          else handleTitleChange(next);
-        }}
-        onClose={() => setKeyboardTarget(null)}
-        maxLen={keyboardTarget === 'description' ? MAX_JOB_DESCRIPTION_LEN : MAX_JOB_TITLE_LEN}
-      />
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -6,6 +6,10 @@
 export const MAX_JOB_TITLE_LEN = 120;
 export const MAX_JOB_DESCRIPTION_LEN = 4000;
 
+export function hasUnsupportedJobChars(raw) {
+  return /[^A-Za-z0-9 \u0900-\u097F]/.test(String(raw ?? ''));
+}
+
 /** Remove any character that is not A–Z, a–z, 0–9, Devanagari, or space. */
 export function sanitizeJobTextInput(raw) {
   return String(raw ?? '').replace(/[^A-Za-z0-9 \u0900-\u097F]/g, '');
