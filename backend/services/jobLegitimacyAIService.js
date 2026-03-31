@@ -10,6 +10,7 @@
  */
 
 const axios = require('axios');
+const crypto = require('crypto');
 
 const CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-4o-mini';
@@ -49,6 +50,60 @@ function sleep(ms) {
 
 /** OpenAI returns 429 when RPM/TPM limits are hit; short retries help transient bursts. */
 const CHAT_MAX_ATTEMPTS = 3;
+
+function getMaxConcurrency() {
+  const v = parseInt(process.env.JOB_CHAT_GATE_MAX_CONCURRENCY || '2', 10);
+  if (!Number.isFinite(v)) return 2;
+  return Math.max(1, Math.min(6, v));
+}
+
+function getCacheTtlMs() {
+  const v = parseInt(process.env.JOB_CHAT_GATE_CACHE_TTL_MS || '300000', 10); // 5 min
+  if (!Number.isFinite(v)) return 300000;
+  return Math.max(0, Math.min(3600000, v));
+}
+
+// In-memory cache (best-effort): avoids repeated charges + helps prevent bursts.
+const decisionCache = new Map(); // key -> { expiresAt, value }
+function cacheGet(key) {
+  const hit = decisionCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    decisionCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+function cacheSet(key, value, ttlMs) {
+  if (!ttlMs || ttlMs <= 0) return;
+  decisionCache.set(key, { expiresAt: Date.now() + ttlMs, value });
+  // Light pruning so the map can’t grow without bound.
+  if (decisionCache.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of decisionCache) {
+      if (v.expiresAt <= now) decisionCache.delete(k);
+      if (decisionCache.size <= 3500) break;
+    }
+  }
+}
+
+// Simple async semaphore: prevents many parallel OpenAI calls causing 429.
+let inFlight = 0;
+const waiters = [];
+async function acquire() {
+  const max = getMaxConcurrency();
+  if (inFlight < max) {
+    inFlight++;
+    return;
+  }
+  await new Promise((resolve) => waiters.push(resolve));
+  inFlight++;
+}
+function release() {
+  inFlight = Math.max(0, inFlight - 1);
+  const next = waiters.shift();
+  if (next) next();
+}
 
 async function postChatCompletion(body, headers, timeoutMs) {
   let lastResp = null;
@@ -95,6 +150,13 @@ async function assessJobPostingWithChatGPT({ title, description, category }) {
     category: String(category || '').trim(),
   };
 
+  const cacheKey = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ v: 1, payload, model: process.env.OPENAI_JOB_CHAT_MODEL || DEFAULT_MODEL }))
+    .digest('hex');
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   const system = `You are the only approval step for job posts on a local services app in India (home help, cleaning, cooking, plumbing, electrical, driver, delivery, mechanic, tailor, barber, care taker, laundry, etc.).
 
 You receive JSON with:
@@ -138,17 +200,20 @@ or
     'Content-Type': 'application/json',
   };
 
+  await acquire();
   try {
     const resp = await postChatCompletion(requestBody, requestHeaders, 28000);
 
     if (resp.status !== 200 || !resp.data?.choices?.[0]?.message?.content) {
       console.error('[jobChatGate] unexpected response', { status: resp.status });
       if (failOpenOnError()) return { allowed: true, skipped: true };
-      return {
+      const out = {
         allowed: false,
         error: VERIFICATION_ERROR_MESSAGE,
         reason: 'verification_error',
       };
+      cacheSet(cacheKey, out, getCacheTtlMs());
+      return out;
     }
 
     const raw = resp.data.choices[0].message.content;
@@ -158,43 +223,55 @@ or
     } catch (e) {
       console.error('[jobChatGate] invalid JSON', raw?.slice?.(0, 200));
       if (failOpenOnError()) return { allowed: true, skipped: true };
-      return {
+      const out = {
         allowed: false,
         error: VERIFICATION_ERROR_MESSAGE,
         reason: 'verification_error',
       };
+      cacheSet(cacheKey, out, getCacheTtlMs());
+      return out;
     }
 
     const allowed = coerceAllowed(parsed.allowed);
     if (allowed === null) {
       console.error('[jobChatGate] missing allowed boolean', parsed);
       if (failOpenOnError()) return { allowed: true, skipped: true };
-      return {
+      const out = {
         allowed: false,
         error: VERIFICATION_ERROR_MESSAGE,
         reason: 'verification_error',
       };
+      cacheSet(cacheKey, out, getCacheTtlMs());
+      return out;
     }
 
     if (!allowed) {
       const msg = sanitizeAiUserMessage(parsed.message);
       console.warn('[jobChatGate] rejected by model');
-      return {
+      const out = {
         allowed: false,
         error: msg || GENERIC_REJECT,
         reason: 'policy',
       };
+      cacheSet(cacheKey, out, getCacheTtlMs());
+      return out;
     }
 
-    return { allowed: true };
+    const out = { allowed: true };
+    cacheSet(cacheKey, out, getCacheTtlMs());
+    return out;
   } catch (err) {
     console.error('[jobChatGate] request failed', err.message || err);
     if (failOpenOnError()) return { allowed: true, skipped: true };
-    return {
+    const out = {
       allowed: false,
       error: VERIFICATION_ERROR_MESSAGE,
       reason: 'verification_error',
     };
+    cacheSet(cacheKey, out, getCacheTtlMs());
+    return out;
+  } finally {
+    release();
   }
 }
 
