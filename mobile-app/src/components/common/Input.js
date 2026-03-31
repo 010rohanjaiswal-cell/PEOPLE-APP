@@ -3,7 +3,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, TextInput, Text, StyleSheet, Platform } from 'react-native';
+import { View, TextInput, Text, StyleSheet, Platform, Pressable } from 'react-native';
 import { spacing, typography } from '../../theme';
 import lightColors from '../../theme/colors';
 import { useTheme } from '../../context/ThemeContext';
@@ -110,6 +110,9 @@ const Input = ({
   const colors = forceLight ? lightColors : themeColors;
   const styles = useMemo(() => createInputStyles(colors), [colors, forceLight]);
 
+  const effectiveEditable = typeof editable === 'boolean' ? editable : !disabled;
+  const pressToEdit = !effectiveEditable && typeof props.onPressIn === 'function';
+
   return (
     <View style={[styles.container, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
@@ -122,26 +125,37 @@ const Input = ({
         ]}
       >
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
-        <TextInput
-          style={[
-            styles.input,
-            leftIcon && styles.inputWithLeftIcon,
-            rightIcon && styles.inputWithRightIcon,
-            multiline && styles.inputMultiline,
-            inputStyle,
-          ]}
-          placeholder={placeholder}
-          placeholderTextColor={colors.text.muted}
-          value={value}
-          onChangeText={onChangeText}
-          editable={typeof editable === 'boolean' ? editable : !disabled}
-          multiline={multiline}
-          numberOfLines={numberOfLines}
-          keyboardType={keyboardType}
-          secureTextEntry={secureTextEntry}
-          selectionColor={colors.primary.main}
-          {...props}
-        />
+        <Pressable
+          style={{ flex: 1 }}
+          disabled={!pressToEdit}
+          onPress={(e) => {
+            // When editable is false, TextInput often won’t fire onPressIn reliably.
+            // Capture tap here to support custom keyboards.
+            props.onPressIn?.(e);
+          }}
+        >
+          <TextInput
+            style={[
+              styles.input,
+              leftIcon && styles.inputWithLeftIcon,
+              rightIcon && styles.inputWithRightIcon,
+              multiline && styles.inputMultiline,
+              inputStyle,
+            ]}
+            pointerEvents={pressToEdit ? 'none' : 'auto'}
+            placeholder={placeholder}
+            placeholderTextColor={colors.text.muted}
+            value={value}
+            onChangeText={onChangeText}
+            editable={effectiveEditable}
+            multiline={multiline}
+            numberOfLines={numberOfLines}
+            keyboardType={keyboardType}
+            secureTextEntry={secureTextEntry}
+            selectionColor={colors.primary.main}
+            {...props}
+          />
+        </Pressable>
         {rightIcon && <View style={styles.rightIcon}>{rightIcon}</View>}
       </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
