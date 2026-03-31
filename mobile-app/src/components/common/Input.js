@@ -102,6 +102,8 @@ const Input = ({
   elevated = false,
   /** Use fixed light palette (e.g. login) even when app dark mode is on. */
   forceLight = false,
+  /** Override editability (used for custom keyboards). */
+  editable,
   ...props
 }) => {
   const { colors: themeColors } = useTheme();
@@ -132,7 +134,7 @@ const Input = ({
           placeholderTextColor={colors.text.muted}
           value={value}
           onChangeText={onChangeText}
-          editable={!disabled}
+          editable={typeof editable === 'boolean' ? editable : !disabled}
           multiline={multiline}
           numberOfLines={numberOfLines}
           keyboardType={keyboardType}

@@ -399,6 +399,11 @@ function normalizeText(s) {
     .trim();
 }
 
+function hasTooManyRepeatedChars(s) {
+  // Any character repeated 3+ times in a row => block (e.g. seeeeeex, hoooooookup, druuuuugs)
+  return /(.)\1{2,}/.test(String(s || '').toLowerCase());
+}
+
 function combinedText(title, description) {
   const t = normalizeText(title);
   const d = description != null ? normalizeText(description) : '';
@@ -410,6 +415,10 @@ function combinedText(title, description) {
  * @returns {{ blocked: boolean, match?: string }}
  */
 function isJobTextBlockedByWords(title, description) {
+  if (hasTooManyRepeatedChars(title) || hasTooManyRepeatedChars(description)) {
+    return { blocked: true, match: 'repeated_chars' };
+  }
+
   const haystack = combinedText(title, description);
   if (!haystack) return { blocked: false };
 

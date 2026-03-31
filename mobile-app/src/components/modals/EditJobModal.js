@@ -28,6 +28,7 @@ import {
 import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
+import JobCustomKeyboardModal from '../common/JobCustomKeyboardModal';
 
 const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const { t } = useLanguage();
@@ -45,6 +46,8 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     deliveryToPincode: '',
   });
   const [loading, setLoading] = useState(false);
+  const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
+  const [keyboardTarget, setKeyboardTarget] = useState(null); // 'title' | 'description' | null
   const [error, setError] = useState('');
 
   const categories = [
@@ -160,7 +163,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
 
     const blocked = isJobTextBlockedByWords(formData.title, formData.description);
     if (blocked.blocked) {
-      setError(t('postJob.jobNotAppropriate'));
+      setNotAppropriateModalVisible(true);
       return;
     }
 
@@ -203,7 +206,11 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       console.error('Error updating job:', err);
       const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      setError(code === 'JOB_BLOCKED_WORD' ? t('postJob.jobNotAppropriate') : serverErr || err.message || t('jobs.failedUpdateJob'));
+      if (code === 'JOB_BLOCKED_WORD') {
+        setNotAppropriateModalVisible(true);
+      } else {
+        setError(serverErr || err.message || t('jobs.failedUpdateJob'));
+      }
     } finally {
       setLoading(false);
     }
@@ -241,6 +248,13 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
               value={formData.title}
               onChangeText={(value) => handleChange('title', value)}
               placeholder="Enter job title"
+              editable={false}
+              contextMenuHidden
+              showSoftInputOnFocus={false}
+              caretHidden
+              selectTextOnFocus={false}
+              onPressIn={() => setKeyboardTarget('title')}
+              rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
             />
 
             <View style={styles.selectContainer}>
@@ -364,6 +378,13 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                   placeholder="Describe the job requirements, tasks, or any additional details..."
                   multiline
                   numberOfLines={3}
+                  editable={false}
+                  contextMenuHidden
+                  showSoftInputOnFocus={false}
+                  caretHidden
+                  selectTextOnFocus={false}
+                  onPressIn={() => setKeyboardTarget('description')}
+                  rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
                 />
               </>
             ) : null}
@@ -384,6 +405,39 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
           </View>
         </View>
       </View>
+
+      <Modal
+        visible={notAppropriateModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotAppropriateModalVisible(false)}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertCard}>
+            <MaterialIcons name="error" size={54} color={colors.error.main} />
+            <Text style={styles.alertTitle}>{t('common.error')}</Text>
+            <Text style={styles.alertSubtitle}>{t('postJob.jobNotAppropriate')}</Text>
+            <TouchableOpacity
+              style={styles.alertButton}
+              onPress={() => setNotAppropriateModalVisible(false)}
+            >
+              <Text style={styles.alertButtonText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <JobCustomKeyboardModal
+        visible={keyboardTarget === 'title' || keyboardTarget === 'description'}
+        title={keyboardTarget === 'description' ? 'Job Description' : 'Job Title'}
+        value={keyboardTarget === 'description' ? formData.description : formData.title}
+        onChange={(next) => {
+          if (keyboardTarget === 'description') handleChange('description', next);
+          else handleChange('title', next);
+        }}
+        onClose={() => setKeyboardTarget(null)}
+        maxLen={keyboardTarget === 'description' ? MAX_JOB_DESCRIPTION_LEN : MAX_JOB_TITLE_LEN}
+      />
     </Modal>
   );
 };
@@ -488,6 +542,46 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 52,
     paddingVertical: spacing.md,
+  },
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertCard: {
+    width: '88%',
+    maxWidth: 380,
+    backgroundColor: colors.background,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  alertTitle: {
+    ...typography.h3,
+    color: colors.text.primary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  alertSubtitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  alertButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.sm,
+    backgroundColor: colors.error.main,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  alertButtonText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });
 

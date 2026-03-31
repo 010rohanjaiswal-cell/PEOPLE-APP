@@ -35,6 +35,7 @@ import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
+import JobCustomKeyboardModal from '../../components/common/JobCustomKeyboardModal';
 
 const CATEGORY_KEYS = {
   'Delivery': 'Delivery',
@@ -261,6 +262,9 @@ function createPostJobStyles(colors, isDark) {
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  errorModalButton: {
+    backgroundColor: colors.error.main,
+  },
   verifyModalContent: {
     width: '88%',
     maxWidth: 400,
@@ -427,6 +431,8 @@ const PostJob = ({ onJobPosted }) => {
     description: '',
   });
   const [loading, setLoading] = useState(false);
+  const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
+  const [keyboardTarget, setKeyboardTarget] = useState(null); // 'title' | 'description' | null
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -560,7 +566,7 @@ const PostJob = ({ onJobPosted }) => {
     const blocked = isJobTextBlockedByWords(formData.title, formData.description);
     if (blocked.blocked) {
       runErrorBorderAnimation(borderOpacity.title);
-      Alert.alert(t('common.error'), t('postJob.jobNotAppropriate'));
+      setNotAppropriateModalVisible(true);
       return;
     }
 
@@ -601,11 +607,11 @@ const PostJob = ({ onJobPosted }) => {
       console.error('Error posting job:', err);
       const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      const msg =
-        code === 'JOB_BLOCKED_WORD'
-          ? t('postJob.jobNotAppropriate')
-          : serverErr || err.message || t('postJob.failedToPostJobTryAgain');
-      Alert.alert(t('common.error'), msg);
+      if (code === 'JOB_BLOCKED_WORD') {
+        setNotAppropriateModalVisible(true);
+      } else {
+        Alert.alert(t('common.error'), serverErr || err.message || t('postJob.failedToPostJobTryAgain'));
+      }
     } finally {
       setLoading(false);
     }
@@ -646,6 +652,13 @@ const PostJob = ({ onJobPosted }) => {
               value={formData.title}
               onChangeText={handleTitleChange}
               style={styles.inputField}
+              editable={false}
+              contextMenuHidden
+              showSoftInputOnFocus={false}
+              caretHidden
+              selectTextOnFocus={false}
+              onPressIn={() => setKeyboardTarget('title')}
+              rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
             />
           </View>
 
@@ -876,7 +889,16 @@ const PostJob = ({ onJobPosted }) => {
                   multiline
                   numberOfLines={2}
                   style={styles.inputField}
-                  onFocus={() => focusScrollToField(descriptionWrapRef)}
+                  editable={false}
+                  contextMenuHidden
+                  showSoftInputOnFocus={false}
+                  caretHidden
+                  selectTextOnFocus={false}
+                  onPressIn={() => {
+                    focusScrollToField(descriptionWrapRef);
+                    setKeyboardTarget('description');
+                  }}
+                  rightIcon={<MaterialIcons name="keyboard" size={20} color={colors.text.muted} />}
                 />
               </View>
             </>
@@ -903,6 +925,31 @@ const PostJob = ({ onJobPosted }) => {
           </TouchableOpacity>
         </CardContent>
       </Card>
+
+      <Modal
+        visible={notAppropriateModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotAppropriateModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.successIconContainer}>
+              <MaterialIcons name="error" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>{t('common.error')}</Text>
+            <Text style={styles.modalSubtitle}>{t('postJob.jobNotAppropriate')}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
+                onPress={() => setNotAppropriateModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Success Modal */}
       <Modal
@@ -971,6 +1018,21 @@ const PostJob = ({ onJobPosted }) => {
           </View>
         </View>
       </Modal>
+      <JobCustomKeyboardModal
+        visible={keyboardTarget === 'title' || keyboardTarget === 'description'}
+        title={
+          keyboardTarget === 'description'
+            ? t('postJob.jobDescriptionOptional')
+            : t('postJob.jobTitle')
+        }
+        value={keyboardTarget === 'description' ? formData.description : formData.title}
+        onChange={(next) => {
+          if (keyboardTarget === 'description') handleDescriptionChange(next);
+          else handleTitleChange(next);
+        }}
+        onClose={() => setKeyboardTarget(null)}
+        maxLen={keyboardTarget === 'description' ? MAX_JOB_DESCRIPTION_LEN : MAX_JOB_TITLE_LEN}
+      />
       </ScrollView>
     </KeyboardAvoidingView>
   );
