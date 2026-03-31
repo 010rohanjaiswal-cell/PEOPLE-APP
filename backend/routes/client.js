@@ -32,6 +32,7 @@ const {
 } = require('../services/autoPickApplications');
 const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils/jobTextPolicy');
 // NOTE: Job posting moderation/AI gate removed per product decision.
+const { isJobTextBlockedByWords } = require('../utils/jobBlockedWords');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -181,6 +182,15 @@ router.post('/jobs', authenticate, async (req, res) => {
         return res.status(400).json({ success: false, error: descCheck.error });
       }
       descriptionStr = descCheck.normalized;
+    }
+
+    const wordBlock = isJobTextBlockedByWords(titleNormalized, descriptionStr);
+    if (wordBlock.blocked) {
+      return res.status(400).json({
+        success: false,
+        code: 'JOB_BLOCKED_WORD',
+        error: 'This job does not feel appropriate. Please try again.',
+      });
     }
 
     let state = null;
@@ -549,6 +559,15 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     }
 
     if (budget !== undefined) job.budget = Number(budget);
+
+    const wordBlock = isJobTextBlockedByWords(job.title, job.description);
+    if (wordBlock.blocked) {
+      return res.status(400).json({
+        success: false,
+        code: 'JOB_BLOCKED_WORD',
+        error: 'This job does not feel appropriate. Please try again.',
+      });
+    }
 
     await job.save();
 

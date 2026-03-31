@@ -25,6 +25,7 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
+import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
 
@@ -157,6 +158,12 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       }
     }
 
+    const blocked = isJobTextBlockedByWords(formData.title, formData.description);
+    if (blocked.blocked) {
+      setError(t('postJob.jobNotAppropriate'));
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -194,8 +201,9 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       }
     } catch (err) {
       console.error('Error updating job:', err);
+      const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      setError(serverErr || err.message || t('jobs.failedUpdateJob'));
+      setError(code === 'JOB_BLOCKED_WORD' ? t('postJob.jobNotAppropriate') : serverErr || err.message || t('jobs.failedUpdateJob'));
     } finally {
       setLoading(false);
     }

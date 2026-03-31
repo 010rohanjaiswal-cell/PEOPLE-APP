@@ -31,6 +31,7 @@ import {
   isValidJobTitle,
   isValidJobDescription,
 } from '../../utils/jobTextPolicy';
+import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -556,6 +557,13 @@ const PostJob = ({ onJobPosted }) => {
       return;
     }
 
+    const blocked = isJobTextBlockedByWords(formData.title, formData.description);
+    if (blocked.blocked) {
+      runErrorBorderAnimation(borderOpacity.title);
+      Alert.alert(t('common.error'), t('postJob.jobNotAppropriate'));
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -591,8 +599,13 @@ const PostJob = ({ onJobPosted }) => {
       }
     } catch (err) {
       console.error('Error posting job:', err);
+      const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      Alert.alert(t('common.error'), serverErr || err.message || t('postJob.failedToPostJobTryAgain'));
+      const msg =
+        code === 'JOB_BLOCKED_WORD'
+          ? t('postJob.jobNotAppropriate')
+          : serverErr || err.message || t('postJob.failedToPostJobTryAgain');
+      Alert.alert(t('common.error'), msg);
     } finally {
       setLoading(false);
     }

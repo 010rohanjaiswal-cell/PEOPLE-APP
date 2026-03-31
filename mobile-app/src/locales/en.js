@@ -370,6 +370,7 @@ export default {
     failedToPostJobTryAgain: 'Failed to post job. Please try again.',
     jobModerationRejected:
       'This job cannot be posted because it may violate our community guidelines. Please edit the title or description and try again.',
+    jobNotAppropriate: 'This posted job does not feel appropriate. Please try again.',
     jobVerificationFailed:
       "We couldn't finish checking your job. Check your internet connection and try again in a moment.",
     verifyModalTitle: 'Verifying your job',
