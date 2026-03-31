@@ -31,7 +31,7 @@ const {
   clearAutoPickTimer,
 } = require('../services/autoPickApplications');
 const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils/jobTextPolicy');
-const { moderateJobContent } = require('../services/jobModerationService');
+// NOTE: Job posting moderation/AI gate removed per product decision.
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -198,24 +198,6 @@ router.post('/jobs', authenticate, async (req, res) => {
       }
     } catch (e) {
       console.warn('Could not resolve state/coords for pincode:', pincodeStr, e.message);
-    }
-
-    const moderation = await moderateJobContent({
-      title: titleNormalized,
-      description: descriptionStr,
-      category: categoryStored,
-    });
-    if (!moderation.allowed) {
-      const code = moderation.verificationError
-        ? 'JOB_VERIFICATION_FAILED'
-        : moderation.aiRejected
-          ? 'JOB_AI_REJECTED'
-          : 'JOB_MODERATION_REJECTED';
-      return res.status(400).json({
-        success: false,
-        code,
-        error: moderation.error || 'This job cannot be posted under our community guidelines.',
-      });
     }
 
     const job = await Job.create({
@@ -567,24 +549,6 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     }
 
     if (budget !== undefined) job.budget = Number(budget);
-
-    const moderation = await moderateJobContent({
-      title: job.title,
-      description: job.description,
-      category: job.category,
-    });
-    if (!moderation.allowed) {
-      const code = moderation.verificationError
-        ? 'JOB_VERIFICATION_FAILED'
-        : moderation.aiRejected
-          ? 'JOB_AI_REJECTED'
-          : 'JOB_MODERATION_REJECTED';
-      return res.status(400).json({
-        success: false,
-        code,
-        error: moderation.error || 'This job cannot be posted under our community guidelines.',
-      });
-    }
 
     await job.save();
 

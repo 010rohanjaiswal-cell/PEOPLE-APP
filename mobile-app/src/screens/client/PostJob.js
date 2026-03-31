@@ -35,13 +35,6 @@ import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
 
-const VERIFY_STATUS_KEYS = [
-  'verifyReviewingPost',
-  'verifyAnalyzingDetails',
-  'verifyCommunityGuidelines',
-  'verifyLegalCheck',
-];
-
 const CATEGORY_KEYS = {
   'Delivery': 'Delivery',
   'Cooking': 'Cooking',
@@ -418,39 +411,6 @@ const PostJob = ({ onJobPosted }) => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!verifyModalVisible) {
-      verifySlowAnimRef.current?.stop?.();
-      verifySlowAnimRef.current = null;
-      verifyProgressAnim.setValue(0);
-      return;
-    }
-    verifyProgressAnim.setValue(0);
-    const anim = Animated.timing(verifyProgressAnim, {
-      toValue: 0.92,
-      duration: 22000,
-      useNativeDriver: false,
-    });
-    verifySlowAnimRef.current = anim;
-    anim.start();
-    return () => {
-      anim.stop();
-      verifySlowAnimRef.current = null;
-    };
-  }, [verifyModalVisible, verifyProgressAnim]);
-
-  useEffect(() => {
-    if (!verifyModalVisible) {
-      setVerifyStep(0);
-      return;
-    }
-    setVerifyStep(0);
-    const id = setInterval(() => {
-      setVerifyStep((s) => (s + 1) % 4);
-    }, 2400);
-    return () => clearInterval(id);
-  }, [verifyModalVisible]);
-
   const focusScrollToField = (ref) => scrollFieldIntoView(ref);
   const [formData, setFormData] = useState({
     title: '',
@@ -465,12 +425,8 @@ const PostJob = ({ onJobPosted }) => {
     gender: '',
     description: '',
   });
-  const [verifying, setVerifying] = useState(false);
-  const [verifyModalVisible, setVerifyModalVisible] = useState(false);
-  const [verifyStep, setVerifyStep] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const verifyProgressAnim = useRef(new Animated.Value(0)).current;
-  const verifySlowAnimRef = useRef(null);
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
   const addressBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -600,27 +556,8 @@ const PostJob = ({ onJobPosted }) => {
       return;
     }
 
-    const closeVerifyModal = () => {
-      setVerifyModalVisible(false);
-      verifyProgressAnim.setValue(0);
-    };
-
-    const finishVerifyBar = () =>
-      new Promise((resolve) => {
-        verifySlowAnimRef.current?.stop?.();
-        verifySlowAnimRef.current = null;
-        Animated.timing(verifyProgressAnim, {
-          toValue: 1,
-          duration: 380,
-          useNativeDriver: false,
-        }).start(() => resolve());
-      });
-
-    setVerifying(true);
-    setVerifyModalVisible(true);
-
     try {
-      await new Promise((r) => setTimeout(r, 50));
+      setLoading(true);
 
       const categoryTrimmed = String(formData.category || '').trim();
       const base = {
@@ -648,35 +585,16 @@ const PostJob = ({ onJobPosted }) => {
       const result = await clientJobsAPI.postJob(jobData);
 
       if (result.success) {
-        await finishVerifyBar();
-        closeVerifyModal();
         setSuccessModalVisible(true);
       } else {
         throw new Error(result.error || t('postJob.failedToPostJob'));
       }
     } catch (err) {
       console.error('Error posting job:', err);
-      verifySlowAnimRef.current?.stop?.();
-      closeVerifyModal();
-      const code = err.response?.data?.code;
       const serverErr = err.response?.data?.error;
-      let msg;
-      if (code === 'JOB_VERIFICATION_FAILED') {
-        msg = t('postJob.jobVerificationFailed');
-      } else if (code === 'JOB_AI_REJECTED') {
-        msg = serverErr || t('postJob.jobModerationRejected');
-      } else if (
-        code === 'JOB_MODERATION_REJECTED' ||
-        code === 'JOB_CONTENT_HARD_BLOCK' ||
-        code === 'JOB_LEGITIMACY_REJECTED'
-      ) {
-        msg = t('postJob.jobModerationRejected');
-      } else {
-        msg = serverErr || err.message || t('postJob.failedToPostJobTryAgain');
-      }
-      Alert.alert(t('common.error'), msg);
+      Alert.alert(t('common.error'), serverErr || err.message || t('postJob.failedToPostJobTryAgain'));
     } finally {
-      setVerifying(false);
+      setLoading(false);
     }
   };
 
@@ -954,47 +872,24 @@ const PostJob = ({ onJobPosted }) => {
           {/* Submit Button */}
           <TouchableOpacity
             onPress={handleSubmit}
-            disabled={verifying || gpsDenied}
+            disabled={loading || gpsDenied}
             style={[
               styles.submitButton,
-              (gpsDenied || verifying) && styles.submitButtonDisabled,
+              (gpsDenied || loading) && styles.submitButtonDisabled,
             ]}
             activeOpacity={0.7}
           >
-            <View style={styles.buttonContent}>
-              <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-              <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
-            </View>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" size="large" />
+            ) : (
+              <View style={styles.buttonContent}>
+                <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>{t('postJob.postJobButton')}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </CardContent>
       </Card>
-
-      <Modal visible={verifyModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.verifyModalContent}>
-            <Text style={styles.verifyModalTitle}>{t('postJob.verifyModalTitle')}</Text>
-            <Text style={styles.verifyStatusText}>
-              {t(`postJob.${VERIFY_STATUS_KEYS[verifyStep]}`)}
-            </Text>
-            <View style={styles.verifyProgressTrack}>
-              <Animated.View
-                style={[
-                  styles.verifyProgressFill,
-                  {
-                    width: verifyProgressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-            </View>
-            <View style={styles.verifySpinnerWrap}>
-              <ActivityIndicator size="large" color={colors.primary.main} />
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Success Modal */}
       <Modal
