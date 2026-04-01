@@ -98,6 +98,8 @@ router.post('/jobs', authenticate, async (req, res) => {
       category,
       address,
       pincode,
+      jobLat: jobLatInput,
+      jobLng: jobLngInput,
       budget,
       gender,
       description,
@@ -222,7 +224,21 @@ router.post('/jobs', authenticate, async (req, res) => {
         getCoordsFromPincode(pincodeStr),
       ]);
       if (pinInfo && pinInfo.state) state = pinInfo.state;
-      if (coords) {
+      const parsedLat = jobLatInput !== undefined ? Number(jobLatInput) : null;
+      const parsedLng = jobLngInput !== undefined ? Number(jobLngInput) : null;
+      const hasValidCoords =
+        jobLatInput !== undefined &&
+        jobLngInput !== undefined &&
+        parsedLat != null &&
+        parsedLng != null &&
+        !Number.isNaN(parsedLat) &&
+        !Number.isNaN(parsedLng) &&
+        Math.abs(parsedLat) <= 90 &&
+        Math.abs(parsedLng) <= 180;
+      if (hasValidCoords) {
+        jobLat = parsedLat;
+        jobLng = parsedLng;
+      } else if (coords) {
         jobLat = coords.lat;
         jobLng = coords.lng;
       }
@@ -493,6 +509,18 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
     const catNow = job.category;
     const delivery = isDeliveryCategory(catNow);
 
+    const parsedLat = jobLat !== undefined ? Number(jobLat) : null;
+    const parsedLng = jobLng !== undefined ? Number(jobLng) : null;
+    const hasValidCoords =
+      jobLat !== undefined &&
+      jobLng !== undefined &&
+      parsedLat != null &&
+      parsedLng != null &&
+      !Number.isNaN(parsedLat) &&
+      !Number.isNaN(parsedLng) &&
+      Math.abs(parsedLat) <= 90 &&
+      Math.abs(parsedLng) <= 180;
+
     if (delivery) {
       const fromA = deliveryFromAddress !== undefined ? String(deliveryFromAddress).trim() : job.deliveryFromAddress;
       const fromP = deliveryFromPincode !== undefined ? String(deliveryFromPincode).trim() : job.deliveryFromPincode;
@@ -524,7 +552,10 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
           getCoordsFromPincode(toP),
         ]);
         job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
-        if (coords) {
+        if (hasValidCoords) {
+          job.jobLat = parsedLat;
+          job.jobLng = parsedLng;
+        } else if (coords) {
           job.jobLat = coords.lat;
           job.jobLng = coords.lng;
         } else {
@@ -544,7 +575,10 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
             getCoordsFromPincode(job.pincode),
           ]);
           job.state = (pinInfo && pinInfo.state) ? pinInfo.state : null;
-          if (coords) {
+          if (hasValidCoords) {
+            job.jobLat = parsedLat;
+            job.jobLng = parsedLng;
+          } else if (coords) {
             job.jobLat = coords.lat;
             job.jobLng = coords.lng;
           } else {

@@ -3,7 +3,7 @@
  * Modal for editing job details
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,16 @@ import {
   Modal,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
   Alert,
+  Animated,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../../theme';
+import { spacing, typography } from '../../theme';
+import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button, Input } from '../common';
+import AddressPickerModal from './AddressPickerModal';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import {
   sanitizeJobTextInput,
@@ -30,13 +34,199 @@ import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { isDeliveryCategory } from '../../utils/jobDisplay';
 
+function createEditJobModalStyles(themeColors, isDark) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modal: {
+      backgroundColor: themeColors.background,
+      borderRadius: spacing.lg,
+      maxHeight: '90%',
+      width: '90%',
+      maxWidth: 500,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+    },
+    title: {
+      ...typography.h2,
+      color: themeColors.text.primary,
+    },
+    closeButton: {
+      padding: spacing.xs,
+    },
+    content: {
+      padding: spacing.lg,
+      maxHeight: 500,
+    },
+    errorContainer: {
+      backgroundColor: themeColors.error.light,
+      borderWidth: 1,
+      borderColor: themeColors.error.main,
+      borderRadius: spacing.sm,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+    },
+    errorText: {
+      ...typography.small,
+      color: themeColors.error.main,
+      textAlign: 'center',
+    },
+    selectContainer: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      ...typography.body,
+      fontWeight: '600',
+      color: themeColors.text.primary,
+      marginBottom: spacing.sm,
+    },
+    selectGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    selectRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    selectOption: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      backgroundColor: themeColors.cardBackground,
+    },
+    selectOptionActive: {
+      borderColor: themeColors.primary.main,
+      backgroundColor: themeColors.primary.light,
+    },
+    selectOptionText: {
+      ...typography.body,
+      color: isDark ? themeColors.text.primary : themeColors.text.secondary,
+    },
+    selectOptionTextActive: {
+      color: isDark ? themeColors.text.primary : themeColors.primary.main,
+      fontWeight: '600',
+    },
+    footer: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      padding: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: themeColors.border,
+    },
+    cancelButton: {
+      flex: 1,
+      minHeight: 52,
+      paddingVertical: spacing.md,
+    },
+    submitButton: {
+      flex: 1,
+      minHeight: 52,
+      paddingVertical: spacing.md,
+    },
+    alertOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    alertCard: {
+      width: '88%',
+      maxWidth: 380,
+      backgroundColor: themeColors.cardBackground,
+      borderRadius: spacing.md,
+      padding: spacing.lg,
+      alignItems: 'center',
+    },
+    alertTitle: {
+      ...typography.h3,
+      color: themeColors.text.primary,
+      marginTop: spacing.sm,
+      marginBottom: spacing.xs,
+      textAlign: 'center',
+    },
+    alertSubtitle: {
+      ...typography.body,
+      color: themeColors.text.secondary,
+      textAlign: 'center',
+      marginBottom: spacing.lg,
+    },
+    alertButton: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      borderRadius: spacing.sm,
+      backgroundColor: themeColors.error.main,
+      minWidth: 120,
+      alignItems: 'center',
+    },
+    alertButtonText: {
+      ...typography.body,
+      color: '#FFFFFF',
+      fontWeight: '700',
+    },
+
+    verifyCard: {
+      width: '88%',
+      maxWidth: 400,
+      backgroundColor: themeColors.cardBackground,
+      borderRadius: spacing.md,
+      padding: spacing.lg,
+      alignItems: 'center',
+    },
+    verifyTitle: {
+      ...typography.h3,
+      color: themeColors.text.primary,
+      marginTop: spacing.md,
+      marginBottom: spacing.sm,
+      textAlign: 'center',
+    },
+    verifySubtitle: {
+      ...typography.body,
+      color: themeColors.text.secondary,
+      textAlign: 'center',
+      marginBottom: spacing.lg,
+    },
+    verifyProgressTrack: {
+      width: '100%',
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: themeColors.border,
+      overflow: 'hidden',
+    },
+    verifyProgressFill: {
+      height: '100%',
+      borderRadius: 4,
+      backgroundColor: themeColors.primary.main,
+    },
+  });
+}
+
 const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const { t } = useLanguage();
+  const { colors: themeColors, isDark } = useTheme();
+  const styles = useMemo(
+    () => createEditJobModalStyles(themeColors, isDark),
+    [themeColors, isDark]
+  );
   const [formData, setFormData] = useState({
     title: '',
     category: '',
     address: '',
     pincode: '',
+    jobLat: null,
+    jobLng: null,
     budget: '',
     gender: '',
     description: '',
@@ -47,7 +237,12 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   });
   const [loading, setLoading] = useState(false);
   const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
+  const [verifyingModalVisible, setVerifyingModalVisible] = useState(false);
+  const [moderationRejectedVisible, setModerationRejectedVisible] = useState(false);
   const [error, setError] = useState('');
+  const verifyProgressAnim = useRef(new Animated.Value(0)).current;
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
+  const [addressPickerTarget, setAddressPickerTarget] = useState(null); // 'address'|'deliveryFrom'|'deliveryTo'
 
   const categories = [
     'Delivery',
@@ -73,6 +268,8 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
         category: job.category || '',
         address: job.address || '',
         pincode: job.pincode || '',
+        jobLat: job.jobLat ?? null,
+        jobLng: job.jobLng ?? null,
         budget: job.budget?.toString() || '',
         gender: job.gender ? job.gender.charAt(0).toUpperCase() + job.gender.slice(1) : '',
         description: sanitizeJobTextInput(job.description || '').slice(0, MAX_JOB_DESCRIPTION_LEN),
@@ -89,6 +286,8 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     if (!visible) {
       setLoading(false);
       setError('');
+      setVerifyingModalVisible(false);
+      verifyProgressAnim.stopAnimation();
     }
   }, [visible]);
 
@@ -101,6 +300,39 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     }
     setFormData((prev) => ({ ...prev, [field]: next }));
     setError('');
+  };
+
+  const openAddressPicker = (target) => {
+    setAddressPickerTarget(target);
+    setAddressPickerVisible(true);
+  };
+
+  const applyPickedAddress = ({ address, pincode, lat, lng }, target) => {
+    if (target === 'deliveryFrom') {
+      setFormData((prev) => ({
+        ...prev,
+        deliveryFromAddress: String(address || ''),
+        deliveryFromPincode: String(pincode || ''),
+      }));
+      return;
+    }
+    if (target === 'deliveryTo') {
+      setFormData((prev) => ({
+        ...prev,
+        deliveryToAddress: String(address || ''),
+        deliveryToPincode: String(pincode || ''),
+        jobLat: lat ?? prev.jobLat,
+        jobLng: lng ?? prev.jobLng,
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      address: String(address || ''),
+      pincode: String(pincode || ''),
+      jobLat: lat ?? prev.jobLat,
+      jobLng: lng ?? prev.jobLng,
+    }));
   };
 
   const handleSubmit = async () => {
@@ -175,6 +407,22 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     }
 
     try {
+      setVerifyingModalVisible(true);
+      verifyProgressAnim.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(verifyProgressAnim, {
+            toValue: 1,
+            duration: 1400,
+            useNativeDriver: false,
+          }),
+          Animated.timing(verifyProgressAnim, {
+            toValue: 0,
+            duration: 800,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
       setLoading(true);
       setError('');
 
@@ -189,12 +437,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
             deliveryFromPincode: String(formData.deliveryFromPincode).trim(),
             deliveryToAddress: String(formData.deliveryToAddress).trim(),
             deliveryToPincode: String(formData.deliveryToPincode).trim(),
+            jobLat: formData.jobLat,
+            jobLng: formData.jobLng,
           }
         : {
             title: formData.title,
             category: formData.category,
             address: formData.address,
             pincode: formData.pincode,
+            jobLat: formData.jobLat,
+            jobLng: formData.jobLng,
             budget: parseFloat(formData.budget),
             gender: formData.gender.toLowerCase(),
             description: formData.description || null,
@@ -215,10 +467,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       const serverErr = err.response?.data?.error;
       if (code === 'JOB_BLOCKED_WORD') {
         setNotAppropriateModalVisible(true);
+      } else if (code === 'JOB_MODERATION_REJECTED' || code === 'JOB_SAFETY_REJECTED') {
+        setModerationRejectedVisible(true);
+      } else if (code === 'JOB_UNSUPPORTED_LANGUAGE') {
+        setError(t('postJob.onlyEnglishHindi'));
       } else {
         setError(serverErr || err.message || t('jobs.failedUpdateJob'));
       }
     } finally {
+      setVerifyingModalVisible(false);
+      verifyProgressAnim.stopAnimation();
       setLoading(false);
     }
   };
@@ -239,7 +497,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
               style={styles.closeButton}
               disabled={loading}
             >
-              <MaterialIcons name="close" size={24} color={colors.text.primary} />
+              <MaterialIcons name="close" size={24} color={themeColors.text.primary} />
             </TouchableOpacity>
           </View>
 
@@ -287,14 +545,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                 <Input
                   label={t('postJob.fromAddress')}
                   value={formData.deliveryFromAddress}
-                  onChangeText={(value) => handleChange('deliveryFromAddress', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('deliveryFrom')}
                   placeholder={t('postJob.enterFromAddress')}
                   multiline
                 />
                 <Input
                   label={t('postJob.fromPincode')}
                   value={formData.deliveryFromPincode}
-                  onChangeText={(value) => handleChange('deliveryFromPincode', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('deliveryFrom')}
                   placeholder={t('postJob.pincodePlaceholder')}
                   keyboardType="numeric"
                   maxLength={6}
@@ -302,14 +562,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                 <Input
                   label={t('postJob.toAddress')}
                   value={formData.deliveryToAddress}
-                  onChangeText={(value) => handleChange('deliveryToAddress', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('deliveryTo')}
                   placeholder={t('postJob.enterToAddress')}
                   multiline
                 />
                 <Input
                   label={t('postJob.toPincode')}
                   value={formData.deliveryToPincode}
-                  onChangeText={(value) => handleChange('deliveryToPincode', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('deliveryTo')}
                   placeholder={t('postJob.pincodePlaceholder')}
                   keyboardType="numeric"
                   maxLength={6}
@@ -320,7 +582,8 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                 <Input
                   label="Address"
                   value={formData.address}
-                  onChangeText={(value) => handleChange('address', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('address')}
                   placeholder="Enter address"
                   multiline
                 />
@@ -328,7 +591,8 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                 <Input
                   label="Pincode"
                   value={formData.pincode}
-                  onChangeText={(value) => handleChange('pincode', value)}
+                  editable={false}
+                  onPressIn={() => openAddressPicker('address')}
                   placeholder="e.g., 400001"
                   keyboardType="numeric"
                   maxLength={6}
@@ -388,6 +652,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
               variant="outline"
               onPress={onClose}
               style={styles.cancelButton}
+              textStyle={{ color: themeColors.text.primary }}
               disabled={loading}
             >
               Cancel
@@ -407,7 +672,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       >
         <View style={styles.alertOverlay}>
           <View style={styles.alertCard}>
-            <MaterialIcons name="error" size={54} color={colors.error.main} />
+            <MaterialIcons name="error" size={54} color={themeColors.error.main} />
             <Text style={styles.alertTitle}>{t('common.error')}</Text>
             <Text style={styles.alertSubtitle}>{t('postJob.jobNotAppropriate')}</Text>
             <TouchableOpacity
@@ -420,152 +685,80 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
         </View>
       </Modal>
 
+      <Modal
+        visible={verifyingModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.verifyCard}>
+            <ActivityIndicator size="large" color={themeColors.primary.main} />
+            <Text style={styles.verifyTitle}>{t('postJob.verifyModalTitle')}</Text>
+            <Text style={styles.verifySubtitle}>{t('postJob.verifyReviewingPost')}</Text>
+            <View style={styles.verifyProgressTrack}>
+              <Animated.View
+                style={[
+                  styles.verifyProgressFill,
+                  {
+                    width: verifyProgressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['10%', '95%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={moderationRejectedVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModerationRejectedVisible(false)}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertCard}>
+            <MaterialIcons name="error" size={54} color={themeColors.error.main} />
+            <Text style={styles.alertTitle}>{t('common.error')}</Text>
+            <Text style={styles.alertSubtitle}>{t('postJob.jobModerationRejected')}</Text>
+            <TouchableOpacity
+              style={styles.alertButton}
+              onPress={() => setModerationRejectedVisible(false)}
+            >
+              <Text style={styles.alertButtonText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        onClose={() => setAddressPickerVisible(false)}
+        initialValue={{
+          address:
+            addressPickerTarget === 'deliveryFrom'
+              ? formData.deliveryFromAddress
+              : addressPickerTarget === 'deliveryTo'
+                ? formData.deliveryToAddress
+                : formData.address,
+          pincode:
+            addressPickerTarget === 'deliveryFrom'
+              ? formData.deliveryFromPincode
+              : addressPickerTarget === 'deliveryTo'
+                ? formData.deliveryToPincode
+                : formData.pincode,
+          lat: formData.jobLat,
+          lng: formData.jobLng,
+        }}
+        onSelect={(picked) => applyPickedAddress(picked, addressPickerTarget)}
+      />
+
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modal: {
-    backgroundColor: colors.background,
-    borderRadius: spacing.lg,
-    maxHeight: '90%',
-    width: '90%',
-    maxWidth: 500,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: {
-    ...typography.h2,
-    color: colors.text.primary,
-  },
-  closeButton: {
-    padding: spacing.xs,
-  },
-  content: {
-    padding: spacing.lg,
-    maxHeight: 500,
-  },
-  errorContainer: {
-    backgroundColor: colors.error.light,
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    borderRadius: spacing.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.error.main,
-    textAlign: 'center',
-  },
-  selectContainer: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-  },
-  selectGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  selectRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  selectOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  selectOptionActive: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
-  },
-  selectOptionText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  selectOptionTextActive: {
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  cancelButton: {
-    flex: 1,
-    minHeight: 52,
-    paddingVertical: spacing.md,
-  },
-  submitButton: {
-    flex: 1,
-    minHeight: 52,
-    paddingVertical: spacing.md,
-  },
-  alertOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alertCard: {
-    width: '88%',
-    maxWidth: 380,
-    backgroundColor: colors.background,
-    borderRadius: spacing.md,
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  alertTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  alertSubtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  alertButton: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: spacing.sm,
-    backgroundColor: colors.error.main,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  alertButtonText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-});
 
 export default EditJobModal;
 

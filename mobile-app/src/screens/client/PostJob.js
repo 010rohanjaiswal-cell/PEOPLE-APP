@@ -23,6 +23,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Input, Card, CardContent } from '../../components/common';
+import AddressPickerModal from '../../components/modals/AddressPickerModal';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import {
   sanitizeJobTextInput,
@@ -435,6 +436,8 @@ const PostJob = ({ onJobPosted }) => {
     category: '',
     address: '',
     pincode: '',
+    jobLat: null,
+    jobLng: null,
     deliveryFromAddress: '',
     deliveryFromPincode: '',
     deliveryToAddress: '',
@@ -448,6 +451,8 @@ const PostJob = ({ onJobPosted }) => {
   const [verifyingModalVisible, setVerifyingModalVisible] = useState(false);
   const [moderationRejectedVisible, setModerationRejectedVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [addressPickerVisible, setAddressPickerVisible] = useState(false);
+  const [addressPickerTarget, setAddressPickerTarget] = useState(null); // 'address'|'deliveryFrom'|'deliveryTo'
   const verifyProgressAnim = useRef(new Animated.Value(0)).current;
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -491,6 +496,39 @@ const PostJob = ({ onJobPosted }) => {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const openAddressPicker = (target) => {
+    setAddressPickerTarget(target);
+    setAddressPickerVisible(true);
+  };
+
+  const applyPickedAddress = ({ address, pincode, lat, lng }, target) => {
+    if (target === 'deliveryFrom') {
+      setFormData((prev) => ({
+        ...prev,
+        deliveryFromAddress: String(address || ''),
+        deliveryFromPincode: String(pincode || ''),
+      }));
+      return;
+    }
+    if (target === 'deliveryTo') {
+      setFormData((prev) => ({
+        ...prev,
+        deliveryToAddress: String(address || ''),
+        deliveryToPincode: String(pincode || ''),
+        jobLat: lat ?? prev.jobLat,
+        jobLng: lng ?? prev.jobLng,
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      address: String(address || ''),
+      pincode: String(pincode || ''),
+      jobLat: lat ?? prev.jobLat,
+      jobLng: lng ?? prev.jobLng,
+    }));
   };
 
   const handleTitleChange = (value) => {
@@ -619,11 +657,15 @@ const PostJob = ({ onJobPosted }) => {
             deliveryFromPincode: formData.deliveryFromPincode.trim(),
             deliveryToAddress: formData.deliveryToAddress.trim(),
             deliveryToPincode: formData.deliveryToPincode.trim(),
+            jobLat: formData.jobLat,
+            jobLng: formData.jobLng,
           }
         : {
             ...base,
             address: formData.address,
             pincode: formData.pincode,
+            jobLat: formData.jobLat,
+            jobLng: formData.jobLng,
             gender: formData.gender.toLowerCase(),
             description: formData.description || null,
           };
@@ -735,7 +777,8 @@ const PostJob = ({ onJobPosted }) => {
                       label={t('postJob.address')}
                       placeholder={t('postJob.enterFromAddress')}
                       value={formData.deliveryFromAddress}
-                      onChangeText={(value) => handleChange('deliveryFromAddress', value)}
+                      editable={false}
+                      onPressIn={() => openAddressPicker('deliveryFrom')}
                       multiline
                       numberOfLines={2}
                       style={styles.inputField}
@@ -755,9 +798,8 @@ const PostJob = ({ onJobPosted }) => {
                         label={t('postJob.pincode')}
                         placeholder={t('postJob.pincodePlaceholder')}
                         value={formData.deliveryFromPincode}
-                        onChangeText={(value) =>
-                          handleChange('deliveryFromPincode', value.replace(/\D/g, '').slice(0, 6))
-                        }
+                        editable={false}
+                        onPressIn={() => openAddressPicker('deliveryFrom')}
                         keyboardType="number-pad"
                         maxLength={6}
                         style={styles.inputField}
@@ -789,7 +831,8 @@ const PostJob = ({ onJobPosted }) => {
                       label={t('postJob.address')}
                       placeholder={t('postJob.enterToAddress')}
                       value={formData.deliveryToAddress}
-                      onChangeText={(value) => handleChange('deliveryToAddress', value)}
+                      editable={false}
+                      onPressIn={() => openAddressPicker('deliveryTo')}
                       multiline
                       numberOfLines={2}
                       style={styles.inputField}
@@ -809,9 +852,8 @@ const PostJob = ({ onJobPosted }) => {
                         label={t('postJob.pincode')}
                         placeholder={t('postJob.pincodePlaceholder')}
                         value={formData.deliveryToPincode}
-                        onChangeText={(value) =>
-                          handleChange('deliveryToPincode', value.replace(/\D/g, '').slice(0, 6))
-                        }
+                        editable={false}
+                        onPressIn={() => openAddressPicker('deliveryTo')}
                         keyboardType="number-pad"
                         maxLength={6}
                         style={styles.inputField}
@@ -835,7 +877,8 @@ const PostJob = ({ onJobPosted }) => {
                     label={t('postJob.address')}
                     placeholder={t('postJob.enterAddress')}
                     value={formData.address}
-                    onChangeText={(value) => handleChange('address', value)}
+                    editable={false}
+                    onPressIn={() => openAddressPicker('address')}
                     style={styles.inputField}
                     onFocus={() => focusScrollToField(ndAddressWrapRef)}
                   />
@@ -852,7 +895,8 @@ const PostJob = ({ onJobPosted }) => {
                     label={t('postJob.pincode')}
                     placeholder={t('postJob.pincodePlaceholder')}
                     value={formData.pincode}
-                    onChangeText={(value) => handleChange('pincode', value.replace(/\D/g, '').slice(0, 6))}
+                    editable={false}
+                    onPressIn={() => openAddressPicker('address')}
                     keyboardType="number-pad"
                     maxLength={6}
                     style={styles.inputField}
@@ -1024,6 +1068,28 @@ const PostJob = ({ onJobPosted }) => {
         </View>
       </Modal>
 
+      <AddressPickerModal
+        visible={addressPickerVisible}
+        onClose={() => setAddressPickerVisible(false)}
+        initialValue={{
+          address:
+            addressPickerTarget === 'deliveryFrom'
+              ? formData.deliveryFromAddress
+              : addressPickerTarget === 'deliveryTo'
+                ? formData.deliveryToAddress
+                : formData.address,
+          pincode:
+            addressPickerTarget === 'deliveryFrom'
+              ? formData.deliveryFromPincode
+              : addressPickerTarget === 'deliveryTo'
+                ? formData.deliveryToPincode
+                : formData.pincode,
+          lat: formData.jobLat,
+          lng: formData.jobLng,
+        }}
+        onSelect={(picked) => applyPickedAddress(picked, addressPickerTarget)}
+      />
+
       {/* Success Modal */}
       <Modal
         visible={successModalVisible}
@@ -1037,6 +1103,8 @@ const PostJob = ({ onJobPosted }) => {
             category: '',
             address: '',
             pincode: '',
+            jobLat: null,
+            jobLng: null,
             deliveryFromAddress: '',
             deliveryFromPincode: '',
             deliveryToAddress: '',
@@ -1071,6 +1139,8 @@ const PostJob = ({ onJobPosted }) => {
                     category: '',
                     address: '',
                     pincode: '',
+                    jobLat: null,
+                    jobLng: null,
                     deliveryFromAddress: '',
                     deliveryFromPincode: '',
                     deliveryToAddress: '',
