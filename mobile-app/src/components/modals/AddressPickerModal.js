@@ -14,6 +14,7 @@ import {
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -33,13 +34,13 @@ function createStyles(colors, isDark) {
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
-      justifyContent: 'flex-end',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.md,
     },
     sheet: {
       maxHeight: '92%',
       backgroundColor: colors.background,
-      borderTopLeftRadius: spacing.lg,
-      borderTopRightRadius: spacing.lg,
+      borderRadius: spacing.lg,
       overflow: 'hidden',
     },
     header: {
@@ -214,6 +215,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const { t } = useLanguage();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+  const insets = useSafeAreaInsets();
 
   const [tab, setTab] = useState('search'); // 'search' | 'map'
   const [query, setQuery] = useState('');
@@ -429,7 +431,16 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable
+          style={[
+            styles.sheet,
+            {
+              marginTop: Math.max(insets.top, 12),
+              marginBottom: Math.max(insets.bottom, 12),
+            },
+          ]}
+          onPress={() => {}}
+        >
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select address</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
