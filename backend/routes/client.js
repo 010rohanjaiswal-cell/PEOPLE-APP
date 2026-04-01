@@ -33,6 +33,7 @@ const {
 const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils/jobTextPolicy');
 // NOTE: Job posting moderation/AI gate removed per product decision.
 const { isJobTextBlockedByWords } = require('../utils/jobBlockedWords');
+const { moderateJobText } = require('../services/openAiModerationService');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -190,6 +191,15 @@ router.post('/jobs', authenticate, async (req, res) => {
         success: false,
         code: 'JOB_BLOCKED_WORD',
         error: 'This job does not feel appropriate. Please try again.',
+      });
+    }
+
+    const moderation = await moderateJobText({ title: titleNormalized, description: descriptionStr });
+    if (!moderation.allowed) {
+      return res.status(moderation.code === 'JOB_MODERATION_UNAVAILABLE' ? 503 : 400).json({
+        success: false,
+        code: moderation.code,
+        error: moderation.error,
       });
     }
 
@@ -566,6 +576,15 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
         success: false,
         code: 'JOB_BLOCKED_WORD',
         error: 'This job does not feel appropriate. Please try again.',
+      });
+    }
+
+    const moderation = await moderateJobText({ title: job.title, description: job.description });
+    if (!moderation.allowed) {
+      return res.status(moderation.code === 'JOB_MODERATION_UNAVAILABLE' ? 503 : 400).json({
+        success: false,
+        code: moderation.code,
+        error: moderation.error,
       });
     }
 

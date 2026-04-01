@@ -273,6 +273,19 @@ function createPostJobStyles(colors, isDark) {
     padding: spacing.lg,
     alignItems: 'center',
   },
+  verifyProgressTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  verifyProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: colors.primary.main,
+  },
   verifyModalTitle: {
     ...typography.h3,
     color: colors.text.primary,
@@ -432,7 +445,10 @@ const PostJob = ({ onJobPosted }) => {
   });
   const [loading, setLoading] = useState(false);
   const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
+  const [verifyingModalVisible, setVerifyingModalVisible] = useState(false);
+  const [moderationRejectedVisible, setModerationRejectedVisible] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const verifyProgressAnim = useRef(new Animated.Value(0)).current;
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
   const addressBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -579,6 +595,14 @@ const PostJob = ({ onJobPosted }) => {
     }
 
     try {
+      setVerifyingModalVisible(true);
+      verifyProgressAnim.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(verifyProgressAnim, { toValue: 1, duration: 1400, useNativeDriver: false }),
+          Animated.timing(verifyProgressAnim, { toValue: 0, duration: 800, useNativeDriver: false }),
+        ])
+      ).start();
       setLoading(true);
 
       const categoryTrimmed = String(formData.category || '').trim();
@@ -617,10 +641,14 @@ const PostJob = ({ onJobPosted }) => {
       const serverErr = err.response?.data?.error;
       if (code === 'JOB_BLOCKED_WORD') {
         setNotAppropriateModalVisible(true);
+      } else if (code === 'JOB_MODERATION_REJECTED') {
+        setModerationRejectedVisible(true);
       } else {
         Alert.alert(t('common.error'), serverErr || err.message || t('postJob.failedToPostJobTryAgain'));
       }
     } finally {
+      setVerifyingModalVisible(false);
+      verifyProgressAnim.stopAnimation();
       setLoading(false);
     }
   };
@@ -935,6 +963,59 @@ const PostJob = ({ onJobPosted }) => {
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
                 onPress={() => setNotAppropriateModalVisible(false)}
+              >
+                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={verifyingModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.verifyModalContent}>
+            <ActivityIndicator size="large" color={colors.primary.main} />
+            <Text style={[styles.verifyModalTitle, { marginTop: spacing.md }]}>{t('postJob.verifyModalTitle')}</Text>
+            <Text style={styles.verifyStatusText}>{t('postJob.verifyReviewingPost')}</Text>
+            <View style={styles.verifyProgressTrack}>
+              <Animated.View
+                style={[
+                  styles.verifyProgressFill,
+                  {
+                    width: verifyProgressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['10%', '95%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={moderationRejectedVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModerationRejectedVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.successIconContainer}>
+              <MaterialIcons name="error" size={64} color={colors.error.main} />
+            </View>
+            <Text style={styles.modalTitle}>{t('common.error')}</Text>
+            <Text style={styles.modalSubtitle}>{t('postJob.jobModerationRejected')}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSubmitButton, styles.errorModalButton]}
+                onPress={() => setModerationRejectedVisible(false)}
               >
                 <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
