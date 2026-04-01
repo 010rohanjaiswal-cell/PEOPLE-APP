@@ -34,6 +34,7 @@ const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils
 // NOTE: Job posting moderation/AI gate removed per product decision.
 const { isJobTextBlockedByWords } = require('../utils/jobBlockedWords');
 const { moderateJobText } = require('../services/openAiModerationService');
+const { safetyGateJobText } = require('../services/openAiJobSafetyGate');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -200,6 +201,15 @@ router.post('/jobs', authenticate, async (req, res) => {
         success: false,
         code: moderation.code,
         error: moderation.error,
+      });
+    }
+
+    const safety = await safetyGateJobText({ title: titleNormalized, description: descriptionStr });
+    if (!safety.allowed) {
+      return res.status(safety.code === 'JOB_SAFETY_UNAVAILABLE' ? 503 : 400).json({
+        success: false,
+        code: safety.code,
+        error: safety.error,
       });
     }
 
@@ -585,6 +595,15 @@ router.put('/jobs/:id', authenticate, async (req, res) => {
         success: false,
         code: moderation.code,
         error: moderation.error,
+      });
+    }
+
+    const safety = await safetyGateJobText({ title: job.title, description: job.description });
+    if (!safety.allowed) {
+      return res.status(safety.code === 'JOB_SAFETY_UNAVAILABLE' ? 503 : 400).json({
+        success: false,
+        code: safety.code,
+        error: safety.error,
       });
     }
 

@@ -641,7 +641,7 @@ const PostJob = ({ onJobPosted }) => {
       const serverErr = err.response?.data?.error;
       if (code === 'JOB_BLOCKED_WORD') {
         setNotAppropriateModalVisible(true);
-      } else if (code === 'JOB_MODERATION_REJECTED') {
+      } else if (code === 'JOB_MODERATION_REJECTED' || code === 'JOB_SAFETY_REJECTED') {
         setModerationRejectedVisible(true);
       } else {
         Alert.alert(t('common.error'), serverErr || err.message || t('postJob.failedToPostJobTryAgain'));
