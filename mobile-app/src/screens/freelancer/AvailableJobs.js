@@ -11,6 +11,7 @@ import {
   FlatList,
   ActivityIndicator,
   TouchableOpacity,
+  Pressable,
   Alert,
   Modal,
   TextInput,
@@ -31,6 +32,7 @@ import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
+import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
 
 function createAvailableJobsStyles(colors) {
   return StyleSheet.create({
@@ -142,6 +144,14 @@ function createAvailableJobsStyles(colors) {
   jobMetaText: {
     ...typography.small,
     color: colors.text.secondary,
+  },
+  jobDirectionsIconButton: {
+    borderWidth: 1.5,
+    borderColor: colors.primary.main,
+    borderRadius: spacing.sm,
+    padding: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   descriptionBlock: {
     position: 'relative',
@@ -401,6 +411,87 @@ function createAvailableJobsStyles(colors) {
   filterOptionTextActive: {
     color: '#FFFFFF',
   },
+  categoryModalWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  categoryModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  categoryModalContent: {
+    width: '100%',
+    zIndex: 1,
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    maxHeight: '72%',
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  categoryModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  categoryModalTitle: {
+    ...typography.h3,
+    fontSize: 18,
+    color: colors.text.primary,
+    fontWeight: '700',
+  },
+  /** 3 columns × 4 rows (12 categories). */
+  categoryModalGrid: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  categoryModalRowWrap: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  categoryModalCell: {
+    flex: 1,
+    minHeight: 56,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 4,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryModalCellActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  categoryModalCellText: {
+    ...typography.small,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.text.primary,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  categoryModalCellTextActive: {
+    color: colors.primary.main,
+  },
+  categoryEmptyWrap: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  categoryEmptyText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    textAlign: 'center',
+  },
   gpsMessageCard: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -449,6 +540,9 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
   const [offerErrorMessage, setOfferErrorMessage] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('none');
+  /** When set, only jobs with this category (exact match, case-insensitive). */
+  const [categoryFilter, setCategoryFilter] = useState(null);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [hasActiveJob, setHasActiveJob] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   // When locale is Hindi, cache translated title/description/address/pincode per job
@@ -706,10 +800,23 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     }
   };
 
-  const applyFilter = (jobs) => {
-    if (selectedFilter === 'none') return jobs;
+  const jobMatchesCategory = (job, cat) => {
+    if (cat == null || cat === '') return true;
+    const a = String(job?.category || '')
+      .trim()
+      .toLowerCase();
+    const b = String(cat)
+      .trim()
+      .toLowerCase();
+    return a === b;
+  };
 
-    const sortedJobs = [...jobs];
+  const applyFilter = (jobList) => {
+    let list = categoryFilter ? jobList.filter((j) => jobMatchesCategory(j, categoryFilter)) : [...jobList];
+
+    if (selectedFilter === 'none') return list;
+
+    const sortedJobs = [...list];
     
     switch (selectedFilter) {
       case 'price_high_low':
@@ -744,6 +851,9 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         return sortedJobs;
     }
   };
+
+  const categoryLabel = (cat) =>
+    t('postJob.category' + (JOB_CATEGORY_I18N_KEYS[cat] || cat.replace(/\s/g, '')));
 
   const openOfferModal = (job) => {
     if (!canWork) {
@@ -921,7 +1031,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         translated={tr}
         t={t}
         compact
-        onLocationIconPress={delivery ? undefined : () => openDirectionsFromJob(item)}
+        hideLeadingIcon={!delivery}
       />
       <View style={styles.jobMetaRow}>
         <JobMetaGenderOrDeliveryPins
@@ -930,10 +1040,27 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           t={t}
           style={styles.jobMetaMainInner}
         />
-        {item.distanceKm != null ? (
+        {!delivery || item.distanceKm != null ? (
           <View style={styles.jobMetaDistance}>
-            <MaterialIcons name="near-me" size={16} color={colors.text.secondary} />
-            <Text style={styles.jobMetaText}>{item.distanceKm} {t('jobs.kmAway')}</Text>
+            {!delivery ? (
+              <Pressable
+                onPress={() => openDirectionsFromJob(item)}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.jobDirectionsIconButton,
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('jobs.openDirectionsA11y')}
+              >
+                <MaterialIcons name="location-on" size={16} color={colors.primary.main} />
+              </Pressable>
+            ) : null}
+            {item.distanceKm != null ? (
+              <Text style={styles.jobMetaText}>
+                {item.distanceKm} {t('jobs.kmAway')}
+              </Text>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -1091,15 +1218,40 @@ const AvailableJobs = ({ onJobPickedUp }) => {
             <TouchableOpacity
               style={[
                 styles.filterOption,
-                selectedFilter === 'none' && styles.filterOptionActive,
+                selectedFilter === 'none' && !categoryFilter && styles.filterOptionActive,
               ]}
-              onPress={() => setSelectedFilter('none')}
+              onPress={() => {
+                setSelectedFilter('none');
+                setCategoryFilter(null);
+              }}
             >
-              <Text style={[
-                styles.filterOptionText,
-                selectedFilter === 'none' && styles.filterOptionTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.filterOptionText,
+                  selectedFilter === 'none' && !categoryFilter && styles.filterOptionTextActive,
+                ]}
+                numberOfLines={1}
+              >
                 {t('jobs.filterAll')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.filterOption,
+                categoryFilter != null && styles.filterOptionActive,
+              ]}
+              onPress={() => setCategoryModalVisible(true)}
+            >
+              <Text
+                style={[
+                  styles.filterOptionText,
+                  categoryFilter != null && styles.filterOptionTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {categoryFilter
+                  ? `${t('jobs.filterCategory')}: ${categoryLabel(categoryFilter)}`
+                  : t('jobs.filterCategory')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1181,6 +1333,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         keyExtractor={(item) => item._id || item.id}
         renderItem={renderJobItem}
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          jobs.length > 0 ? (
+            <View style={styles.categoryEmptyWrap}>
+              <Text style={styles.categoryEmptyText}>{t('jobs.noJobsForCategory')}</Text>
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1190,6 +1349,64 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           />
         }
       />
+
+      {/* Category picker (filter) */}
+      <Modal
+        visible={categoryModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoryModalVisible(false)}
+      >
+        <View style={styles.categoryModalWrap}>
+          <Pressable
+            style={styles.categoryModalBackdrop}
+            onPress={() => setCategoryModalVisible(false)}
+            accessibilityLabel={t('common.cancel')}
+          />
+          <View style={styles.categoryModalContent}>
+            <View style={styles.categoryModalHeader}>
+              <Text style={styles.categoryModalTitle}>{t('jobs.chooseCategoryTitle')}</Text>
+              <TouchableOpacity
+                onPress={() => setCategoryModalVisible(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+              >
+                <MaterialIcons name="close" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.categoryModalGrid}>
+              {Array.from({ length: Math.ceil(JOB_CATEGORIES.length / 3) }, (_, rowIndex) => (
+                <View key={rowIndex} style={styles.categoryModalRowWrap}>
+                  {JOB_CATEGORIES.slice(rowIndex * 3, rowIndex * 3 + 3).map((cat) => {
+                    const active = categoryFilter === cat;
+                    return (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.categoryModalCell, active && styles.categoryModalCellActive]}
+                        onPress={() => {
+                          setCategoryFilter(cat);
+                          setCategoryModalVisible(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.categoryModalCellText,
+                            active && styles.categoryModalCellTextActive,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {categoryLabel(cat)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Pickup Job Confirmation Modal */}
       <Modal

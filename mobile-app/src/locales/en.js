@@ -90,6 +90,9 @@ export default {
   },
   jobs: {
     filterAll: 'All',
+    filterCategory: 'Category',
+    chooseCategoryTitle: 'Choose category',
+    noJobsForCategory: 'No jobs match this category. Try another or tap All.',
     filterPriceHighLow: 'Price: High to Low',
     filterPriceLowHigh: 'Price: Low to High',
     filterNewestFirst: 'Newest First',

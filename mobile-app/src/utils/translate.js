@@ -1,167 +1,135 @@
 /**
- * Translate text from English to Hindi using MyMemory API (free, no key).
- * Supports Hinglish (Hindi+English in Latin script) for job title, description, address:
- * first tries English→Hindi translation; if input is Hinglish and stays in Latin script,
- * falls back to Roman→Devanagari transliteration. Results are cached in memory.
+ * Hindi translation for jobs and notifications — OpenAI only (gpt-4o-mini).
+ * Any source language (Marathi, English, Hinglish, etc.) → standard Hindi (Devanagari).
+ *
+ * Requires EXPO_PUBLIC_OPENAI_API_KEY. If missing or the API fails, the original text is returned.
+ *
+ * Security: EXPO_PUBLIC_* keys ship in the app bundle. For production, prefer a backend proxy.
  */
 
-import Sanscript from '@indic-transliteration/sanscript';
+import Constants from 'expo-constants';
 import { isDeliveryJob } from './jobDisplay';
 
 const CACHE = {};
-const TRANS_LANG_PAIR = 'en|hi';
-const API_URL = 'https://api.mymemory.translated.net/get';
+/** Bump when prompt changes so stale cache entries are ignored. */
+const CACHE_KEY_VERSION = '4';
 
-const DEVANAGARI_REGEX = /[\u0900-\u097F]/;
-const LATIN_REGEX = /[a-zA-Z]/;
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_MODEL = 'gpt-4o-mini';
 
-/** MyMemory returns quota/warning messages inside translatedText when free limit is exceeded. */
-
-function isMyMemoryWarning(text) {
-  if (!text || typeof text !== 'string') return false;
-  const t = text.trim();
-  return /mymemory\s+warning/i.test(t) || (/warning/i.test(t) && /free\s*(trial|translation|quota|available)/i.test(t));
+function getOpenAIApiKey() {
+  return (
+    process.env.EXPO_PUBLIC_OPENAI_API_KEY ||
+    Constants.expoConfig?.extra?.openaiApiKey ||
+    Constants.manifest?.extra?.openaiApiKey ||
+    null
+  );
 }
 
-/** Remove MyMemory warning text if it was prepended or appended to a real translation. */
-function stripMyMemoryWarning(text) {
-  if (!text || typeof text !== 'string') return text;
-  return text
-    .replace(/\s*MYMEMORY\s+WARNING[\s\S]*/i, '')
-    .replace(/^[\s·]*MYMEMORY\s+WARNING[\s\S]*/i, '')
-    .trim();
-}
-
-function isDevanagari(text) {
-  if (!text || typeof text !== 'string') return false;
-  return DEVANAGARI_REGEX.test(text);
-}
-
-function hasLatin(text) {
-  if (!text || typeof text !== 'string') return false;
-  return LATIN_REGEX.test(text);
+function cacheKeyFor(text) {
+  return `hi:${CACHE_KEY_VERSION}:${text}`;
 }
 
 /**
- * In a mixed Hindi+Latin string, transliterate each maximal Latin segment to Devanagari.
- * e.g. "देखिए thik karana hai" -> "देखिए ठीक करना है"
+ * @returns {Promise<string|null>} null if no key, error, or empty response
  */
-function transliterateLatinSegments(str) {
-  if (!str || !hasLatin(str)) return str;
-  return str.replace(/(\s*[a-zA-Z][a-zA-Z\s]*)/g, (match) => {
-    const trimmed = match.trim();
-    if (!trimmed) return match;
-    const lead = match.match(/^\s*/)[0];
-    const trail = match.match(/\s*$/)[0];
-    return lead + hinglishToDevanagari(trimmed) + trail;
-  });
-}
+async function openaiTranslateToHindi(trimmed) {
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) {
+    console.warn('translate: EXPO_PUBLIC_OPENAI_API_KEY is not set; skipping translation.');
+    return null;
+  }
 
-/**
- * Try converting one word from Roman to Devanagari using a given scheme.
- * Returns converted string if it produced Devanagari, otherwise null.
- */
-function tryTransliterateWord(word, scheme) {
+  const maxTokens = Math.min(4096, Math.max(256, Math.ceil(trimmed.length * 2) + 128));
+
   try {
-    const converted = Sanscript.t(word, scheme, 'devanagari', { syncope: true });
-    return converted && isDevanagari(converted) ? converted : null;
-  } catch {
+    const res = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        temperature: 0.1,
+        max_tokens: maxTokens,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You translate into standard modern Hindi (Devanagari only for Indic text).\n\n' +
+              'Detect the source language. It may be: Marathi, Gujarati, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, Odia, Assamese, Urdu, English, Hinglish, or any other language.\n\n' +
+              'CRITICAL: Marathi and Hindi both use Devanagari. If the input is Marathi (मराठी), you must OUTPUT Hindi that expresses the same meaning — not Marathi. Do not copy Marathi wording. Do not reply that it is already Hindi unless it is genuinely standard Hindi.\n\n' +
+              'Output rules:\n' +
+              '- Return ONLY the Hindi translation. No quotes, markdown, labels, or "Translation:".\n' +
+              '- Keep numbers, PIN codes, and amounts like ₹500 unchanged.\n' +
+              '- Keep well-known global brand names in Latin if usual in India; otherwise Devanagari.\n' +
+              '- Digits-only or trivial punctuation: return unchanged.',
+          },
+          {
+            role: 'user',
+            content:
+              'Convert this job/app text into natural Hindi (Devanagari). If it is Marathi or any non-Hindi language, translate fully into Hindi:\n\n' +
+              trimmed,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.warn('OpenAI translate HTTP', res.status, errBody?.slice?.(0, 300));
+      return null;
+    }
+
+    const data = await res.json();
+    let out = data?.choices?.[0]?.message?.content;
+    if (typeof out !== 'string') return null;
+    out = out.trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+    return out || null;
+  } catch (e) {
+    console.warn('OpenAI translate error:', e?.message || e);
     return null;
   }
 }
 
 /**
- * Transliterate Hinglish (Roman script Hindi / mixed Hindi-English) to Devanagari.
- * Word-by-word so English words stay unchanged. Tries ITRANS first, then Harvard-Kyoto.
- */
-function hinglishToDevanagari(text) {
-  if (!text || typeof text !== 'string') return text;
-  const trimmed = text.trim();
-  if (!trimmed) return text;
-  const words = trimmed.split(/(\s+)/);
-  const out = [];
-  for (let i = 0; i < words.length; i++) {
-    const token = words[i];
-    if (/^\s+$/.test(token)) {
-      out.push(token);
-      continue;
-    }
-    const converted = tryTransliterateWord(token, 'itrans') || tryTransliterateWord(token, 'hk');
-    out.push(converted || token);
-  }
-  return out.join('');
-}
-
-/**
- * Translate a single text string from English to Hindi.
- * @param {string} text - Text to translate
- * @returns {Promise<string>} - Translated text, or original on error/empty
+ * Translate a single string to Hindi via OpenAI, or return original if unavailable.
  */
 export async function translateToHindi(text) {
   if (!text || typeof text !== 'string') return text;
   const trimmed = text.trim();
   if (!trimmed) return text;
 
-  const cacheKey = `tr:${trimmed}`;
-  if (CACHE[cacheKey] !== undefined) return CACHE[cacheKey];
+  const key = cacheKeyFor(trimmed);
+  if (CACHE[key] !== undefined) return CACHE[key];
 
-  try {
-    const encoded = encodeURIComponent(trimmed);
-    const res = await fetch(`${API_URL}?q=${encoded}&langpair=${TRANS_LANG_PAIR}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-    const data = await res.json();
-    let translated =
-      data?.responseData?.translatedText != null
-        ? String(data.responseData.translatedText).trim()
-        : '';
-    translated = stripMyMemoryWarning(translated);
-    if (translated && !isMyMemoryWarning(translated)) {
-      CACHE[cacheKey] = translated;
-      return translated;
-    }
-  } catch (e) {
-    console.warn('Translate API error:', e?.message || e);
+  if (/^\d{4,8}$/.test(trimmed)) {
+    CACHE[key] = trimmed;
+    return trimmed;
   }
-  CACHE[cacheKey] = trimmed;
-  return trimmed;
-}
 
-/**
- * Translate or convert to Hindi for one job field (title, description, address).
- * Uses translation first. If the result is mixed (Devanagari + Latin, e.g. "देखिए thik karana hai"),
- * transliterates the remaining Latin segments so the full line is in Hindi.
- */
-export async function translateJobFieldToHindi(text) {
-  if (!text || typeof text !== 'string') return text;
-  const trimmed = String(text).trim();
-  if (!trimmed) return text;
-  const cacheKey = `job:${trimmed}`;
-  if (CACHE[cacheKey] !== undefined) return CACHE[cacheKey];
-  const translated = await translateToHindi(trimmed);
-  let result = translated || trimmed;
-  if (hasLatin(result)) {
-    result = transliterateLatinSegments(result);
-  }
-  if (translated && !isDevanagari(translated)) {
-    const hinglishResult = hinglishToDevanagari(trimmed);
-    if (isDevanagari(hinglishResult)) result = hinglishResult;
-  }
-  CACHE[cacheKey] = result;
+  const translated = await openaiTranslateToHindi(trimmed);
+  const result = translated != null && translated !== '' ? translated : trimmed;
+  CACHE[key] = result;
   return result;
 }
 
+/** Same as translateToHindi (OpenAI-only); kept for call-site clarity. */
+export async function translateJobFieldToHindi(text) {
+  return translateToHindi(text);
+}
+
 /**
- * Translate job fields to Hindi. Title, description, address support Hinglish; pincode is translation only.
+ * Translate job fields to Hindi.
  * @param {object} job
  * @returns {Promise<object>}
  */
 export async function translateJobToHindi(job) {
   const [title, description, address, pincode] = await Promise.all([
-    job.title ? translateJobFieldToHindi(String(job.title)) : Promise.resolve(job.title || ''),
-    job.description ? translateJobFieldToHindi(String(job.description)) : Promise.resolve(job.description || ''),
-    job.address ? translateJobFieldToHindi(String(job.address)) : Promise.resolve(job.address || ''),
+    job.title ? translateToHindi(String(job.title)) : Promise.resolve(job.title || ''),
+    job.description ? translateToHindi(String(job.description)) : Promise.resolve(job.description || ''),
+    job.address ? translateToHindi(String(job.address)) : Promise.resolve(job.address || ''),
     job.pincode ? translateToHindi(String(job.pincode)) : Promise.resolve(job.pincode || ''),
   ]);
   const out = { title, description, address, pincode };
@@ -171,13 +139,13 @@ export async function translateJobToHindi(job) {
   ) {
     const [df, dfp, dt, dtp] = await Promise.all([
       job.deliveryFromAddress
-        ? translateJobFieldToHindi(String(job.deliveryFromAddress))
+        ? translateToHindi(String(job.deliveryFromAddress))
         : Promise.resolve(job.deliveryFromAddress || ''),
       job.deliveryFromPincode
         ? translateToHindi(String(job.deliveryFromPincode))
         : Promise.resolve(job.deliveryFromPincode || ''),
       job.deliveryToAddress
-        ? translateJobFieldToHindi(String(job.deliveryToAddress))
+        ? translateToHindi(String(job.deliveryToAddress))
         : Promise.resolve(job.deliveryToAddress || ''),
       job.deliveryToPincode
         ? translateToHindi(String(job.deliveryToPincode))

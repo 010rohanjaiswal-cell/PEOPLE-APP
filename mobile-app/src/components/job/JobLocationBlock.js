@@ -77,6 +77,14 @@ function createJobLocationBlockStyles(colors) {
       marginTop: 4,
       marginBottom: 0,
     },
+    locationIconButton: {
+      borderWidth: 1.5,
+      borderColor: colors.primary.main,
+      borderRadius: spacing.sm,
+      padding: 5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
   });
 }
 
@@ -87,8 +95,9 @@ function createJobLocationBlockStyles(colors) {
  * @param {function} props.t — i18n
  * @param {boolean} [props.compact] — tighter list-card layout (e.g. Available Jobs)
  * @param {function} [props.onLocationIconPress] — when set, location icon is tappable (e.g. open Maps)
+ * @param {boolean} [props.hideLeadingIcon] — address text only (no pin before address)
  */
-export function JobLocationBlock({ job, translated, t, compact = false, onLocationIconPress }) {
+export function JobLocationBlock({ job, translated, t, compact = false, onLocationIconPress, hideLeadingIcon = false }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createJobLocationBlockStyles(colors), [colors]);
   const tr = translated || {};
@@ -134,6 +143,16 @@ export function JobLocationBlock({ job, translated, t, compact = false, onLocati
     );
   }
 
+  if (hideLeadingIcon) {
+    return (
+      <View style={[styles.jobAddressRow, compact && styles.jobAddressRowCompact]}>
+        <Text style={compact ? styles.jobAddressCompact : styles.jobAddress} numberOfLines={compact ? 3 : undefined}>
+          {address}
+        </Text>
+      </View>
+    );
+  }
+
   const iconSize = compact ? 15 : 16;
   const iconColor = onLocationIconPress ? colors.primary.main : colors.text.secondary;
   const iconEl = (
@@ -145,7 +164,8 @@ export function JobLocationBlock({ job, translated, t, compact = false, onLocati
       {onLocationIconPress ? (
         <Pressable
           onPress={onLocationIconPress}
-          hitSlop={12}
+          hitSlop={8}
+          style={({ pressed }) => [styles.locationIconButton, pressed && { opacity: 0.85 }]}
           accessibilityRole="button"
           accessibilityLabel={t('jobs.openDirectionsA11y')}
         >

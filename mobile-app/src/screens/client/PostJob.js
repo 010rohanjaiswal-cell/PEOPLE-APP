@@ -37,21 +37,7 @@ import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
-
-const CATEGORY_KEYS = {
-  'Delivery': 'Delivery',
-  'Cooking': 'Cooking',
-  'Cleaning': 'Cleaning',
-  'Plumbing': 'Plumbing',
-  'Electrical': 'Electrical',
-  'Mechanic': 'Mechanic',
-  'Driver': 'Driver',
-  'Care taker': 'CareTaker',
-  'Tailor': 'Tailor',
-  'Barber': 'Barber',
-  'Laundry': 'Laundry',
-  'Other': 'Other',
-};
+import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
 
 /**
  * Scroll so the focused field stays just below the top padding of the scroll area
@@ -468,21 +454,6 @@ const PostJob = ({ onJobPosted }) => {
     toAddr: toAddrBorderOpacity,
   };
 
-  const categories = [
-    'Delivery',
-    'Cooking',
-    'Cleaning',
-    'Plumbing',
-    'Electrical',
-    'Mechanic',
-    'Driver',
-    'Care taker',
-    'Tailor',
-    'Barber',
-    'Laundry',
-    'Other',
-  ];
-
   const genders = ['Male', 'Female', 'Any'];
 
   const handleChange = (field, value) => {
@@ -725,14 +696,14 @@ const PostJob = ({ onJobPosted }) => {
             <View style={styles.fieldWithErrorWrap}>
               <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.category }]} pointerEvents="none" />
               <View style={styles.categoryGrid}>
-                {categories.map((cat) => (
+                {JOB_CATEGORIES.map((cat) => (
                   <TouchableOpacity
                     key={cat}
                     style={[styles.categoryButton, formData.category === cat && styles.categoryButtonActive]}
                     onPress={() => handleChange('category', cat)}
                   >
                     <Text style={[styles.categoryText, formData.category === cat && styles.categoryTextActive]}>
-                      {t('postJob.category' + (CATEGORY_KEYS[cat] || cat))}
+                      {t('postJob.category' + (JOB_CATEGORY_I18N_KEYS[cat] || cat))}
                     </Text>
                   </TouchableOpacity>
                 ))}

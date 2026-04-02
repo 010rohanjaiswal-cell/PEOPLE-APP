@@ -91,6 +91,9 @@ export default {
   },
   jobs: {
     filterAll: 'सभी',
+    filterCategory: 'श्रेणी',
+    chooseCategoryTitle: 'श्रेणी चुनें',
+    noJobsForCategory: 'इस श्रेणी में कोई नौकरी नहीं। दूसरी चुनें या सभी पर टैप करें।',
     filterPriceHighLow: 'कीमत: उच्च से निम्न',
     filterPriceLowHigh: 'कीमत: निम्न से उच्च',
     filterNewestFirst: 'नवीनतम पहले',
