@@ -24,6 +24,7 @@ import {
   placesAutocomplete,
   reverseGeocode,
 } from '../../services/googlePlaces';
+import { defaultIndiaMapRegion, getApproximateLatLng, regionAround } from '../../services/approximateLocation';
 
 function randomToken() {
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -227,45 +228,54 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const [tab, setTab] = useState('search'); // 'search' | 'map'
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  /** Blocks confirm / GPS / place details — never tied to search TextInput editable (avoids keyboard dismiss). */
   const [loading, setLoading] = useState(false);
+  /** Autocomplete in-flight only */
+  const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
 
   const sessionTokenRef = useRef(randomToken());
   const debounceRef = useRef(null);
+  const coarseBiasRef = useRef(null); // { lat, lng } for Places bias + map seed
 
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 20.5937,
-    longitude: 78.9629,
-    latitudeDelta: 8,
-    longitudeDelta: 8,
-  });
+  const [mapRegion, setMapRegion] = useState(() => defaultIndiaMapRegion());
   const [marker, setMarker] = useState(null); // { latitude, longitude }
 
   useEffect(() => {
     if (!visible) return;
     setError('');
     setLoading(false);
+    setSearchLoading(false);
     setSuggestions([]);
     setQuery('');
     setTab('search');
     sessionTokenRef.current = randomToken();
-    if (initialValue?.lat != null && initialValue?.lng != null) {
+    coarseBiasRef.current = null;
+
+    const hasSavedCoords =
+      initialValue?.lat != null &&
+      initialValue?.lng != null &&
+      !Number.isNaN(Number(initialValue.lat)) &&
+      !Number.isNaN(Number(initialValue.lng));
+
+    if (hasSavedCoords) {
       const latitude = Number(initialValue.lat);
       const longitude = Number(initialValue.lng);
-      if (!Number.isNaN(latitude) && !Number.isNaN(longitude)) {
-        setMapRegion((r) => ({
-          ...r,
-          latitude,
-          longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        }));
-        setMarker({ latitude, longitude });
-      }
+      setMapRegion(regionAround(latitude, longitude, 0.02));
+      setMarker({ latitude, longitude });
+      coarseBiasRef.current = { lat: latitude, lng: longitude };
     } else {
       setMarker(null);
+      setMapRegion(defaultIndiaMapRegion());
+      (async () => {
+        const approx = await getApproximateLatLng();
+        if (!approx) return;
+        coarseBiasRef.current = { lat: approx.lat, lng: approx.lng };
+        setMapRegion(regionAround(approx.lat, approx.lng, 0.08));
+      })();
     }
+
     setSelected(
       initialValue?.address
         ? {
@@ -285,23 +295,28 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       const q = String(text || '').trim();
       if (q.length < 2) {
         setSuggestions([]);
+        setSearchLoading(false);
         return;
       }
+      const bias = coarseBiasRef.current;
       try {
-        setLoading(true);
+        setSearchLoading(true);
         setError('');
         const preds = await placesAutocomplete({
           input: q,
           sessionToken: sessionTokenRef.current,
           language: 'en',
           country: 'in',
+          locationBiasLat: bias?.lat,
+          locationBiasLng: bias?.lng,
+          locationBiasRadiusM: 50000,
         });
         setSuggestions(preds);
       } catch (e) {
         setSuggestions([]);
         setError(e.message || 'Failed to search address');
       } finally {
-        setLoading(false);
+        setSearchLoading(false);
       }
     }, 250);
   };
@@ -497,9 +512,10 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                     placeholder="Start typing address..."
                     placeholderTextColor={colors.text.muted}
                     style={styles.searchInput}
-                    editable={!loading}
+                    blurOnSubmit={false}
+                    autoCorrect={false}
                   />
-                  {loading ? <ActivityIndicator size="small" color={colors.primary.main} /> : null}
+                  {searchLoading ? <ActivityIndicator size="small" color={colors.primary.main} /> : null}
                 </View>
                 <Text style={styles.hint}>
                   You must select an address from the dropdown (manual address is not allowed).
@@ -510,6 +526,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   keyExtractor={(it) => it.place_id}
                   renderItem={renderSuggestion}
                   keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="none"
                   style={{ marginTop: spacing.sm, maxHeight: 260 }}
                 />
               </>
@@ -541,8 +558,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   </MapView>
                 </View>
                 <Text style={styles.mapHint}>
-                  Tap anywhere on the map to drop a pin (GPS not required). You can drag the pin to
-                  fine-tune.
+                  Map starts near your area (network location when GPS is off). Tap to drop a pin;
+                  drag to fine-tune.
                 </Text>
               </>
             )}

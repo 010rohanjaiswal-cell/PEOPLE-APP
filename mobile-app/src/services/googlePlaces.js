@@ -18,15 +18,35 @@ function buildUrl(base, params) {
   return `${base}?${usp.toString()}`;
 }
 
-export async function placesAutocomplete({ input, sessionToken, language = 'en', country = 'in' }) {
+export async function placesAutocomplete({
+  input,
+  sessionToken,
+  language = 'en',
+  country = 'in',
+  /** Optional bias toward user area (e.g. from IP / last-known), in meters */
+  locationBiasLat,
+  locationBiasLng,
+  locationBiasRadiusM = 80000,
+}) {
   const key = getGoogleMapsApiKey();
   if (!key) throw new Error('Google Maps API key not configured');
+  const hasBias =
+    locationBiasLat != null &&
+    locationBiasLng != null &&
+    !Number.isNaN(Number(locationBiasLat)) &&
+    !Number.isNaN(Number(locationBiasLng));
   const url = buildUrl('https://maps.googleapis.com/maps/api/place/autocomplete/json', {
     input,
     key,
     language,
     components: country ? `country:${country}` : undefined,
     sessiontoken: sessionToken,
+    ...(hasBias
+      ? {
+          location: `${Number(locationBiasLat)},${Number(locationBiasLng)}`,
+          radius: String(Math.min(Math.max(Number(locationBiasRadiusM) || 80000, 1000), 50000)),
+        }
+      : {}),
   });
   const resp = await fetch(url);
   const data = await resp.json();
