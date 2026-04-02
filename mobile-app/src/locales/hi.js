@@ -58,6 +58,7 @@ export default {
       'निकट की नौकरियों के लिए GPS / लोकेशन चालू करें और ऐप को एक्सेस दें।',
     notificationsBanner: 'जॉब अलर्ट और अपडेट के लिए सूचनाएँ चालू करें।',
     openSettings: 'सेटिंग्स खोलें',
+    enable: 'चालू करें',
     allowNotifications: 'अनुमति दें',
   },
   auth: {

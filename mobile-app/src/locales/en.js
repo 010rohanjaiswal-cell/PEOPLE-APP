@@ -57,6 +57,7 @@ export default {
       'Turn on GPS / location services and allow access so we can show nearby jobs.',
     notificationsBanner: 'Enable notifications for job alerts and important updates.',
     openSettings: 'Open Settings',
+    enable: 'Enable',
     allowNotifications: 'Allow',
   },
   auth: {
