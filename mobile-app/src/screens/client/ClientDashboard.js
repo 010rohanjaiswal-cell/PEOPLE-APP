@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform, AppState } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -370,15 +370,8 @@ const ClientDashboard = () => {
     }, [switchToMyJobsIfActiveJobs])
   );
 
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        switchToMyJobsIfActiveJobs();
-      }
-    });
-    return () => sub.remove();
-  }, [switchToMyJobsIfActiveJobs]);
-
+  // Do not switch tabs on every AppState "active" — the location permission dialog (and other
+  // system sheets) triggers that and would jump to My Jobs while posting a job.
 
   // Swipe gesture to switch between Post Job and My Jobs
   const panResponder = useRef(

@@ -238,9 +238,22 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const sessionTokenRef = useRef(randomToken());
   const debounceRef = useRef(null);
   const coarseBiasRef = useRef(null); // { lat, lng } for Places bias + map seed
+  /** True for this open if job already had lat/lng — skip auto “zoom to me” on Map pin tab. */
+  const openedWithSavedCoordsRef = useRef(false);
+  const mapRef = useRef(null);
 
   const [mapRegion, setMapRegion] = useState(() => defaultIndiaMapRegion());
   const [marker, setMarker] = useState(null); // { latitude, longitude }
+  /** Native blue dot (react-native-maps) when OS location permission is granted. */
+  const [canShowUserLocation, setCanShowUserLocation] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      setCanShowUserLocation(status === 'granted');
+    })();
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -258,6 +271,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       initialValue?.lng != null &&
       !Number.isNaN(Number(initialValue.lat)) &&
       !Number.isNaN(Number(initialValue.lng));
+
+    openedWithSavedCoordsRef.current = hasSavedCoords;
 
     if (hasSavedCoords) {
       const latitude = Number(initialValue.lat);
@@ -288,6 +303,40 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
         : null
     );
   }, [visible]);
+
+  /** Map pin tab: zoom to device GPS when permission + location services on (skip if editing saved coords). */
+  useEffect(() => {
+    if (!visible || tab !== 'map') return;
+    if (openedWithSavedCoordsRef.current) return;
+
+    let cancelled = false;
+    const run = async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted' || cancelled) return;
+      const servicesOn = await Location.hasServicesEnabledAsync();
+      if (!servicesOn || cancelled) return;
+      try {
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+          maximumAge: 12000,
+        });
+        if (cancelled) return;
+        const { latitude, longitude } = pos.coords;
+        const region = regionAround(latitude, longitude, 0.004);
+        setMapRegion(region);
+        requestAnimationFrame(() => {
+          mapRef.current?.animateToRegion(region, 550);
+        });
+      } catch (_) {
+        /* keep IP-approximate or default region */
+      }
+    };
+    const t = setTimeout(run, 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [visible, tab]);
 
   const runAutocomplete = (text) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -394,22 +443,26 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       if (status !== 'granted') {
         throw new Error(t('postJob.gpsToPostJob'));
       }
+      setCanShowUserLocation(true);
+      const servicesOn = await Location.hasServicesEnabledAsync();
+      if (!servicesOn) {
+        throw new Error(t('postJob.gpsToPostJob'));
+      }
       const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.High,
+        maximumAge: 5000,
       });
       const latitude = pos?.coords?.latitude;
       const longitude = pos?.coords?.longitude;
       if (latitude == null || longitude == null) throw new Error('Unable to get current location');
+      const region = regionAround(latitude, longitude, 0.004);
       setMarker({ latitude, longitude });
-      setMapRegion((r) => ({
-        ...r,
-        latitude,
-        longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }));
-      await reverseFromMarker(latitude, longitude, 'gps');
+      setMapRegion(region);
       setTab('map');
+      requestAnimationFrame(() => {
+        mapRef.current?.animateToRegion(region, 550);
+      });
+      await reverseFromMarker(latitude, longitude, 'gps');
     } catch (e) {
       setError(e.message || 'Failed to get location');
     } finally {
@@ -468,7 +521,14 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select address</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity style={styles.headerBtn} onPress={useMyLocation} disabled={loading}>
+              <TouchableOpacity
+                style={styles.headerBtn}
+                onPress={() => {
+                  useMyLocation();
+                }}
+                disabled={loading}
+                activeOpacity={0.7}
+              >
                 <MaterialIcons name="my-location" size={20} color={colors.primary.main} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.headerBtn} onPress={onClose} disabled={loading}>
@@ -534,6 +594,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               <>
                 <View style={styles.mapWrap}>
                   <MapView
+                    ref={mapRef}
                     style={styles.map}
                     region={mapRegion}
                     onRegionChangeComplete={(r) => setMapRegion(r)}
@@ -541,6 +602,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                     pitchEnabled={false}
                     rotateEnabled={false}
                     toolbarEnabled={false}
+                    showsUserLocation={canShowUserLocation}
+                    showsMyLocationButton={false}
                   >
                     {marker ? (
                       <Marker
@@ -558,8 +621,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   </MapView>
                 </View>
                 <Text style={styles.mapHint}>
-                  Map starts near your area (network location when GPS is off). Tap to drop a pin;
-                  drag to fine-tune.
+                  Tap the map to drop a pin.{'\n'}
+                  Drag the pin to fine-tune.
                 </Text>
               </>
             )}
