@@ -3,7 +3,7 @@
  * Display open jobs that freelancers can see
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   TextInput,
   ScrollView,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -29,6 +30,7 @@ import { useLocation } from '../../context/LocationContext';
 import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
+import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
 
 function createAvailableJobsStyles(colors) {
   return StyleSheet.create({
@@ -422,7 +424,7 @@ function createAvailableJobsStyles(colors) {
 const AvailableJobs = ({ onJobPickedUp }) => {
   const { user } = useAuth();
   const { t, locale } = useLanguage();
-  const { gpsEnabled, gpsDenied, getCurrentCoords } = useLocation();
+  const { gpsEnabled, gpsDenied, getCurrentCoords, requestPermission } = useLocation();
   const { colors } = useTheme();
   const styles = useMemo(() => createAvailableJobsStyles(colors), [colors]);
 
@@ -825,6 +827,42 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     }
   };
 
+  /** Google Maps: origin = job (client), destination = freelancer; travelmode bicycling. */
+  const openDirectionsFromJob = useCallback(
+    async (job) => {
+      let dest = await getCurrentCoords();
+      if (!dest) {
+        const servicesOk = await requestPermission();
+        if (servicesOk) {
+          dest = await getCurrentCoords();
+        }
+      }
+      if (!dest) {
+        Alert.alert(t('jobs.gpsOff'), t('jobs.navigateNeedLocation'));
+        return;
+      }
+      const addrParts = [job.address, job.pincode].filter(Boolean);
+      const originQuery = addrParts.length ? `${addrParts.join(', ')}, India` : '';
+      const url = buildGoogleMapsBikeDirectionsUrl({
+        originLat: job.jobLat,
+        originLng: job.jobLng,
+        originQuery: originQuery || null,
+        destLat: dest.lat,
+        destLng: dest.lng,
+      });
+      if (!url) {
+        Alert.alert(t('jobs.navigateNoOriginTitle'), t('jobs.navigateNoOriginMessage'));
+        return;
+      }
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(t('common.error'), t('jobs.navigateOpenFailed'));
+      }
+    },
+    [getCurrentCoords, requestPermission, t]
+  );
+
   const renderJobItem = ({ item }) => {
     const cooldownMinutes = getOfferCooldownMinutes(item);
     // Check if job is already picked up (by any freelancer)
@@ -878,7 +916,13 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           ) : null}
         </View>
       ) : null}
-      <JobLocationBlock job={item} translated={tr} t={t} compact />
+      <JobLocationBlock
+        job={item}
+        translated={tr}
+        t={t}
+        compact
+        onLocationIconPress={delivery ? undefined : () => openDirectionsFromJob(item)}
+      />
       <View style={styles.jobMetaRow}>
         <JobMetaGenderOrDeliveryPins
           job={item}

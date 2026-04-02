@@ -181,6 +181,12 @@ export default {
     failedApply: 'Failed to submit application',
     appliedSuccessfully: 'Applied Successfully',
     viewApplications: 'View Applications',
+    openDirectionsA11y: 'Open directions in Google Maps from job location to your location, bicycle mode',
+    navigateNeedLocation:
+      'Allow location access and keep GPS on so we can set your position as the route destination.',
+    navigateNoOriginTitle: 'Cannot open directions',
+    navigateNoOriginMessage: 'This job has no map pin or address we can use as the starting point.',
+    navigateOpenFailed: 'Could not open Google Maps. Please try again.',
   },
   applications: {
     title: 'Job applications',

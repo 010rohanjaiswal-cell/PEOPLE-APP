@@ -2,7 +2,7 @@
  * Shared job location UI: Delivery (from/to) vs single address.
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
@@ -86,8 +86,9 @@ function createJobLocationBlockStyles(colors) {
  * @param {object} [props.translated] — optional Hindi translations
  * @param {function} props.t — i18n
  * @param {boolean} [props.compact] — tighter list-card layout (e.g. Available Jobs)
+ * @param {function} [props.onLocationIconPress] — when set, location icon is tappable (e.g. open Maps)
  */
-export function JobLocationBlock({ job, translated, t, compact = false }) {
+export function JobLocationBlock({ job, translated, t, compact = false, onLocationIconPress }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createJobLocationBlockStyles(colors), [colors]);
   const tr = translated || {};
@@ -133,9 +134,26 @@ export function JobLocationBlock({ job, translated, t, compact = false }) {
     );
   }
 
+  const iconSize = compact ? 15 : 16;
+  const iconColor = onLocationIconPress ? colors.primary.main : colors.text.secondary;
+  const iconEl = (
+    <MaterialIcons name="location-on" size={iconSize} color={iconColor} />
+  );
+
   return (
     <View style={[styles.jobAddressRow, compact && styles.jobAddressRowCompact]}>
-      <MaterialIcons name="location-on" size={compact ? 15 : 16} color={colors.text.secondary} />
+      {onLocationIconPress ? (
+        <Pressable
+          onPress={onLocationIconPress}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={t('jobs.openDirectionsA11y')}
+        >
+          {iconEl}
+        </Pressable>
+      ) : (
+        iconEl
+      )}
       <Text style={compact ? styles.jobAddressCompact : styles.jobAddress} numberOfLines={compact ? 3 : undefined}>
         {address}
       </Text>

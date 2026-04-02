@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -232,6 +233,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const [loading, setLoading] = useState(false);
   /** Autocomplete in-flight only */
   const [searchLoading, setSearchLoading] = useState(false);
+  /** Reverse geocode after map tap/drag — avoids setLoading + controlled region fights (map jank). */
+  const [resolvingAddress, setResolvingAddress] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
 
@@ -241,11 +244,37 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   /** True for this open if job already had lat/lng — skip auto “zoom to me” on Map pin tab. */
   const openedWithSavedCoordsRef = useRef(false);
   const mapRef = useRef(null);
+  /** Latest map region from user pan/zoom; avoids setState on every frame (stops “shaking”). */
+  const mapRegionRef = useRef(defaultIndiaMapRegion());
+  /** Ignore stale reverse-geocode results when the user taps again quickly. */
+  const reverseGeocodeSeqRef = useRef(0);
 
   const [mapRegion, setMapRegion] = useState(() => defaultIndiaMapRegion());
   const [marker, setMarker] = useState(null); // { latitude, longitude }
   /** Native blue dot (react-native-maps) when OS location permission is granted. */
   const [canShowUserLocation, setCanShowUserLocation] = useState(false);
+  /** Lift sheet + suggestions above keyboard (Modal is not resized by default). */
+  const [keyboardPad, setKeyboardPad] = useState(0);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardPad(0);
+      return;
+    }
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardPad(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardPad(0)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+      setKeyboardPad(0);
+    };
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -259,6 +288,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     if (!visible) return;
     setError('');
     setLoading(false);
+    setResolvingAddress(false);
     setSearchLoading(false);
     setSuggestions([]);
     setQuery('');
@@ -277,17 +307,26 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     if (hasSavedCoords) {
       const latitude = Number(initialValue.lat);
       const longitude = Number(initialValue.lng);
-      setMapRegion(regionAround(latitude, longitude, 0.02));
+      const r = regionAround(latitude, longitude, 0.02);
+      mapRegionRef.current = r;
+      setMapRegion(r);
       setMarker({ latitude, longitude });
       coarseBiasRef.current = { lat: latitude, lng: longitude };
     } else {
       setMarker(null);
-      setMapRegion(defaultIndiaMapRegion());
+      const india = defaultIndiaMapRegion();
+      mapRegionRef.current = india;
+      setMapRegion(india);
       (async () => {
         const approx = await getApproximateLatLng();
         if (!approx) return;
         coarseBiasRef.current = { lat: approx.lat, lng: approx.lng };
-        setMapRegion(regionAround(approx.lat, approx.lng, 0.08));
+        const r = regionAround(approx.lat, approx.lng, 0.08);
+        mapRegionRef.current = r;
+        setMapRegion(r);
+        requestAnimationFrame(() => {
+          mapRef.current?.animateToRegion(r, 450);
+        });
       })();
     }
 
@@ -323,6 +362,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
         if (cancelled) return;
         const { latitude, longitude } = pos.coords;
         const region = regionAround(latitude, longitude, 0.004);
+        mapRegionRef.current = region;
         setMapRegion(region);
         requestAnimationFrame(() => {
           mapRef.current?.animateToRegion(region, 550);
@@ -337,6 +377,15 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       clearTimeout(t);
     };
   }, [visible, tab]);
+
+  /** When leaving Map pin, persist panned region into state so the next mount gets correct initialRegion. */
+  useEffect(() => {
+    if (tab !== 'map') return undefined;
+    return () => {
+      const r = mapRegionRef.current;
+      if (r) setMapRegion(r);
+    };
+  }, [tab]);
 
   const runAutocomplete = (text) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -370,6 +419,27 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     }, 250);
   };
 
+  const applySelection = (payload) => {
+    if (!payload?.address) {
+      setError('Please select an address from the list or the map.');
+      return false;
+    }
+    if (!payload?.pincode) {
+      setError('Pincode not found for this location. Please choose a more specific address.');
+      return false;
+    }
+    onSelect?.({
+      address: payload.address,
+      pincode: payload.pincode,
+      lat: payload.lat ?? null,
+      lng: payload.lng ?? null,
+      placeId: payload.placeId ?? null,
+      source: payload.source,
+    });
+    onClose?.();
+    return true;
+  };
+
   const selectPrediction = async (prediction) => {
     try {
       setLoading(true);
@@ -389,15 +459,19 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       const next = { address, pincode, lat, lng, placeId, source: 'places' };
       setSelected(next);
       if (lat != null && lng != null) {
-        setMapRegion((r) => ({
-          ...r,
+        const r = {
+          ...mapRegionRef.current,
           latitude: Number(lat),
           longitude: Number(lng),
           latitudeDelta: 0.02,
           longitudeDelta: 0.02,
-        }));
+        };
+        mapRegionRef.current = r;
+        setMapRegion(r);
         setMarker({ latitude: Number(lat), longitude: Number(lng) });
       }
+      Keyboard.dismiss();
+      applySelection(next);
     } catch (e) {
       setError(e.message || 'Failed to fetch place details');
     } finally {
@@ -406,10 +480,12 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   };
 
   const reverseFromMarker = async (latitude, longitude, source = 'map') => {
+    const seq = ++reverseGeocodeSeqRef.current;
+    setResolvingAddress(true);
+    setError('');
     try {
-      setLoading(true);
-      setError('');
       const res = await reverseGeocode({ lat: latitude, lng: longitude, language: 'en' });
+      if (seq !== reverseGeocodeSeqRef.current) return;
       const address = res?.formatted_address || '';
       const pincode = extractPincodeFromAddressComponents(res?.address_components) || null;
       setSelected({
@@ -420,9 +496,13 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
         source,
       });
     } catch (e) {
-      setError(e.message || 'Failed to resolve address');
+      if (seq === reverseGeocodeSeqRef.current) {
+        setError(e.message || 'Failed to resolve address');
+      }
     } finally {
-      setLoading(false);
+      if (seq === reverseGeocodeSeqRef.current) {
+        setResolvingAddress(false);
+      }
     }
   };
 
@@ -431,7 +511,17 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     const longitude = e?.nativeEvent?.coordinate?.longitude;
     if (latitude == null || longitude == null) return;
     setMarker({ latitude, longitude });
-    setMapRegion((r) => ({ ...r, latitude, longitude }));
+    const base = mapRegionRef.current;
+    const next = {
+      latitude,
+      longitude,
+      latitudeDelta: base.latitudeDelta,
+      longitudeDelta: base.longitudeDelta,
+    };
+    mapRegionRef.current = next;
+    requestAnimationFrame(() => {
+      mapRef.current?.animateToRegion(next, 220);
+    });
     reverseFromMarker(latitude, longitude, 'map');
   };
 
@@ -444,7 +534,17 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
         throw new Error(t('postJob.gpsForCurrentLocation'));
       }
       setCanShowUserLocation(true);
-      const servicesOn = await Location.hasServicesEnabledAsync();
+      let servicesOn = await Location.hasServicesEnabledAsync();
+      // Android: same Google-style “Turn on / No thanks” dialog as LocationContext + Google Maps.
+      if (!servicesOn && Platform.OS === 'android') {
+        try {
+          const { promptForEnableLocationIfNeeded } = require('react-native-android-location-enabler');
+          await promptForEnableLocationIfNeeded();
+          servicesOn = await Location.hasServicesEnabledAsync();
+        } catch (_) {
+          /* user dismissed or dialog unavailable */
+        }
+      }
       if (!servicesOn) {
         throw new Error(t('postJob.gpsForCurrentLocation'));
       }
@@ -457,6 +557,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       if (latitude == null || longitude == null) throw new Error('Unable to get current location');
       const region = regionAround(latitude, longitude, 0.004);
       setMarker({ latitude, longitude });
+      mapRegionRef.current = region;
       setMapRegion(region);
       setTab('map');
       requestAnimationFrame(() => {
@@ -471,23 +572,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   };
 
   const confirmSelection = () => {
-    if (!selected?.address) {
-      setError('Please select an address from the list or the map.');
-      return;
-    }
-    if (!selected?.pincode) {
-      setError('Pincode not found for this location. Please choose a more specific address.');
-      return;
-    }
-    onSelect?.({
-      address: selected.address,
-      pincode: selected.pincode,
-      lat: selected.lat ?? null,
-      lng: selected.lng ?? null,
-      placeId: selected.placeId ?? null,
-      source: selected.source,
-    });
-    onClose?.();
+    applySelection(selected);
   };
 
   const renderSuggestion = ({ item }) => (
@@ -510,7 +595,10 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.root} pointerEvents="box-none">
+      <View
+        style={[styles.root, keyboardPad > 0 ? { paddingBottom: keyboardPad } : null]}
+        pointerEvents="box-none"
+      >
         <Pressable
           style={styles.backdrop}
           onPress={onClose}
@@ -577,9 +665,6 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   />
                   {searchLoading ? <ActivityIndicator size="small" color={colors.primary.main} /> : null}
                 </View>
-                <Text style={styles.hint}>
-                  You must select an address from the dropdown (manual address is not allowed).
-                </Text>
 
                 <FlatList
                   data={suggestions}
@@ -596,8 +681,10 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   <MapView
                     ref={mapRef}
                     style={styles.map}
-                    region={mapRegion}
-                    onRegionChangeComplete={(r) => setMapRegion(r)}
+                    initialRegion={mapRegion}
+                    onRegionChangeComplete={(r) => {
+                      mapRegionRef.current = r;
+                    }}
                     onPress={onMapPress}
                     pitchEnabled={false}
                     rotateEnabled={false}
@@ -637,25 +724,29 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               </View>
             ) : null}
 
-            {loading ? (
+            {loading || resolvingAddress ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={colors.primary.main} />
-                <Text style={styles.loadingText}>Verifying location…</Text>
+                <Text style={styles.loadingText}>
+                  {resolvingAddress && !loading ? 'Resolving address…' : 'Verifying location…'}
+                </Text>
               </View>
             ) : null}
 
-            <View style={styles.ctaRow}>
-              <TouchableOpacity style={styles.cta} onPress={onClose} disabled={loading}>
-                <Text style={styles.ctaText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cta, styles.ctaPrimary]}
-                onPress={confirmSelection}
-                disabled={loading}
-              >
-                <Text style={[styles.ctaText, styles.ctaTextPrimary]}>Use this address</Text>
-              </TouchableOpacity>
-            </View>
+            {tab === 'map' ? (
+              <View style={styles.ctaRow}>
+                <TouchableOpacity style={styles.cta} onPress={onClose} disabled={loading}>
+                  <Text style={styles.ctaText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cta, styles.ctaPrimary]}
+                  onPress={confirmSelection}
+                  disabled={loading || resolvingAddress}
+                >
+                  <Text style={[styles.ctaText, styles.ctaTextPrimary]}>Use this address</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>

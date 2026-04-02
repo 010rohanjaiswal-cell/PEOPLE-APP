@@ -182,6 +182,12 @@ export default {
     failedApply: 'आवेदन भेजने में विफल',
     appliedSuccessfully: 'सफलतापूर्वक आवेदन किया गया',
     viewApplications: 'आवेदन देखें',
+    openDirectionsA11y: 'Google Maps में दिशा-निर्देश — नौकरी स्थल से आपके स्थान तक, साइकिल मोड',
+    navigateNeedLocation:
+      'मार्ग के अंत बिंदु के लिए लोकेशन अनुमति दें और GPS चालू रखें।',
+    navigateNoOriginTitle: 'दिशा-निर्देश नहीं खुल सकते',
+    navigateNoOriginMessage: 'इस नौकरी के लिए मानचित्र पिन या पता उपलब्ध नहीं है।',
+    navigateOpenFailed: 'Google Maps नहीं खुल सका। पुनः प्रयास करें।',
   },
   applications: {
     title: 'नौकरी आवेदन',

@@ -364,11 +364,12 @@ const ClientDashboard = () => {
     return () => clearTimeout(t);
   }, [requestPermission]);
 
-  useFocusEffect(
-    useCallback(() => {
-      switchToMyJobsIfActiveJobs();
-    }, [switchToMyJobsIfActiveJobs])
-  );
+  // Only prefer My Jobs once when the dashboard first mounts. Running this on every focus
+  // (useFocusEffect) fires again after native overlays (map, location sheets) and yanks the user
+  // off Post Job while picking an address.
+  useEffect(() => {
+    switchToMyJobsIfActiveJobs();
+  }, [switchToMyJobsIfActiveJobs]);
 
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
