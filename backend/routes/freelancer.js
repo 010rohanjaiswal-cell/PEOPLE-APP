@@ -31,6 +31,54 @@ function isDeliveryCategory(category) {
   return String(category || '').trim().toLowerCase() === 'delivery';
 }
 
+/** Normalize verification/profile gender to Job schema values. */
+function normalizeFreelancerProfileGender(genderRaw) {
+  if (genderRaw == null) return null;
+  const s = String(genderRaw).trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'm' || s === 'male' || s.startsWith('male')) return 'male';
+  if (s === 'f' || s === 'female' || s.startsWith('female')) return 'female';
+  return null;
+}
+
+/**
+ * Jobs visible to this freelancer by job.gender (client "any" = all).
+ * If freelancer gender unknown, only jobs with gender "any" are shown.
+ */
+function jobGenderMatchQuery(freelancerGenderNorm) {
+  if (freelancerGenderNorm === 'male') return { $in: ['male', 'any'] };
+  if (freelancerGenderNorm === 'female') return { $in: ['female', 'any'] };
+  return 'any';
+}
+
+/** Enforce same rules as available-jobs list when acting on a specific job. */
+async function assertFreelancerMatchesJobGender(freelancerId, job) {
+  const jg = (job.gender || '').toString().trim().toLowerCase();
+  if (jg === 'any' || jg === '') return { ok: true };
+
+  const verificationDoc = await FreelancerVerification.findOne({ user: freelancerId })
+    .sort({ updatedAt: -1 })
+    .select('gender')
+    .lean();
+  const fg = normalizeFreelancerProfileGender(verificationDoc?.gender);
+  if (!fg) {
+    return {
+      ok: false,
+      status: 403,
+      error:
+        'This job is limited by gender. Add your gender in freelancer verification to continue, or choose a job open to everyone.',
+    };
+  }
+  if (fg !== jg) {
+    return {
+      ok: false,
+      status: 403,
+      error: 'This job is not available for your profile gender.',
+    };
+  }
+  return { ok: true };
+}
+
 // Use memory storage; we'll stream buffers to Cloudinary
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1148,10 +1196,17 @@ router.get('/jobs/available', authenticate, async (req, res) => {
     const flLat = lat != null ? Number(lat) : null;
     const flLng = lng != null ? Number(lng) : null;
 
+    const verificationDoc = await FreelancerVerification.findOne({ user: freelancerId })
+      .sort({ updatedAt: -1 })
+      .select('gender')
+      .lean();
+    const freelancerGenderNorm = normalizeFreelancerProfileGender(verificationDoc?.gender);
+
     const filter = {
       status: 'open',
       assignedFreelancer: null,
       client: { $ne: freelancerId },
+      gender: jobGenderMatchQuery(freelancerGenderNorm),
     };
 
     if (flLat != null && flLng != null && !Number.isNaN(flLat) && !Number.isNaN(flLng)) {
@@ -1447,6 +1502,14 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       });
     }
 
+    const genderPickup = await assertFreelancerMatchesJobGender(freelancerId, job);
+    if (!genderPickup.ok) {
+      return res.status(genderPickup.status || 403).json({
+        success: false,
+        error: genderPickup.error,
+      });
+    }
+
     if (!isDeliveryCategory(job.category)) {
       return res.status(400).json({
         success: false,
@@ -1560,6 +1623,14 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Use Pickup for delivery jobs',
+      });
+    }
+
+    const genderApply = await assertFreelancerMatchesJobGender(freelancerId, job);
+    if (!genderApply.ok) {
+      return res.status(genderApply.status || 403).json({
+        success: false,
+        error: genderApply.error,
       });
     }
 
@@ -1686,6 +1757,14 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Cannot make offer on this job anymore',
+      });
+    }
+
+    const genderOffer = await assertFreelancerMatchesJobGender(freelancerId, job);
+    if (!genderOffer.ok) {
+      return res.status(genderOffer.status || 403).json({
+        success: false,
+        error: genderOffer.error,
       });
     }
 

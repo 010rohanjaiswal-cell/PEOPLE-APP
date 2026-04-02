@@ -209,7 +209,7 @@ This document contains all API endpoints, Socket.io events, and connection detai
 
 ### 1. Get Available Jobs
 - **Endpoint**: `GET /api/freelancer/jobs/available`
-- **Description**: Get available jobs (optionally filtered by freelancer's state when `lat`/`lng` provided)
+- **Description**: Get available jobs. Filtered by freelancer **gender** from their latest verification profile: male freelancers see `male` + `any` jobs; female see `female` + `any`; if gender is unknown, only `any` jobs. Optionally filtered by freelancer's state when `lat`/`lng` provided.
 - **Headers**: `Authorization: Bearer <token>`
 - **Query Parameters** (optional): `lat`, `lng` — when provided, jobs are filtered to the state of this location
 - **Response**: Array of available job objects
