@@ -4,9 +4,8 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as IntentLauncher from 'expo-intent-launcher';
 import { colors, spacing, typography } from '../../theme';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -19,33 +18,6 @@ export default function GpsBanner() {
 
   if (!showBanner) return null;
 
-  const handleEnable = async () => {
-    const ok = await requestPermission();
-    if (ok) return;
-
-    // If permission was granted but services are still off, Android won't "enable GPS" for us.
-    Alert.alert(
-      t('common.error'),
-      t('postJob.gpsToPostJob'),
-      [
-        {
-          text: t('permissions.openSettings'),
-          onPress: () => {
-            if (Platform.OS === 'android') {
-              IntentLauncher.startActivityAsync(
-                IntentLauncher.ActivityAction.LOCATION_SOURCE_SETTINGS
-              );
-            } else {
-              Linking.openSettings();
-            }
-          },
-        },
-        { text: t('common.ok'), style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
-  };
-
   return (
     <View style={styles.wrapper}>
       <View style={styles.banner}>
@@ -55,7 +27,7 @@ export default function GpsBanner() {
         </Text>
         <TouchableOpacity
           style={styles.settingsButton}
-          onPress={handleEnable}
+          onPress={() => requestPermission()}
         >
           <Text style={styles.settingsText}>{t('permissions.enable')}</Text>
         </TouchableOpacity>

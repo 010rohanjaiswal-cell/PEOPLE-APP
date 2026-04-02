@@ -5,8 +5,9 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import { promptForEnableLocationIfNeeded } from 'react-native-android-location-enabler';
 
 const LocationContext = createContext(null);
 
@@ -42,7 +43,19 @@ export function LocationProvider({ children }) {
         setGpsEnabled(false);
         return false;
       }
-      const servicesOn = await Location.hasServicesEnabledAsync();
+      let servicesOn = await Location.hasServicesEnabledAsync();
+
+      // Android: show the native "Enable location services" popup (No thanks / Enable).
+      // This is the closest UX to Google Maps and avoids forcing users into Settings.
+      if (!servicesOn && Platform.OS === 'android') {
+        try {
+          await promptForEnableLocationIfNeeded();
+          servicesOn = await Location.hasServicesEnabledAsync();
+        } catch (e) {
+          // User cancelled or popup failed; keep servicesOn=false.
+        }
+      }
+
       setGpsEnabled(servicesOn);
       return servicesOn;
     } catch (err) {
