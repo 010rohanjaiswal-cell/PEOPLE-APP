@@ -402,12 +402,9 @@ const PostJob = ({ onJobPosted }) => {
   const scrollViewRef = useRef(null);
   const scrollFieldIntoView = useMemo(() => createScrollFieldIntoView(scrollViewRef), []);
   const fromAddrWrapRef = useRef(null);
-  const fromPinWrapRef = useRef(null);
   const toAddrWrapRef = useRef(null);
-  const toPinWrapRef = useRef(null);
   const budgetWrapRef = useRef(null);
   const ndAddressWrapRef = useRef(null);
-  const ndPinWrapRef = useRef(null);
   const descriptionWrapRef = useRef(null);
   const [keyboardPad, setKeyboardPad] = useState(0);
 
@@ -457,24 +454,18 @@ const PostJob = ({ onJobPosted }) => {
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
   const addressBorderOpacity = useRef(new Animated.Value(0)).current;
-  const pincodeBorderOpacity = useRef(new Animated.Value(0)).current;
   const budgetBorderOpacity = useRef(new Animated.Value(0)).current;
   const genderBorderOpacity = useRef(new Animated.Value(0)).current;
   const fromAddrBorderOpacity = useRef(new Animated.Value(0)).current;
-  const fromPinBorderOpacity = useRef(new Animated.Value(0)).current;
   const toAddrBorderOpacity = useRef(new Animated.Value(0)).current;
-  const toPinBorderOpacity = useRef(new Animated.Value(0)).current;
   const borderOpacity = {
     title: titleBorderOpacity,
     category: categoryBorderOpacity,
     address: addressBorderOpacity,
-    pincode: pincodeBorderOpacity,
     budget: budgetBorderOpacity,
     gender: genderBorderOpacity,
     fromAddr: fromAddrBorderOpacity,
-    fromPin: fromPinBorderOpacity,
     toAddr: toAddrBorderOpacity,
-    toPin: toPinBorderOpacity,
   };
 
   const categories = [
@@ -593,7 +584,7 @@ const PostJob = ({ onJobPosted }) => {
         return;
       }
       if (!validatePincode(formData.deliveryFromPincode)) {
-        runErrorBorderAnimation(borderOpacity.fromPin);
+        runErrorBorderAnimation(borderOpacity.fromAddr);
         return;
       }
       if (!validateRequired(formData.deliveryToAddress)) {
@@ -601,7 +592,7 @@ const PostJob = ({ onJobPosted }) => {
         return;
       }
       if (!validatePincode(formData.deliveryToPincode)) {
-        runErrorBorderAnimation(borderOpacity.toPin);
+        runErrorBorderAnimation(borderOpacity.toAddr);
         return;
       }
     } else {
@@ -610,7 +601,7 @@ const PostJob = ({ onJobPosted }) => {
         return;
       }
       if (!validatePincode(formData.pincode)) {
-        runErrorBorderAnimation(borderOpacity.pincode);
+        runErrorBorderAnimation(borderOpacity.address);
         return;
       }
       if (!formData.gender) {
@@ -756,7 +747,7 @@ const PostJob = ({ onJobPosted }) => {
 
           {isDelivery ? (
             <View style={styles.deliveryRouteContainer}>
-              {/* From — address + pincode */}
+              {/* From — address (pincode from Google selection) */}
               <View style={[styles.deliveryLegCard, styles.deliveryLegCardFrom]}>
                 <View style={styles.deliveryLegTitleRow}>
                   <Text style={styles.deliveryLegLabel}>{t('jobs.fromShort')}</Text>
@@ -764,7 +755,7 @@ const PostJob = ({ onJobPosted }) => {
                   <Text style={styles.deliveryLegHint}>{t('postJob.deliveryFromHeading')}</Text>
                 </View>
                 <Text style={styles.deliveryMicroHint}>
-                  {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
+                  {t('postJob.deliveryAddressHint')}
                 </Text>
                 <View
                   ref={fromAddrWrapRef}
@@ -786,31 +777,9 @@ const PostJob = ({ onJobPosted }) => {
                     />
                   </View>
                 </View>
-                <View style={styles.deliveryPinRow}>
-                  <View
-                    ref={fromPinWrapRef}
-                    collapsable={false}
-                    style={[styles.deliveryPinField, styles.measureFieldWrap]}
-                  >
-                    <View style={styles.fieldWithErrorWrap}>
-                      <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromPin }]} pointerEvents="none" />
-                      <Input
-                        label={t('postJob.pincode')}
-                        placeholder={t('postJob.pincodePlaceholder')}
-                        value={formData.deliveryFromPincode}
-                        editable={false}
-                        onPressIn={() => openAddressPicker('deliveryFrom')}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        style={styles.inputField}
-                        onFocus={() => focusScrollToField(fromPinWrapRef)}
-                      />
-                    </View>
-                  </View>
-                </View>
               </View>
 
-              {/* To — address + pincode */}
+              {/* To — address (pincode from Google selection) */}
               <View style={[styles.deliveryLegCard, styles.deliveryLegCardTo]}>
                 <View style={styles.deliveryLegTitleRow}>
                   <Text style={styles.deliveryLegLabel}>{t('jobs.toShort')}</Text>
@@ -818,7 +787,7 @@ const PostJob = ({ onJobPosted }) => {
                   <Text style={styles.deliveryLegHint}>{t('postJob.deliveryToHeading')}</Text>
                 </View>
                 <Text style={styles.deliveryMicroHint}>
-                  {t('postJob.deliveryAddressHint')} · {t('postJob.deliveryPinHint')}
+                  {t('postJob.deliveryAddressHint')}
                 </Text>
                 <View
                   ref={toAddrWrapRef}
@@ -840,28 +809,6 @@ const PostJob = ({ onJobPosted }) => {
                     />
                   </View>
                 </View>
-                <View style={styles.deliveryPinRow}>
-                  <View
-                    ref={toPinWrapRef}
-                    collapsable={false}
-                    style={[styles.deliveryPinField, styles.measureFieldWrap]}
-                  >
-                    <View style={styles.fieldWithErrorWrap}>
-                      <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toPin }]} pointerEvents="none" />
-                      <Input
-                        label={t('postJob.pincode')}
-                        placeholder={t('postJob.pincodePlaceholder')}
-                        value={formData.deliveryToPincode}
-                        editable={false}
-                        onPressIn={() => openAddressPicker('deliveryTo')}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        style={styles.inputField}
-                        onFocus={() => focusScrollToField(toPinWrapRef)}
-                      />
-                    </View>
-                  </View>
-                </View>
               </View>
             </View>
           ) : (
@@ -881,26 +828,6 @@ const PostJob = ({ onJobPosted }) => {
                     onPressIn={() => openAddressPicker('address')}
                     style={styles.inputField}
                     onFocus={() => focusScrollToField(ndAddressWrapRef)}
-                  />
-                </View>
-              </View>
-              <View
-                ref={ndPinWrapRef}
-                collapsable={false}
-                style={styles.measureFieldWrap}
-              >
-                <View style={styles.fieldWithErrorWrap}>
-                  <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.pincode }]} pointerEvents="none" />
-                  <Input
-                    label={t('postJob.pincode')}
-                    placeholder={t('postJob.pincodePlaceholder')}
-                    value={formData.pincode}
-                    editable={false}
-                    onPressIn={() => openAddressPicker('address')}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    style={styles.inputField}
-                    onFocus={() => focusScrollToField(ndPinWrapRef)}
                   />
                 </View>
               </View>

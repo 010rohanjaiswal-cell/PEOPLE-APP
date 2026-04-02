@@ -31,17 +31,24 @@ function randomToken() {
 
 function createStyles(colors, isDark) {
   return StyleSheet.create({
-    overlay: {
+    /** Full-screen container; sheet is a sibling of backdrop so touches on the sheet never dismiss. */
+    root: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
       justifyContent: 'center',
       paddingHorizontal: spacing.md,
     },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+    },
     sheet: {
       maxHeight: '92%',
+      width: '100%',
+      alignSelf: 'center',
       backgroundColor: colors.background,
       borderRadius: spacing.lg,
       overflow: 'hidden',
+      zIndex: 1,
     },
     header: {
       paddingHorizontal: spacing.lg,
@@ -428,19 +435,21 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     </TouchableOpacity>
   );
 
+  const sheetMargin = {
+    marginTop: Math.max(insets.top, 12),
+    marginBottom: Math.max(insets.bottom, 12),
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.root} pointerEvents="box-none">
         <Pressable
-          style={[
-            styles.sheet,
-            {
-              marginTop: Math.max(insets.top, 12),
-              marginBottom: Math.max(insets.bottom, 12),
-            },
-          ]}
-          onPress={() => {}}
-        >
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
+        <View style={[styles.sheet, sheetMargin]} pointerEvents="auto">
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select address</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -512,6 +521,9 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                     region={mapRegion}
                     onRegionChangeComplete={(r) => setMapRegion(r)}
                     onPress={onMapPress}
+                    pitchEnabled={false}
+                    rotateEnabled={false}
+                    toolbarEnabled={false}
                   >
                     {marker ? (
                       <Marker
@@ -566,8 +578,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               </TouchableOpacity>
             </View>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
