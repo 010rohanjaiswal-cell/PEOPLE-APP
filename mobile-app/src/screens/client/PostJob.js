@@ -704,12 +704,7 @@ const PostJob = ({ onJobPosted }) => {
         nestedScrollEnabled={true}
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
-        {gpsDenied && (
-          <View style={styles.gpsMessageBox}>
-            <MaterialIcons name="location-off" size={24} color={colors.warning.main} />
-            <Text style={styles.gpsMessageBoxText}>{t('postJob.gpsToPostJob')}</Text>
-          </View>
-        )}
+        {/* GPS banner is shown globally (ClientDashboard). Keep this screen uncluttered. */}
         <Card style={styles.card}>
         <CardContent>
           {/* Job Title */}
