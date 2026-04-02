@@ -334,6 +334,7 @@ export default {
   },
   postJob: {
     gpsToPostJob: 'नौकरी पोस्ट करने के लिए कृपया GPS चालू करें।',
+    gpsForCurrentLocation: 'वर्तमान लोकेशन के लिए कृपया GPS चालू करें।',
     jobTitle: 'नौकरी का शीर्षक',
     enterJobTitle: 'नौकरी का शीर्षक दर्ज करें',
     category: 'श्रेणी',

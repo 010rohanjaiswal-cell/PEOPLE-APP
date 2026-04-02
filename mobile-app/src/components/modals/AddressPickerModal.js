@@ -441,12 +441,12 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       setError('');
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        throw new Error(t('postJob.gpsToPostJob'));
+        throw new Error(t('postJob.gpsForCurrentLocation'));
       }
       setCanShowUserLocation(true);
       const servicesOn = await Location.hasServicesEnabledAsync();
       if (!servicesOn) {
-        throw new Error(t('postJob.gpsToPostJob'));
+        throw new Error(t('postJob.gpsForCurrentLocation'));
       }
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
@@ -621,8 +621,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   </MapView>
                 </View>
                 <Text style={styles.mapHint}>
-                  Tap the map to drop a pin.{'\n'}
-                  Drag the pin to fine-tune.
+                  Tap the map to drop a pin. Drag the pin to fine-tune.
                 </Text>
               </>
             )}

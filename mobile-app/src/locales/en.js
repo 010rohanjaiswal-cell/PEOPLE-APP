@@ -333,6 +333,7 @@ export default {
   },
   postJob: {
     gpsToPostJob: 'Please turn on GPS to post a job.',
+    gpsForCurrentLocation: 'Please turn on GPS for current location.',
     jobTitle: 'Job Title',
     enterJobTitle: 'Enter job title',
     category: 'Category',
