@@ -1014,9 +1014,6 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     // Can only pickup if: canWork is true, job is not picked up, and freelancer doesn't have active job
     const workCooldownActive = workCooldownRemainMs > 0;
     const canPickup = canWork && !isPickedUp && !hasActiveJob && !workCooldownActive;
-    // Can make offer if: canWork is true, no cooldown, job not picked up, and no active job
-    const canMakeOffer =
-      canWork && cooldownMinutes === 0 && !isPickedUp && !hasActiveJob && !workCooldownActive;
 
     const jobId = item._id || item.id;
     const tr = locale === 'hi' && translatedJobs[jobId];
@@ -1024,14 +1021,25 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     const delivery = isDeliveryJob(item);
     const description = tr ? tr.description : (item.description || '');
     const myApp = item.myApplication;
-    const isWaitingApp = !delivery && myApp?.status === 'pending';
+    const appStatus = myApp?.status;
+    const isWaitingApp = !delivery && appStatus === 'pending';
+    // Same rules as backend myApplication: only null or rejected allows a new apply/offer on non-delivery jobs
+    const applicationAllowsNewApply =
+      myApp == null || appStatus === 'rejected';
     const canApply =
       canWork &&
       !isPickedUp &&
       !hasActiveJob &&
       !workCooldownActive &&
       !isWaitingApp &&
-      (myApp == null || myApp.status === 'rejected');
+      applicationAllowsNewApply;
+    const canMakeOffer =
+      canWork &&
+      cooldownMinutes === 0 &&
+      !isPickedUp &&
+      !hasActiveJob &&
+      !workCooldownActive &&
+      (delivery || applicationAllowsNewApply);
     const applyingThis = applyingJobId === jobId;
 
     return (
@@ -1170,6 +1178,8 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
               ? t('jobs.alreadyTaken')
               : isWaitingApp
               ? t('jobs.waitingForClient')
+              : appStatus === 'accepted'
+              ? t('jobs.applicationAcceptedShort')
               : t('jobs.apply')}
           </Text>
         </TouchableOpacity>
@@ -1202,6 +1212,10 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
               ? t('jobs.workCooldownShort')
               : isPickedUp
               ? t('jobs.alreadyTaken')
+              : !delivery && appStatus === 'pending'
+              ? t('jobs.waitingForClient')
+              : !delivery && appStatus === 'accepted'
+              ? t('jobs.applicationAcceptedShort')
               : cooldownMinutes > 0
               ? `${cooldownMinutes}m`
               : t('jobs.makeOffer')}

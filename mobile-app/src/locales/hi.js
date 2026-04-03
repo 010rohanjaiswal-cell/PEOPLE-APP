@@ -177,6 +177,7 @@ export default {
     deliveryEnterTo: 'कृपया ड्रॉप पता दर्ज करें',
     apply: 'आवेदन करें',
     waitingForClient: 'स्वीकृति की प्रतीक्षा',
+    applicationAcceptedShort: 'आवेदन स्वीकृत',
     applyConfirmTitle: 'इस नौकरी के लिए आवेदन?',
     applyConfirmMessage: 'क्लाइंट को सूचना मिलेगी। आप तब तक दोबारा आवेदन कर सकते हैं जब तक वे अस्वीकार न करें या किसी और को न चुनें।',
     cannotApply: 'आवेदन नहीं कर सकते',

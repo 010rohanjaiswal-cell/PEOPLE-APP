@@ -43,6 +43,12 @@ async function clearExpiredFreelancerPickupBlock(user) {
   }
 }
 
+/** True when the job is open and nobody is assigned (accepted applications here are stale if any). */
+function isOpenJobWithNoAssignee(job) {
+  if (!job || job.status !== 'open') return false;
+  return !job.assignedFreelancer;
+}
+
 /** Normalize verification/profile gender to Job schema values. */
 function normalizeFreelancerProfileGender(genderRaw) {
   if (genderRaw == null) return null;
@@ -1219,6 +1225,7 @@ router.get('/jobs/available', authenticate, async (req, res) => {
       assignedFreelancer: null,
       client: { $ne: freelancerId },
       gender: jobGenderMatchQuery(freelancerGenderNorm),
+      // Slot is defined by assignedFreelancer, not application subdoc status (stale "accepted" can exist if assign never completed).
     };
 
     if (flLat != null && flLng != null && !Number.isNaN(flLat) && !Number.isNaN(flLng)) {
@@ -1277,12 +1284,16 @@ router.get('/jobs/available', authenticate, async (req, res) => {
         (a) => a.freelancer && a.freelancer.toString() === fid
       );
       const pendingApp = mine.find((a) => a.status === 'pending');
+      const openUnassigned = isOpenJobWithNoAssignee(job);
       if (pendingApp) {
         job.myApplication = {
           status: 'pending',
           applicationId: pendingApp._id,
         };
-      } else if (mine.some((a) => a.status === 'accepted')) {
+      } else if (
+        mine.some((a) => a.status === 'accepted') &&
+        !openUnassigned
+      ) {
         job.myApplication = { status: 'accepted' };
       } else if (mine.some((a) => a.status === 'rejected')) {
         job.myApplication = { status: 'rejected' };
@@ -1655,6 +1666,14 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       });
     }
 
+    // Assignment never completed: "accepted" on an open, unassigned job is invalid — clear before checks.
+    if (!job.applications) job.applications = [];
+    for (const a of job.applications) {
+      if (a.status === 'accepted') {
+        a.status = 'rejected';
+      }
+    }
+
     if (isDeliveryCategory(job.category)) {
       return res.status(400).json({
         success: false,
@@ -1669,8 +1688,6 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
         error: genderApply.error,
       });
     }
-
-    if (!job.applications) job.applications = [];
 
     const mine = job.applications.filter(
       (a) => a.freelancer.toString() === freelancerId.toString()
