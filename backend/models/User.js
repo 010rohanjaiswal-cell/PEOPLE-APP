@@ -85,7 +85,7 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
-  /** Freelancer-only: block pickup/apply/offer until this time (eg. after support "cancel order" action). */
+  /** Legacy: no longer enforced by API; optional cleanup via script. Was used after support cancel-unassign. */
   freelancerPickupBlockedUntil: {
     type: Date,
     default: null,

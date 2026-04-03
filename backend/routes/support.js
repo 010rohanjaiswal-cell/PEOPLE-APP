@@ -160,7 +160,7 @@ router.post('/tickets/:id/append', authenticate, async (req, res) => {
 /**
  * Cancel order action:
  * - If freelancer has an assigned job, unassign them (job -> open)
- * - Block freelancer from picking jobs for 8 hours
+ * - Records an advisory ~8h window on the ticket only (no API lock on pickup/apply/offer)
  * POST /api/support/tickets/:id/actions/cancel-order
  */
 router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) => {
@@ -199,11 +199,7 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
     ticket.effects.unassignedJobId = unassignedJobId;
     if (unassignedJobId) {
       const blockedUntil = hoursFromNow(8);
-      await User.updateOne(
-        { _id: freelancerId },
-        { $set: { freelancerPickupBlockedUntil: blockedUntil } }
-      );
-
+      // Advisory window on the ticket only — we do not lock pickup/apply in the API (avoids false positives).
       ticket.effects.pickupBlockedUntil = blockedUntil;
       ticket.messages.push({
         sender: 'system',

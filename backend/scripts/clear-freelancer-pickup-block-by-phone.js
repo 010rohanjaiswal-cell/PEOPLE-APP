@@ -1,10 +1,10 @@
 /**
- * Clear freelancer pickup/apply/offer cooldown (freelancerPickupBlockedUntil) by phone
+ * Clear legacy freelancerPickupBlockedUntil by phone (field is no longer enforced by the API).
  *
  * Usage (from repo root):
  *   MONGODB_URI="..." node backend/scripts/clear-freelancer-pickup-block-by-phone.js 7021098460
  *
- * Only clears the 8h-style block set after Support → Cancel order (unassign). Does not print the URI.
+ * Does not print the URI.
  */
 
 require('dotenv').config();
