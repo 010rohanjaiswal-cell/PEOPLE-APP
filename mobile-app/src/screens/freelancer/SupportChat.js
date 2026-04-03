@@ -21,8 +21,11 @@ import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supportAPI } from '../../api';
 
-function createStyles(colors) {
+function createStyles(colors, insets) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -127,14 +130,14 @@ function createStyles(colors) {
     },
     composer: {
       padding: spacing.md,
+      paddingBottom: spacing.md + Math.max(insets?.bottom || 0, 0),
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.cardBackground,
       gap: spacing.md,
     },
     quickReplies: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: 'column',
       gap: spacing.sm,
       justifyContent: 'flex-start',
     },
@@ -145,7 +148,7 @@ function createStyles(colors) {
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,
-      flexGrow: 0,
+      width: '100%',
     },
     quickReplyPrimary: {
       borderColor: colors.primary.main,
@@ -180,15 +183,19 @@ export default function SupportChat({ onBack }) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const { user } = useAuth();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(colors, insets), [colors, insets]);
 
   const [messages, setMessages] = useState([]);
   const [chatStarted, setChatStarted] = useState(false);
   const [nodeId, setNodeId] = useState('root');
+  const [ticketId, setTicketId] = useState(null);
+  const [ticketStatus, setTicketStatus] = useState('open');
 
   const flatListRef = useRef(null);
 
   const nowId = () => `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const TICKET_KEY = 'supportTicketId';
 
   const FLOW = useMemo(
     () => ({
@@ -198,7 +205,6 @@ export default function SupportChat({ onBack }) {
           { id: 'orders', labelKey: 'supportBot.root.orders', next: 'orders' },
           { id: 'wallet', labelKey: 'supportBot.root.wallet', next: 'wallet' },
           { id: 'withdrawal', labelKey: 'supportBot.root.withdrawal', next: 'withdrawal' },
-          { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' },
         ],
       },
       orders: {
@@ -207,7 +213,6 @@ export default function SupportChat({ onBack }) {
           { id: 'orders_cancel', labelKey: 'supportBot.orders.cancelOrder', next: 'orders_cancel' },
           { id: 'orders_contact', labelKey: 'supportBot.orders.cannotContact', next: 'orders_contact' },
           { id: 'orders_customer_cancel', labelKey: 'supportBot.orders.customerAskingCancel', next: 'orders_customer_cancel' },
-          { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' },
         ],
       },
       wallet: {
@@ -217,7 +222,6 @@ export default function SupportChat({ onBack }) {
           { id: 'wallet_dues_not_reflecting', labelKey: 'supportBot.wallet.duesNotReflecting', next: 'wallet_dues_not_reflecting' },
           { id: 'wallet_processing', labelKey: 'supportBot.wallet.paymentProcessing', next: 'wallet_processing' },
           { id: 'wallet_status', labelKey: 'supportBot.wallet.paymentStatus', next: 'wallet_status' },
-          { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' },
         ],
       },
       withdrawal: {
@@ -227,25 +231,37 @@ export default function SupportChat({ onBack }) {
           { id: 'withdrawal_status', labelKey: 'supportBot.withdrawal.paymentStatus', next: 'withdrawal_status' },
           { id: 'withdrawal_amount', labelKey: 'supportBot.withdrawal.withdrawalAmount', next: 'withdrawal_amount' },
           { id: 'withdrawal_not_received', labelKey: 'supportBot.withdrawal.notReceived', next: 'withdrawal_not_received' },
-          { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' },
         ],
       },
-      orders_cancel: { botTextKey: 'supportBot.ordersCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      orders_contact: { botTextKey: 'supportBot.ordersContact.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      orders_customer_cancel: { botTextKey: 'supportBot.ordersCustomerCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      wallet_withdraw_not_credited: { botTextKey: 'supportBot.walletWithdrawNotCredited.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      wallet_dues_not_reflecting: { botTextKey: 'supportBot.walletDuesNotReflecting.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      wallet_processing: { botTextKey: 'supportBot.walletProcessing.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      wallet_status: { botTextKey: 'supportBot.walletStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      withdrawal_status: { botTextKey: 'supportBot.withdrawalStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      withdrawal_amount: { botTextKey: 'supportBot.withdrawalAmountHelp.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
-      withdrawal_not_received: { botTextKey: 'supportBot.withdrawalNotReceived.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }, { id: 'cancel', labelKey: 'supportBot.common.cancelChat', next: 'cancel' }] },
+      orders_cancel: { botTextKey: 'supportBot.ordersCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
+      orders_contact: { botTextKey: 'supportBot.ordersContact.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
+      orders_customer_cancel: { botTextKey: 'supportBot.ordersCustomerCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
+      wallet_withdraw_not_credited: { botTextKey: 'supportBot.walletWithdrawNotCredited.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      wallet_dues_not_reflecting: { botTextKey: 'supportBot.walletDuesNotReflecting.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      wallet_processing: { botTextKey: 'supportBot.walletProcessing.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      wallet_status: { botTextKey: 'supportBot.walletStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      withdrawal_status: { botTextKey: 'supportBot.withdrawalStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      withdrawal_amount: { botTextKey: 'supportBot.withdrawalAmountHelp.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      withdrawal_not_received: { botTextKey: 'supportBot.withdrawalNotReceived.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      end_ready: { botTextKey: 'supportBot.endReady.text', options: [] },
     }),
     []
   );
 
   const currentNode = FLOW[nodeId] || FLOW.root;
+
+  const renderTicketText = (m) => {
+    const key = m?.textKey;
+    let out = key ? t(key) : (m?.text || '');
+    const params = m?.params;
+    if (out && params && typeof params === 'object') {
+      for (const [k, v] of Object.entries(params)) {
+        out = out.replace(`{${k}}`, String(v));
+      }
+    }
+    return out;
+  };
 
   const pushBotNode = (id) => {
     const node = FLOW[id] || FLOW.root;
@@ -260,60 +276,104 @@ export default function SupportChat({ onBack }) {
     ]);
   };
 
-  const resetChat = () => {
-    setChatStarted(false);
-    setNodeId('root');
-    setMessages([]);
-  };
-
-  const startChat = () => {
+  const startChat = async () => {
     if (!user) return;
-    setChatStarted(true);
-    setNodeId('root');
-    setMessages([
-      {
-        _id: nowId(),
-        sender: 'bot',
-        message: t('supportBot.greeting'),
-        createdAt: new Date(),
-      },
-      {
-        _id: nowId(),
-        sender: 'bot',
-        message: t(FLOW.root.botTextKey),
-        createdAt: new Date(),
-      },
-    ]);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    const resp = await supportAPI.startTicket();
+    if (resp?.success && resp.ticket?._id) {
+      const id = String(resp.ticket._id);
+      await AsyncStorage.setItem(TICKET_KEY, id);
+      setTicketId(id);
+      setTicketStatus(resp.ticket.status || 'open');
+      setChatStarted(true);
+      setNodeId(resp.ticket.currentNodeId || 'root');
+      const msgs = (resp.ticket.messages || []).map((m) => ({
+        _id: m._id || nowId(),
+        sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+        message: renderTicketText(m),
+        createdAt: m.createdAt || new Date(),
+      }));
+      setMessages(msgs);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    }
   };
 
-  const selectOption = (opt) => {
+  const endChat = async () => {
+    if (!ticketId) return;
+    try {
+      const resp = await supportAPI.complete(ticketId);
+      if (resp?.success) {
+        setTicketStatus('completed');
+        await AsyncStorage.removeItem(TICKET_KEY);
+      }
+    } catch (_) {}
+  };
+
+  const selectOption = async (opt) => {
     if (!opt) return;
     const label = t(opt.labelKey);
-    setMessages((prev) => [
-      ...prev,
-      {
-        _id: nowId(),
-        sender: user?.id || user?._id || 'me',
-        message: label,
-        createdAt: new Date(),
-      },
-    ]);
+    const userMsg = {
+      _id: nowId(),
+      sender: user?.id || user?._id || 'me',
+      message: label,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
 
-    if (opt.next === 'cancel') {
-      resetChat();
-      return;
+    if (!ticketId) return;
+
+    // Special action: cancel order
+    if (opt.id === 'orders_cancel') {
+      try {
+        // Persist the user's choice as a key before running the backend action
+        await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
+        const resp = await supportAPI.cancelOrderAction(ticketId);
+        if (resp?.success && resp.ticket) {
+          setNodeId(resp.ticket.currentNodeId || 'end_ready');
+          setTicketStatus(resp.ticket.status || 'open');
+          const msgs = (resp.ticket.messages || []).map((m) => ({
+            _id: m._id || nowId(),
+            sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+            message: renderTicketText(m),
+            createdAt: m.createdAt || new Date(),
+          }));
+          setMessages(msgs);
+          return;
+        }
+      } catch (_) {}
     }
 
+    const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
     setNodeId(opt.next);
     setTimeout(() => {
       pushBotNode(opt.next);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
     }, 250);
+    try {
+      await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
+    } catch (_) {}
   };
 
   useEffect(() => {
-    // keep empty until Start chat
+    (async () => {
+      const id = await AsyncStorage.getItem(TICKET_KEY);
+      if (!id) return;
+      setTicketId(id);
+      try {
+        const resp = await supportAPI.getTicket(id);
+        if (resp?.success && resp.ticket) {
+          setChatStarted(resp.ticket.status === 'open');
+          setTicketStatus(resp.ticket.status || 'open');
+          setNodeId(resp.ticket.currentNodeId || 'root');
+          const msgs = (resp.ticket.messages || []).map((m) => ({
+            _id: m._id || nowId(),
+            sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+            message: renderTicketText(m),
+            createdAt: m.createdAt || new Date(),
+          }));
+          setMessages(msgs);
+        }
+      } catch (_) {}
+    })();
   }, []);
 
   const renderMessage = ({ item }) => {
@@ -342,11 +402,12 @@ export default function SupportChat({ onBack }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
@@ -379,10 +440,14 @@ export default function SupportChat({ onBack }) {
             <MaterialIcons name="chat" size={20} color="#FFFFFF" />
             <Text style={styles.startChatText}>{t('supportBot.startChat')}</Text>
           </TouchableOpacity>
+        ) : nodeId === 'end_ready' && ticketStatus === 'open' ? (
+          <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
+            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
+          </TouchableOpacity>
         ) : (
           <View style={styles.quickReplies}>
             {(currentNode?.options || []).map((opt) => {
-              const isCancel = opt.next === 'cancel';
               const isPrimary = opt.id === 'orders' || opt.id === 'wallet' || opt.id === 'withdrawal';
               return (
                 <TouchableOpacity
@@ -390,7 +455,6 @@ export default function SupportChat({ onBack }) {
                   style={[
                     styles.quickReply,
                     isPrimary && styles.quickReplyPrimary,
-                    isCancel && styles.quickReplyDanger,
                   ]}
                   onPress={() => selectOption(opt)}
                   activeOpacity={0.85}
@@ -402,7 +466,8 @@ export default function SupportChat({ onBack }) {
           </View>
         )}
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

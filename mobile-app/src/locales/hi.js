@@ -494,6 +494,7 @@ export default {
     greeting: 'नमस्ते! मैं People Support बॉट हूँ।',
     tapStart: 'शुरू करने के लिए “Start chat” पर टैप करें।',
     startChat: 'Start chat',
+    endChat: 'End chat',
     common: {
       back: 'वापस',
       cancelChat: 'चैट बंद करें',
@@ -567,6 +568,20 @@ export default {
     withdrawalNotReceived: {
       text:
         'पैसा नहीं मिला:\n- Wallet history में स्टेटस देखें।\n- Paid है लेकिन काफी समय बाद भी नहीं मिला तो सपोर्ट को कॉल करें।\n- बैंक के last 4 digits/UPI और समय तैयार रखें।',
+    },
+    endReady: {
+      text: 'हो गया। इस टिकट को पूरा करने के लिए End chat पर टैप करें।',
+    },
+  },
+  supportTicket: {
+    system: {
+      unassigned: 'आपको आपकी वर्तमान नौकरी से हटा दिया गया है।',
+      noAssignedJob: 'हटाने के लिए कोई assigned job नहीं मिली।',
+      completed: 'टिकट पूरा हो गया।',
+    },
+    bot: {
+      blocked8hAndEnd:
+        'आप अगले {hours} घंटे तक कोई जॉब नहीं उठा पाएंगे। जब हो जाए तो End chat पर टैप करें।',
     },
   },
   legalAcceptance: {

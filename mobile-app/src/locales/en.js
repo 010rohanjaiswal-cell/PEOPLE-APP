@@ -493,6 +493,7 @@ export default {
     greeting: "Hi! I'm the People Support bot.",
     tapStart: 'Tap “Start chat” to begin.',
     startChat: 'Start chat',
+    endChat: 'End chat',
     common: {
       back: 'Back',
       cancelChat: 'Cancel chat',
@@ -566,6 +567,19 @@ export default {
     withdrawalNotReceived: {
       text:
         'Not received:\n- Check status in wallet history.\n- If Paid but not received after some time, call support.\n- Keep your bank last 4 digits/UPI and the time ready.',
+    },
+    endReady: {
+      text: 'Done. Tap End chat to complete this ticket.',
+    },
+  },
+  supportTicket: {
+    system: {
+      unassigned: 'You have been unassigned from your current job.',
+      noAssignedJob: 'No assigned job was found to unassign.',
+      completed: 'Ticket completed.',
+    },
+    bot: {
+      blocked8hAndEnd: 'You will not be able to pick any job for the next {hours} hours. Tap End chat when you are done.',
     },
   },
   legalAcceptance: {

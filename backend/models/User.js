@@ -85,6 +85,12 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  /** Freelancer-only: block pickup/apply/offer until this time (eg. after support "cancel order" action). */
+  freelancerPickupBlockedUntil: {
+    type: Date,
+    default: null,
+    index: true,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -20,6 +20,7 @@ const cashfreeRoutes = require('./routes/cashfree');
 const cashfreePayoutWebhook = require('./routes/cashfreePayoutWebhook');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notifications');
+const supportRoutes = require('./routes/support');
 
 // Initialize Express app
 const app = express();
@@ -82,6 +83,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/cashfree', cashfreeRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/support', supportRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -1465,6 +1465,17 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       });
     }
 
+    // Temporary block after certain support actions (e.g. cancel-order)
+    const blockedUntil = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntil && blockedUntil.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot pick jobs right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        blockedUntil,
+      });
+    }
+
     const freelancerId = user._id || user.id;
 
     // Check unpaid dues - cannot pickup jobs if dues > 450rs
@@ -1573,6 +1584,16 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       return res.status(403).json({
         success: false,
         error: 'Only freelancers can apply to jobs',
+      });
+    }
+
+    const blockedUntil = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntil && blockedUntil.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot apply for jobs right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        blockedUntil,
       });
     }
 
@@ -1712,6 +1733,16 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       return res.status(403).json({
         success: false,
         error: 'Only freelancers can make offers',
+      });
+    }
+
+    const blockedUntil = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntil && blockedUntil.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot make offers right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        blockedUntil,
       });
     }
 
