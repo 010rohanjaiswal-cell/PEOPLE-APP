@@ -307,6 +307,48 @@ export default {
     referralRewardCredited: 'रेफरल रिवॉर्ड जमा हुआ',
     withdrawalProcessing: 'निकासी प्रक्रिया में',
     duesPaidActivity: 'बकाया भुगतान',
+    title: 'वॉलेट',
+    addBankAccount: 'बैंक खाता जोड़ें',
+    availableBalance: 'उपलब्ध शेष',
+    lockedBalanceHint: '₹{amount} प्रोसेसिंग (निकासी प्रगति पर)',
+    clearDues: 'बकाया साफ़ करें',
+    withdraw: 'निकासी',
+    addBankToWithdraw: 'निकासी के लिए बैंक खाता जोड़ें',
+    enterValidAmount: 'कृपया वैध राशि दर्ज करें',
+    amountExceedsWithdrawable: 'राशि आपकी निकासी योग्य शेष से अधिक नहीं हो सकती।',
+    withdrawalFailed: 'निकासी विफल',
+    enterValidBankAccount: 'कृपया वैध बैंक खाता संख्या दर्ज करें',
+    enterValidIfsc: 'कृपया वैध IFSC कोड दर्ज करें',
+    bankNameMismatch:
+      'खाताधारक का नाम आपकी प्रोफ़ाइल से मेल नहीं खाता। प्रोफ़ाइल नाम अपडेट करें या अपने नाम पर पंजीकृत बैंक खाता उपयोग करें।',
+    failedAddBankAccount: 'बैंक खाता जोड़ने में विफल',
+    minimumWithdrawTitle: 'न्यूनतम निकासी',
+    minimumWithdrawMessage: 'प्रति ट्रांसफर न्यूनतम निकासी ₹100 है।',
+    submittingRequest: 'अनुरोध भेजा जा रहा है…',
+    connectingPayout: 'पेआउट सेवा से कनेक्ट हो रहा है।',
+    withdrawalSubmittedTitle: 'निकासी अनुरोध जमा हुआ',
+    withdrawalSubmittedMessage:
+      'आपका अनुरोध प्रगति में है। निकासी इतिहास में स्थिति देखें — बैंक ट्रांसफर पूरा होने पर Paid दिखेगा।',
+    addBankModalSubtitle:
+      'अपने बैंक विवरण दर्ज करें। खाताधारक का नाम आपकी प्रोफ़ाइल नाम से मेल खाना चाहिए।',
+    bankAccountPlaceholder: 'बैंक खाता संख्या',
+    ifscPlaceholder: 'IFSC कोड',
+    verifyingWithBank: 'बैंक से सत्यापन…',
+    nameMatchesProfile: 'नाम आपकी प्रोफ़ाइल से मेल खाता है',
+    nameDoesNotMatchProfile: 'नाम आपकी प्रोफ़ाइल से मेल नहीं खाता',
+    bankVerificationFailed: 'सत्यापन विफल',
+  },
+  freelancerProfile: {
+    verificationHint:
+      'सत्यापन जमा करने के बाद विवरण यहां दिखेंगे।',
+    nameLabel: 'नाम:',
+    ageLabel: 'आयु:',
+    yearsOld: '{age} वर्ष',
+    dobLine: 'जन्म तिथि: {dob}',
+    genderLabel: 'लिंग:',
+    addressLabel: 'पता:',
+    mobileLabel: 'मोबाइल:',
+    notAvailable: 'उपलब्ध नहीं',
   },
   orders: {
     failedLoadOrders: 'ऑर्डर लोड नहीं हो सके',
@@ -417,6 +459,115 @@ export default {
     orders: 'ऑर्डर',
     profile: 'प्रोफ़ाइल',
     settings: 'सेटिंग्स',
+    support: 'सहायता',
+  },
+  support: {
+    title: 'सहायता',
+    subtitle: 'मदद चाहिए? कॉल करें या चैट करें।',
+    callToUs: 'हमें कॉल करें',
+    chatWithUs: 'हमसे चैट करें',
+    phoneHint: 'सपोर्ट: {phone}',
+    chatTitle: 'सहायता',
+    typeMessage: 'मैसेज लिखें...',
+    noMessages: 'अभी कोई संदेश नहीं',
+    botGreeting:
+      'नमस्ते! मैं People Support बॉट हूँ। बताइए क्या काम नहीं कर रहा है, मैं आपको स्टेप-बाय-स्टेप मदद करूँगा।\n\nउदाहरण: OTP नहीं आ रहा, वॉलेट निकासी, पता/पिन कोड, वेरिफिकेशन, जॉब नहीं दिख रही, पेमेंट फेल।',
+    botAskIssue: 'कृपया अपनी समस्या लिखें।',
+    botLoginOtp:
+      'लॉगिन/OTP मदद:\n- नेटवर्क चेक करें और फिर कोशिश करें।\n- फोन नंबर सही है यह सुनिश्चित करें।\n- 30–60 सेकंड रुककर Retry करें।\n- फिर भी OTP न आए तो ऐप बंद करके दोबारा खोलें।\n\nफिर भी न हो तो Support से “हमें कॉल करें” उपयोग करें।',
+    botLanguage:
+      'भाषा/अनुवाद मदद:\n- डैशबोर्ड पर भाषा सेलेक्टर खोलें।\n- हिंदी/अंग्रेज़ी बदलकर पेज फिर से खोलें।\n- अगर कोई टेक्स्ट फिर भी अंग्रेज़ी में है तो कौन सा स्क्रीन/टेक्स्ट है बताइए।',
+    botWallet:
+      'वॉलेट/निकासी मदद:\n- बैंक खाता जोड़ें (IFSC सही हो)।\n- न्यूनतम निकासी ₹100 है।\n- नाम mismatch आए तो बैंक नाम आपकी प्रोफ़ाइल नाम से मिलना चाहिए।\n- अगर प्रोसेसिंग दिख रहा है तो कुछ समय इंतज़ार करें।\n\nआपको कौन सा error दिख रहा है?',
+    botAddress:
+      'पता/मैप पिन मदद:\n- एड्रेस पिकर में search list से चुनें या “Map pin” से पिन डालें।\n- चुनने के बाद 6 अंकों का पिनकोड दिखना चाहिए।\n- पिनकोड न मिले तो अधिक specific लोकेशन चुनें या पिन थोड़ा पास ड्रॉप करें।\n\nकौन सा स्टेप फेल हो रहा है?',
+    botVerification:
+      'वेरिफिकेशन मदद:\n- आधार/पैन की साफ़ फोटो अपलोड करें।\n- विवरण दस्तावेज़ से मैच होना चाहिए।\n- फेस वेरिफिकेशन अच्छी रोशनी में करें।\n\nकौन सा स्टेप अटका है (आधार/पैन/फेस)?',
+    botJobs:
+      'जॉब मदद:\n- Available Jobs में pull-to-refresh करें।\n- वेरिफिकेशन approved है या नहीं चेक करें।\n- कुछ जॉब category/gender preference से filter हो सकती हैं।\n\n“No jobs” दिख रहा है या कोई specific error?',
+    botPayments:
+      'पेमेंट मदद:\n- पेमेंट pending/failed हो तो 1–2 मिनट बाद Wallet फिर खोलें।\n- UPI/बैंक ऐप काम कर रहा है यह चेक करें।\n- पैसे कट गए पर status नहीं बदला तो Wallet refresh करें।\n\nआपको कौन सा status/error दिख रहा है?',
+    botFallback:
+      'मैं OTP/लॉगिन, वॉलेट/निकासी, पता/पिनकोड, वेरिफिकेशन, जॉब्स, और पेमेंट में मदद कर सकता हूँ।\n\nआपकी समस्या किस से जुड़ी है?',
+  },
+  supportBot: {
+    greeting: 'नमस्ते! मैं People Support बॉट हूँ।',
+    tapStart: 'शुरू करने के लिए “Start chat” पर टैप करें।',
+    startChat: 'Start chat',
+    common: {
+      back: 'वापस',
+      cancelChat: 'चैट बंद करें',
+    },
+    root: {
+      text: 'कृपया एक कैटेगरी चुनें:',
+      orders: 'ऑर्डर से जुड़ी समस्याएं',
+      wallet: 'वॉलेट समस्याएं',
+      withdrawal: 'निकासी (Withdrawal) समस्याएं',
+    },
+    orders: {
+      text: 'ऑर्डर समस्याएं — एक चुनें:',
+      cancelOrder: 'ऑर्डर कैंसल करना है',
+      cannotContact: 'कस्टमर से संपर्क नहीं हो रहा',
+      customerAskingCancel: 'कस्टमर ऑर्डर कैंसल करने को कह रहा है',
+    },
+    wallet: {
+      text: 'वॉलेट समस्याएं — एक चुनें:',
+      withdrawnNotCredited: 'निकासी हुई लेकिन पैसा क्रेडिट नहीं हुआ',
+      duesNotReflecting: 'बकाया भरा लेकिन वॉलेट में नहीं दिख रहा',
+      paymentProcessing: 'पेमेंट प्रोसेसिंग में है',
+      paymentStatus: 'पेमेंट स्टेटस',
+    },
+    withdrawal: {
+      text: 'निकासी समस्याएं — एक चुनें:',
+      cannotAddBank: 'बैंक खाता जोड़ नहीं पा रहे',
+      paymentStatus: 'पेमेंट स्टेटस',
+      withdrawalAmount: 'निकासी राशि',
+      notReceived: 'पैसा नहीं मिला',
+    },
+    ordersCancel: {
+      text:
+        'ऑर्डर कैंसल:\n- Orders खोलें और ऑर्डर चुनें।\n- अगर Cancel विकल्प दिखे तो Cancel करें।\n- अगर Cancel विकल्प नहीं है तो कस्टमर से कैंसल करवाएं या सपोर्ट को कॉल करें।',
+    },
+    ordersContact: {
+      text:
+        'कस्टमर से संपर्क नहीं हो रहा:\n- नेटवर्क चेक करें।\n- 1–2 मिनट बाद फिर कॉल करें।\n- अगर फिर भी नहीं हो रहा तो मैसेज करें (अगर विकल्प हो) और प्रतीक्षा करें।\n- जरूरी हो तो सपोर्ट को कॉल करें।',
+    },
+    ordersCustomerCancel: {
+      text:
+        'कस्टमर कैंसल कह रहा है:\n- संभव हो तो कस्टमर को उनके तरफ से कैंसल करने को कहें।\n- अगर आप Orders से कैंसल कर सकते हैं तो करें।\n- नहीं हो रहा तो सपोर्ट को कॉल करें।',
+    },
+    walletWithdrawNotCredited: {
+      text:
+        'निकासी हुई लेकिन क्रेडिट नहीं:\n- वॉलेट हिस्ट्री में Processing/Paid स्टेटस देखें।\n- Processing हो तो बैंक ट्रांसफर पूरा होने का इंतज़ार करें।\n- Paid है लेकिन काफी समय बाद भी नहीं मिला तो ट्रांजेक्शन डिटेल्स के साथ सपोर्ट को कॉल करें।',
+    },
+    walletDuesNotReflecting: {
+      text:
+        'बकाया भरा लेकिन नहीं दिख रहा:\n- Wallet रिफ्रेश करें।\n- 1–2 मिनट बाद Wallet फिर खोलें।\n- फिर भी अपडेट नहीं हो तो पेमेंट समय नोट करें और सपोर्ट को कॉल करें।',
+    },
+    walletProcessing: {
+      text:
+        'पेमेंट प्रोसेसिंग:\n- 1–2 मिनट इंतज़ार करें।\n- Wallet फिर खोलकर रिफ्रेश करें।\n- अगर पैसे कट गए हैं तो दोबारा पेमेंट न करें।\n- बहुत देर तक अटका हो तो सपोर्ट को कॉल करें।',
+    },
+    walletStatus: {
+      text:
+        'पेमेंट स्टेटस:\n- Wallet में Recent activity देखें।\n- Pending हो तो इंतज़ार करके रिफ्रेश करें।\n- Failed दिख रहा है लेकिन पैसे कटे हैं तो थोड़ी देर बाद फिर चेक करें।\n- समस्या बनी रहे तो सपोर्ट को कॉल करें।',
+    },
+    withdrawalAddBank: {
+      text:
+        'बैंक खाता जोड़ नहीं पा रहे:\n- अकाउंट नंबर और IFSC सही डालें।\n- बैंक नाम आपकी प्रोफ़ाइल नाम से मैच होना चाहिए।\n- थोड़ी देर बाद फिर कोशिश करें।\n- फिर भी नहीं हो तो सपोर्ट को कॉल करें।',
+    },
+    withdrawalStatus: {
+      text:
+        'निकासी स्टेटस:\n- Wallet withdrawal history देखें।\n- Processing मतलब ट्रांसफर चल रहा है।\n- Paid मतलब ट्रांसफर पूरा।\n- Paid है लेकिन पैसा नहीं मिला तो सपोर्ट को कॉल करें।',
+    },
+    withdrawalAmountHelp: {
+      text:
+        'निकासी राशि:\n- न्यूनतम निकासी ₹100 है।\n- राशि withdrawable balance से अधिक नहीं हो सकती।\n- अगर dues हैं तो पहले dues clear करें।\n\nफिर भी error हो तो सपोर्ट को कॉल करें।',
+    },
+    withdrawalNotReceived: {
+      text:
+        'पैसा नहीं मिला:\n- Wallet history में स्टेटस देखें।\n- Paid है लेकिन काफी समय बाद भी नहीं मिला तो सपोर्ट को कॉल करें।\n- बैंक के last 4 digits/UPI और समय तैयार रखें।',
+    },
   },
   legalAcceptance: {
     leadIn: 'मैंने ',

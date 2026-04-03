@@ -430,7 +430,7 @@ function createWalletStyles(colors) {
 
 const Wallet = () => {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { height: windowHeight } = useWindowDimensions();
   const { colors } = useTheme();
   const styles = useMemo(() => createWalletStyles(colors), [colors]);
@@ -530,8 +530,8 @@ const Wallet = () => {
         } catch (e) {
           if (seq !== bankVerifySeq.current) return;
           setBankNameMatchOk(null);
-          const msg = e?.response?.data?.error || e?.message || 'Verification failed';
-          setBankVerifyError(typeof msg === 'string' ? msg : 'Verification failed');
+          const msg = e?.response?.data?.error || e?.message || t('wallet.bankVerificationFailed');
+          setBankVerifyError(typeof msg === 'string' ? msg : t('wallet.bankVerificationFailed'));
         } finally {
           if (seq === bankVerifySeq.current) setBankVerifyLoading(false);
         }
@@ -539,7 +539,7 @@ const Wallet = () => {
     }, 550);
 
     return () => clearTimeout(delay);
-  }, [bankModalVisible, bankAccountNumber, bankIfsc]);
+  }, [bankModalVisible, bankAccountNumber, bankIfsc, t]);
 
   /** Earnings (ledger) + dues payments + withdrawals processing — sorted by date */
   const recentActivityItems = useMemo(() => {
@@ -700,7 +700,7 @@ const Wallet = () => {
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <MaterialIcons name="account-balance-wallet" size={24} color={colors.primary.main} />
-            <Text style={[styles.cardTitle, { color: colors.text.primary }]}>Wallet</Text>
+            <Text style={[styles.cardTitle, { color: colors.text.primary }]}>{t('wallet.title')}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <TouchableOpacity
@@ -719,7 +719,7 @@ const Wallet = () => {
                   <MaterialIcons name="edit" size={18} color={colors.primary.main} />
                 </View>
               ) : (
-                <Text style={styles.bankButtonText}>Add Bank Account</Text>
+                <Text style={styles.bankButtonText}>{t('wallet.addBankAccount')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -735,12 +735,15 @@ const Wallet = () => {
           ) : (
             <>
               <Text style={styles.noDuesAmount}>₹{available.toFixed(2)}</Text>
-              <Text style={styles.noDuesLabel}>Available balance</Text>
+              <Text style={styles.noDuesLabel}>{t('wallet.availableBalance')}</Text>
             </>
           )}
           {Number(realWallet?.lockedBalance || 0) > 0 ? (
             <Text style={styles.lockedBalanceHint}>
-              ₹{Number(realWallet?.lockedBalance || 0).toFixed(2)} processing (withdrawal in progress)
+              {t('wallet.lockedBalanceHint').replace(
+                '{amount}',
+                Number(realWallet?.lockedBalance || 0).toFixed(2)
+              )}
             </Text>
           ) : null}
         </View>
@@ -772,12 +775,14 @@ const Wallet = () => {
         >
           <>
             <MaterialIcons name={isNegative ? 'payments' : 'north-east'} size={20} color="#FFFFFF" />
-            <Text style={styles.payDuesButtonText}>{isNegative ? 'Clear Dues' : 'Withdraw'}</Text>
+            <Text style={styles.payDuesButtonText}>
+              {isNegative ? t('wallet.clearDues') : t('wallet.withdraw')}
+            </Text>
           </>
         </TouchableOpacity>
 
         {!isNegative && !bankAdded ? (
-          <Text style={styles.inlineHint}>Add bank account to withdraw</Text>
+          <Text style={styles.inlineHint}>{t('wallet.addBankToWithdraw')}</Text>
         ) : null}
       </View>
     );
@@ -788,7 +793,7 @@ const Wallet = () => {
     const maxAvail = Number(((Number(realWallet?.availableBalance ?? 0) - Number(wallet?.totalDues || 0)) || 0).toFixed(2));
     const MIN_WITHDRAW = 100;
     if (!amt || amt <= 0) {
-      setPaymentErrorMessage('Enter a valid amount');
+      setPaymentErrorMessage(t('wallet.enterValidAmount'));
       setPaymentErrorModalVisible(true);
       return;
     }
@@ -797,19 +802,19 @@ const Wallet = () => {
       return;
     }
     if (amt > maxAvail + 0.001) {
-      setPaymentErrorMessage('Amount cannot exceed your withdrawable balance.');
+      setPaymentErrorMessage(t('wallet.amountExceedsWithdrawable'));
       setPaymentErrorModalVisible(true);
       return;
     }
     setWithdrawPhase('loading');
     try {
       const resp = await cashfreeWalletAPI.withdraw({ amount: amt });
-      if (!resp?.success) throw new Error(resp?.error || 'Withdrawal failed');
+      if (!resp?.success) throw new Error(resp?.error || t('wallet.withdrawalFailed'));
       setWithdrawPhase('submitted');
       await loadWallet();
     } catch (e) {
       setWithdrawPhase('idle');
-      setPaymentErrorMessage(e?.response?.data?.error || e?.message || 'Withdrawal failed');
+      setPaymentErrorMessage(e?.response?.data?.error || e?.message || t('wallet.withdrawalFailed'));
       setPaymentErrorModalVisible(true);
     }
   };
@@ -826,25 +831,23 @@ const Wallet = () => {
       const acct = bankAccountNumber.trim();
       const ifsc = bankIfsc.trim().toUpperCase();
       if (!acct || acct.length < 6) {
-        setPaymentErrorMessage('Enter a valid bank account number');
+        setPaymentErrorMessage(t('wallet.enterValidBankAccount'));
         setPaymentErrorModalVisible(true);
         return;
       }
       if (!ifsc || ifsc.length !== 11) {
-        setPaymentErrorMessage('Enter a valid IFSC code');
+        setPaymentErrorMessage(t('wallet.enterValidIfsc'));
         setPaymentErrorModalVisible(true);
         return;
       }
       if (bankNameMatchOk === false) {
-        setPaymentErrorMessage(
-          'Account holder name does not match your profile. Update your profile name or use a bank account registered in your name.'
-        );
+        setPaymentErrorMessage(t('wallet.bankNameMismatch'));
         setPaymentErrorModalVisible(true);
         return;
       }
       setAddingBank(true);
       const resp = await cashfreeWalletAPI.addBankAccount({ bankAccount: acct, ifsc });
-      if (!resp?.success) throw new Error(resp?.error || 'Failed to add bank account');
+      if (!resp?.success) throw new Error(resp?.error || t('wallet.failedAddBankAccount'));
       setBankModalVisible(false);
       setBankAccountNumber('');
       setBankIfsc('');
@@ -857,7 +860,7 @@ const Wallet = () => {
       const msg =
         respData?.error ||
         e?.message ||
-        'Failed to add bank account';
+        t('wallet.failedAddBankAccount');
       const providerMsg = provider ? `\n\nCashfree provider:\n${JSON.stringify(provider)}` : '';
       setPaymentErrorMessage(`${msg}${providerMsg}`);
       setPaymentErrorModalVisible(true);
@@ -870,7 +873,7 @@ const Wallet = () => {
     const formatDate = (date) => {
       if (!date) return '—';
       const d = new Date(date);
-      return d.toLocaleDateString('en-IN', {
+      return d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -1085,10 +1088,8 @@ const Wallet = () => {
             <View style={styles.errorIconContainer}>
               <MaterialIcons name="info" size={64} color={colors.warning.main} />
             </View>
-            <Text style={styles.modalTitle}>Minimum withdrawal</Text>
-            <Text style={styles.modalSubtitle}>
-              Minimum withdrawal is ₹100 per transfer.
-            </Text>
+            <Text style={styles.modalTitle}>{t('wallet.minimumWithdrawTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{t('wallet.minimumWithdrawMessage')}</Text>
             <View style={[styles.modalActions, styles.modalActionsCentered]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSubmitButton]}
@@ -1112,19 +1113,18 @@ const Wallet = () => {
           {withdrawPhase === 'loading' ? (
             <View style={[styles.modalContent, styles.withdrawProcessingBox]}>
               <ActivityIndicator size="large" color={colors.primary.main} />
-              <Text style={[styles.modalTitle, styles.withdrawProcessingTitle]}>Submitting request…</Text>
-              <Text style={styles.modalSubtitle}>Connecting to payout service.</Text>
+              <Text style={[styles.modalTitle, styles.withdrawProcessingTitle]}>
+                {t('wallet.submittingRequest')}
+              </Text>
+              <Text style={styles.modalSubtitle}>{t('wallet.connectingPayout')}</Text>
             </View>
           ) : withdrawPhase === 'submitted' ? (
             <View style={styles.modalContent}>
               <View style={styles.successIconContainer}>
                 <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
               </View>
-              <Text style={styles.modalTitle}>Withdrawal request submitted</Text>
-              <Text style={styles.modalSubtitle}>
-                Your request is in progress. Track status under Withdrawal history — it will show Paid when
-                the bank transfer completes.
-              </Text>
+              <Text style={styles.modalTitle}>{t('wallet.withdrawalSubmittedTitle')}</Text>
+              <Text style={styles.modalSubtitle}>{t('wallet.withdrawalSubmittedMessage')}</Text>
               <View style={[styles.modalActions, styles.modalActionsCentered]}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
@@ -1168,10 +1168,8 @@ const Wallet = () => {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Add Bank Account</Text>
-                <Text style={styles.modalSubtitle}>
-                  Enter your bank details. The account holder name must match your profile name.
-                </Text>
+                <Text style={styles.modalTitle}>{t('wallet.addBankAccount')}</Text>
+                <Text style={styles.modalSubtitle}>{t('wallet.addBankModalSubtitle')}</Text>
 
                 <View style={{ gap: spacing.sm }}>
                   <TextInput
@@ -1180,7 +1178,7 @@ const Wallet = () => {
                       setBankAccountNumber(v);
                       setBankVerifyError('');
                     }}
-                    placeholder="Bank account number"
+                    placeholder={t('wallet.bankAccountPlaceholder')}
                     keyboardType="default"
                     placeholderTextColor={colors.text.secondary}
                     style={styles.textInput}
@@ -1195,7 +1193,7 @@ const Wallet = () => {
                       setBankIfsc(next);
                       setBankVerifyError('');
                     }}
-                    placeholder="IFSC code"
+                    placeholder={t('wallet.ifscPlaceholder')}
                     autoCapitalize="characters"
                     placeholderTextColor={colors.text.secondary}
                     style={styles.textInput}
@@ -1204,7 +1202,7 @@ const Wallet = () => {
                   {bankVerifyLoading ? (
                     <View style={styles.bankVerifyRow}>
                       <ActivityIndicator size="small" color={colors.primary.main} />
-                      <Text style={styles.bankVerifyHint}>Verifying with bank…</Text>
+                      <Text style={styles.bankVerifyHint}>{t('wallet.verifyingWithBank')}</Text>
                     </View>
                   ) : null}
                   {bankVerifyError ? <Text style={styles.bankVerifyErr}>{bankVerifyError}</Text> : null}
@@ -1215,7 +1213,9 @@ const Wallet = () => {
                         bankNameMatchOk ? styles.bankNameOk : styles.bankNameBad,
                       ]}
                     >
-                      {bankNameMatchOk ? 'Name matches your profile' : 'Name does not match your profile'}
+                      {bankNameMatchOk
+                        ? t('wallet.nameMatchesProfile')
+                        : t('wallet.nameDoesNotMatchProfile')}
                     </Text>
                   ) : null}
                 </View>
@@ -1249,7 +1249,7 @@ const Wallet = () => {
                     {addingBank ? (
                       <ActivityIndicator color="#FFFFFF" size="small" />
                     ) : (
-                      <Text style={styles.modalSubmitText}>Save</Text>
+                      <Text style={styles.modalSubmitText}>{t('common.save')}</Text>
                     )}
                   </TouchableOpacity>
                 </View>

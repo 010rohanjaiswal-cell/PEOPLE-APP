@@ -9,6 +9,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 
@@ -91,6 +92,7 @@ function createFreelancerProfileStyles(colors) {
 
 const Profile = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { colors } = useTheme();
   const styles = useMemo(() => createFreelancerProfileStyles(colors), [colors]);
 
@@ -199,11 +201,12 @@ const Profile = () => {
     return null;
   }
 
-  const displayName = verification?.fullName || user.fullName || 'Freelancer';
+  const displayName = verification?.fullName || user.fullName || t('common.freelancer');
   const age = calculateAge(verification?.dob);
   const gender = verification?.gender || null;
   const address = verification?.address || null;
-  const phone = user.phone || 'N/A';
+  const phone = user.phone || t('freelancerProfile.notAvailable');
+  const na = t('freelancerProfile.notAvailable');
 
   return (
     <ScrollView style={styles.container}>
@@ -218,7 +221,7 @@ const Profile = () => {
               </View>
             )}
             <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.role}>Freelancer</Text>
+            <Text style={styles.role}>{t('common.freelancer')}</Text>
           </View>
 
           {loading ? (
@@ -230,41 +233,43 @@ const Profile = () => {
               {!verification && (
                 <View style={styles.infoMessage}>
                   <MaterialIcons name="info-outline" size={20} color={colors.text.secondary} />
-                  <Text style={styles.infoMessageText}>
-                    Verification details will appear here after you submit your verification.
-                  </Text>
+                  <Text style={styles.infoMessageText}>{t('freelancerProfile.verificationHint')}</Text>
                 </View>
               )}
 
               <View style={styles.infoRow}>
                 <MaterialIcons name="person" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoLabel}>Name:</Text>
+                <Text style={styles.infoLabel}>{t('freelancerProfile.nameLabel')}</Text>
                 <Text style={styles.infoText}>{displayName}</Text>
               </View>
 
               <View style={styles.infoRow}>
                 <MaterialIcons name="cake" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoLabel}>Age:</Text>
+                <Text style={styles.infoLabel}>{t('freelancerProfile.ageLabel')}</Text>
                 <Text style={styles.infoText}>
-                  {age !== null ? `${age} years` : verification?.dob ? `DOB: ${verification.dob}` : 'N/A'}
+                  {age !== null
+                    ? t('freelancerProfile.yearsOld').replace('{age}', String(age))
+                    : verification?.dob
+                      ? t('freelancerProfile.dobLine').replace('{dob}', String(verification.dob))
+                      : na}
                 </Text>
               </View>
 
               <View style={styles.infoRow}>
                 <MaterialIcons name="wc" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoLabel}>Gender:</Text>
-                <Text style={styles.infoText}>{gender || 'N/A'}</Text>
+                <Text style={styles.infoLabel}>{t('freelancerProfile.genderLabel')}</Text>
+                <Text style={styles.infoText}>{gender || na}</Text>
               </View>
 
               <View style={styles.infoRow}>
                 <MaterialIcons name="location-on" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoLabel}>Address:</Text>
-                <Text style={styles.infoText}>{address || 'N/A'}</Text>
+                <Text style={styles.infoLabel}>{t('freelancerProfile.addressLabel')}</Text>
+                <Text style={styles.infoText}>{address || na}</Text>
               </View>
 
               <View style={styles.infoRow}>
                 <MaterialIcons name="phone" size={20} color={colors.text.secondary} />
-                <Text style={styles.infoLabel}>Mobile:</Text>
+                <Text style={styles.infoLabel}>{t('freelancerProfile.mobileLabel')}</Text>
                 <Text style={styles.infoText}>{phone}</Text>
               </View>
             </View>

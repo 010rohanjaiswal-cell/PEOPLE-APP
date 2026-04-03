@@ -82,8 +82,9 @@ function createStyles(colors, isDark) {
     },
     tab: {
       flex: 1,
-      paddingVertical: 10,
-      borderRadius: spacing.md,
+      paddingVertical: 6,
+      minHeight: 34,
+      borderRadius: spacing.sm,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.cardBackground,
@@ -94,9 +95,9 @@ function createStyles(colors, isDark) {
       backgroundColor: colors.primary.light,
     },
     tabText: {
-      ...typography.body,
+      ...typography.small,
       color: isDark ? colors.text.primary : colors.text.secondary,
-      fontWeight: '700',
+      fontWeight: '600',
     },
     tabTextActive: {
       color: isDark ? colors.text.primary : colors.primary.main,

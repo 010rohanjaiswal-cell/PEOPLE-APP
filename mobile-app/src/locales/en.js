@@ -306,6 +306,48 @@ export default {
     referralRewardCredited: 'Referral reward credited',
     withdrawalProcessing: 'Withdrawal processing',
     duesPaidActivity: 'Dues paid',
+    title: 'Wallet',
+    addBankAccount: 'Add Bank Account',
+    availableBalance: 'Available balance',
+    lockedBalanceHint: '₹{amount} processing (withdrawal in progress)',
+    clearDues: 'Clear Dues',
+    withdraw: 'Withdraw',
+    addBankToWithdraw: 'Add bank account to withdraw',
+    enterValidAmount: 'Enter a valid amount',
+    amountExceedsWithdrawable: 'Amount cannot exceed your withdrawable balance.',
+    withdrawalFailed: 'Withdrawal failed',
+    enterValidBankAccount: 'Enter a valid bank account number',
+    enterValidIfsc: 'Enter a valid IFSC code',
+    bankNameMismatch:
+      'Account holder name does not match your profile. Update your profile name or use a bank account registered in your name.',
+    failedAddBankAccount: 'Failed to add bank account',
+    minimumWithdrawTitle: 'Minimum withdrawal',
+    minimumWithdrawMessage: 'Minimum withdrawal is ₹100 per transfer.',
+    submittingRequest: 'Submitting request…',
+    connectingPayout: 'Connecting to payout service.',
+    withdrawalSubmittedTitle: 'Withdrawal request submitted',
+    withdrawalSubmittedMessage:
+      'Your request is in progress. Track status under Withdrawal history — it will show Paid when the bank transfer completes.',
+    addBankModalSubtitle:
+      'Enter your bank details. The account holder name must match your profile name.',
+    bankAccountPlaceholder: 'Bank account number',
+    ifscPlaceholder: 'IFSC code',
+    verifyingWithBank: 'Verifying with bank…',
+    nameMatchesProfile: 'Name matches your profile',
+    nameDoesNotMatchProfile: 'Name does not match your profile',
+    bankVerificationFailed: 'Verification failed',
+  },
+  freelancerProfile: {
+    verificationHint:
+      'Verification details will appear here after you submit your verification.',
+    nameLabel: 'Name:',
+    ageLabel: 'Age:',
+    yearsOld: '{age} years',
+    dobLine: 'DOB: {dob}',
+    genderLabel: 'Gender:',
+    addressLabel: 'Address:',
+    mobileLabel: 'Mobile:',
+    notAvailable: 'N/A',
   },
   orders: {
     failedLoadOrders: 'Failed to load orders',
@@ -416,6 +458,115 @@ export default {
     orders: 'Orders',
     profile: 'Profile',
     settings: 'Settings',
+    support: 'Support',
+  },
+  support: {
+    title: 'Support',
+    subtitle: 'Need help? Call us or chat with our team.',
+    callToUs: 'Call to us',
+    chatWithUs: 'Chat with us',
+    phoneHint: 'Support: {phone}',
+    chatTitle: 'Support',
+    typeMessage: 'Type a message...',
+    noMessages: 'No messages yet',
+    botGreeting:
+      "Hi! I'm the People Support bot. Tell me what's not working and I’ll guide you step-by-step.\n\nExamples: OTP not coming, wallet withdraw, address/pincode, verification, jobs not showing, payment failed.",
+    botAskIssue: 'Please describe the issue you are facing.',
+    botLoginOtp:
+      'Login/OTP help:\n- Check network and try again.\n- Ensure the phone number is correct.\n- Wait 30–60 seconds and retry.\n- If OTP is still not coming, restart the app and try again.\n\nIf it still fails, use Call to us from Support.',
+    botLanguage:
+      'Language/translation help:\n- Go to the language selector on the dashboard.\n- Switch to Hindi/English and reopen the page.\n- If some text is still English, tell me which screen and which text.',
+    botWallet:
+      'Wallet/withdrawal help:\n- Add a bank account (correct IFSC).\n- Minimum withdrawal is ₹100.\n- If name mismatch shows, your bank account name must match your profile name.\n- If withdrawal is processing, wait until it completes.\n\nTell me what exact error you see.',
+    botAddress:
+      'Address/map pin help:\n- In address picker, choose from search list OR use Map pin.\n- After selecting, ensure a 6-digit pincode appears.\n- If pincode not found, pick a more specific location or try map pin slightly closer.\n\nTell me what step is failing.',
+    botVerification:
+      'Verification help:\n- Upload clear Aadhaar/PAN photos.\n- Ensure details match your documents.\n- Good lighting for face verification.\n\nTell me which verification step is stuck (Aadhaar/PAN/face).',
+    botJobs:
+      'Jobs help:\n- Pull to refresh Available Jobs.\n- Check if your verification is approved.\n- Some jobs may be filtered by category/gender preference.\n\nTell me: are you seeing “No jobs” or a specific error?',
+    botPayments:
+      'Payment help:\n- If payment is pending/failed, wait 1–2 minutes and reopen Wallet.\n- Ensure UPI/bank app is working.\n- If charged but status not updated, refresh wallet and check again.\n\nTell me the payment status/error text.',
+    botFallback:
+      "I can help with OTP/login, wallet/withdrawal, address/pincode, verification, jobs, and payments.\n\nWhich one is your issue?",
+  },
+  supportBot: {
+    greeting: "Hi! I'm the People Support bot.",
+    tapStart: 'Tap “Start chat” to begin.',
+    startChat: 'Start chat',
+    common: {
+      back: 'Back',
+      cancelChat: 'Cancel chat',
+    },
+    root: {
+      text: 'Please choose a category:',
+      orders: 'Order related issues',
+      wallet: 'Wallet issues',
+      withdrawal: 'Withdrawal issues',
+    },
+    orders: {
+      text: 'Order related issues — choose one:',
+      cancelOrder: 'Cancel the order',
+      cannotContact: 'Not able to contact customer',
+      customerAskingCancel: 'Customer is asking to cancel the order',
+    },
+    wallet: {
+      text: 'Wallet issues — choose one:',
+      withdrawnNotCredited: 'Withdrawn not credited',
+      duesNotReflecting: 'Paid dues but not reflecting in wallet',
+      paymentProcessing: 'Payment is in processing',
+      paymentStatus: 'Payment status',
+    },
+    withdrawal: {
+      text: 'Withdrawal issues — choose one:',
+      cannotAddBank: 'Not able to add bank account',
+      paymentStatus: 'Payment status',
+      withdrawalAmount: 'Withdrawal amount',
+      notReceived: 'Not received',
+    },
+    ordersCancel: {
+      text:
+        'Cancel the order:\n- Open Orders and select the order.\n- If cancel is available, use Cancel.\n- If cancel is not available, ask the customer to cancel OR call support.',
+    },
+    ordersContact: {
+      text:
+        'Not able to contact customer:\n- Check network.\n- Try calling again after 1–2 minutes.\n- If still not reachable, message the customer (if available) and wait.\n- If urgent, call support.',
+    },
+    ordersCustomerCancel: {
+      text:
+        'Customer asking to cancel:\n- Ask the customer to cancel from their side if possible.\n- If you can cancel from Orders, do it.\n- If neither works, call support.',
+    },
+    walletWithdrawNotCredited: {
+      text:
+        'Withdrawn not credited:\n- Check if status is Processing/Paid in wallet history.\n- If Processing, wait for bank transfer.\n- If Paid but not received after some time, call support with transaction details.',
+    },
+    walletDuesNotReflecting: {
+      text:
+        'Paid dues not reflecting:\n- Refresh Wallet.\n- Wait 1–2 minutes and reopen Wallet.\n- If still not updated, note payment time and call support.',
+    },
+    walletProcessing: {
+      text:
+        'Payment processing:\n- Wait 1–2 minutes.\n- Reopen Wallet and refresh.\n- Avoid paying again if you were already charged.\n- If stuck for long, call support.',
+    },
+    walletStatus: {
+      text:
+        'Payment status:\n- Open Wallet and check recent activity.\n- If pending, wait and refresh.\n- If failed but money deducted, wait a bit and check again.\n- If mismatch continues, call support.',
+    },
+    withdrawalAddBank: {
+      text:
+        'Not able to add bank account:\n- Check account number and IFSC.\n- Ensure bank account name matches your profile name.\n- Try again after some time.\n- If still failing, call support.',
+    },
+    withdrawalStatus: {
+      text:
+        'Withdrawal payment status:\n- Check wallet withdrawal history.\n- Processing means bank transfer is ongoing.\n- Paid means transfer completed.\n- If paid but not received, call support.',
+    },
+    withdrawalAmountHelp: {
+      text:
+        'Withdrawal amount:\n- Minimum withdrawal is ₹100.\n- Amount cannot exceed withdrawable balance.\n- If dues are pending, clear dues first.\n\nIf you still see an error, call support.',
+    },
+    withdrawalNotReceived: {
+      text:
+        'Not received:\n- Check status in wallet history.\n- If Paid but not received after some time, call support.\n- Keep your bank last 4 digits/UPI and the time ready.',
+    },
   },
   legalAcceptance: {
     leadIn: 'I have read and understood the ',

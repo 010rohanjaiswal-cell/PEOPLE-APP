@@ -32,6 +32,8 @@ import OrdersScreen from './Orders';
 import ProfileScreen from './Profile';
 import SettingsScreen from './Settings';
 import ReferralScreen from './Referral';
+import SupportScreen from './Support';
+import SupportChatScreen from './SupportChat';
 
 function createFreelancerDashboardStyles(colors) {
   return StyleSheet.create({
@@ -381,6 +383,14 @@ const FreelancerDashboard = () => {
     { key: 'MyJobs', labelKey: 'myJobs', icon: 'check-circle', component: MyJobsScreen },
   ];
 
+  const handleDrawerBack = () => {
+    setDrawerScreenStack((s) => {
+      const next = s.slice(0, -1);
+      if (next.length === 0) setActiveTab('AvailableJobs');
+      return next;
+    });
+  };
+
   // Drawer menu items (screens accessible from drawer)
   const drawerScreens = {
     Wallet: WalletScreen,
@@ -388,6 +398,8 @@ const FreelancerDashboard = () => {
     Profile: ProfileScreen,
     Settings: SettingsScreen,
     Referral: ReferralScreen,
+    Support: (props) => <SupportScreen {...props} onNavigate={handleDrawerNavigation} />,
+    SupportChat: (props) => <SupportChatScreen {...props} onBack={handleDrawerBack} />,
   };
 
   // Determine which screen to show
@@ -673,6 +685,14 @@ const FreelancerDashboard = () => {
                 >
                   <MaterialIcons name="card-giftcard" size={24} color={colors.text.primary} />
                   <Text style={styles.drawerMenuItemText}>{t('referral.title')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => handleDrawerNavigation('Support')}
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="support-agent" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.support')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />
