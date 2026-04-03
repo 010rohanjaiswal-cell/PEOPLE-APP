@@ -4,11 +4,14 @@
  */
 
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const SupportTicket = require('../models/SupportTicket');
 const Job = require('../models/Job');
 const User = require('../models/User');
+
+const BOT_BLOCKED_8H_KEY = 'supportTicket.bot.blocked8hAndEnd';
 
 function now() {
   return new Date();
@@ -170,9 +173,17 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
     if (ticket.status !== 'open') return res.status(400).json({ success: false, error: 'Ticket is not open' });
 
     const freelancerId = user._id;
+    let freelancerOid = freelancerId;
+    if (!(freelancerId instanceof mongoose.Types.ObjectId)) {
+      try {
+        freelancerOid = new mongoose.Types.ObjectId(String(freelancerId));
+      } catch {
+        freelancerOid = freelancerId;
+      }
+    }
 
     const job = await Job.findOne({
-      assignedFreelancer: freelancerId,
+      assignedFreelancer: freelancerOid,
       status: { $in: ['assigned', 'work_done'] },
     });
 
@@ -185,36 +196,48 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
       unassignedJobId = job._id;
     }
 
-    const blockedUntil = hoursFromNow(8);
-    await User.updateOne(
-      { _id: freelancerId },
-      { $set: { freelancerPickupBlockedUntil: blockedUntil } }
-    );
-
     ticket.effects.unassignedJobId = unassignedJobId;
-    ticket.effects.pickupBlockedUntil = blockedUntil;
-    ticket.messages.push({
-      sender: 'system',
-      textKey: unassignedJobId
-        ? 'supportTicket.system.unassigned'
-        : 'supportTicket.system.noAssignedJob',
-      meta: { unassignedJobId, blockedUntil },
-      createdAt: now(),
-    });
-    ticket.messages.push({
-      sender: 'bot',
-      textKey: 'supportTicket.bot.blocked8hAndEnd',
-      params: { hours: 8 },
-      createdAt: now(),
-    });
-    ticket.currentNodeId = 'end_ready';
+    if (unassignedJobId) {
+      const blockedUntil = hoursFromNow(8);
+      await User.updateOne(
+        { _id: freelancerId },
+        { $set: { freelancerPickupBlockedUntil: blockedUntil } }
+      );
+
+      ticket.effects.pickupBlockedUntil = blockedUntil;
+      ticket.messages.push({
+        sender: 'system',
+        textKey: 'supportTicket.system.unassigned',
+        meta: { unassignedJobId, blockedUntil },
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportTicket.bot.blocked8hAndEnd',
+        params: { hours: 8 },
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+    } else {
+      ticket.effects.pickupBlockedUntil = null;
+      // Drop stale 8h bubbles from earlier sessions/bugs so "no job" path never shows them
+      ticket.messages = ticket.messages.filter((m) => m.textKey !== BOT_BLOCKED_8H_KEY);
+      ticket.messages.push({
+        sender: 'system',
+        textKey: 'supportTicket.system.noAssignedJob',
+        meta: { unassignedJobId: null },
+        createdAt: now(),
+      });
+      // Keep the flow in orders menu (no End chat)
+      ticket.currentNodeId = 'orders';
+    }
     await ticket.save();
 
     res.json({
       success: true,
       unassigned: Boolean(unassignedJobId),
       unassignedJobId,
-      pickupBlockedUntil: blockedUntil,
+      pickupBlockedUntil: ticket.effects.pickupBlockedUntil,
       ticket,
     });
   } catch (e) {

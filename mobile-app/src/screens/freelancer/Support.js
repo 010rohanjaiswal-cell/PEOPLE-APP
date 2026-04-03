@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Linking,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
@@ -120,6 +129,7 @@ export default function Support({ onNavigate }) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [tickets, setTickets] = useState([]);
   const [loadingTickets, setLoadingTickets] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleCall = () => {
     Linking.openURL(`tel:${SUPPORT_PHONE}`);
@@ -135,6 +145,15 @@ export default function Support({ onNavigate }) {
       setTickets([]);
     } finally {
       setLoadingTickets(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await loadTickets();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -163,7 +182,18 @@ export default function Support({ onNavigate }) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ gap: spacing.lg }}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ gap: spacing.lg }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[colors.primary.main]}
+          tintColor={colors.primary.main}
+        />
+      }
+    >
       <View>
         <Text style={styles.title}>{t('support.title')}</Text>
         <Text style={styles.subtitle}>{t('support.subtitle')}</Text>

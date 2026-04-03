@@ -25,6 +25,18 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supportAPI } from '../../api';
 
+/** Must match backend key for the 8h pickup block bot line (strip when cancel finds no job). */
+const BOT_BLOCKED_8H_TEXT_KEY = 'supportTicket.bot.blocked8hAndEnd';
+
+/** Hide orphaned 8h bubbles when this ticket has no active unassign / block side-effects. */
+function ticketMessagesForDisplay(ticket) {
+  const msgs = ticket?.messages || [];
+  const hasActiveUnassignEffect =
+    Boolean(ticket?.effects?.unassignedJobId) || Boolean(ticket?.effects?.pickupBlockedUntil);
+  if (hasActiveUnassignEffect) return msgs;
+  return msgs.filter((m) => m.textKey !== BOT_BLOCKED_8H_TEXT_KEY);
+}
+
 function createStyles(colors, insets) {
   return StyleSheet.create({
     container: {
@@ -286,7 +298,7 @@ export default function SupportChat({ onBack }) {
       setTicketStatus(resp.ticket.status || 'open');
       setChatStarted(true);
       setNodeId(resp.ticket.currentNodeId || 'root');
-      const msgs = (resp.ticket.messages || []).map((m) => ({
+      const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
         _id: m._id || nowId(),
         sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
         message: renderTicketText(m),
@@ -330,7 +342,7 @@ export default function SupportChat({ onBack }) {
         if (resp?.success && resp.ticket) {
           setNodeId(resp.ticket.currentNodeId || 'end_ready');
           setTicketStatus(resp.ticket.status || 'open');
-          const msgs = (resp.ticket.messages || []).map((m) => ({
+          const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
             _id: m._id || nowId(),
             sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
             message: renderTicketText(m),
@@ -364,7 +376,7 @@ export default function SupportChat({ onBack }) {
           setChatStarted(resp.ticket.status === 'open');
           setTicketStatus(resp.ticket.status || 'open');
           setNodeId(resp.ticket.currentNodeId || 'root');
-          const msgs = (resp.ticket.messages || []).map((m) => ({
+          const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
             _id: m._id || nowId(),
             sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
             message: renderTicketText(m),
