@@ -130,6 +130,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  /** Shallow-merge into stored user (e.g. after GET /profile) without dropping fields like isNewUser. */
+  const mergeUser = useCallback((partial) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...partial };
+      AsyncStorage.setItem('userData', JSON.stringify(next)).catch(() => {});
+      if (partial && Object.prototype.hasOwnProperty.call(partial, 'isNewUser')) {
+        setIsNewUser(Boolean(partial.isNewUser));
+      }
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -141,8 +154,9 @@ export const AuthProvider = ({ children }) => {
       loginWithToken,
       logout,
       updateUser,
+      mergeUser,
     }),
-    [user, token, loading, isAuthenticated, isNewUser, login, loginWithToken, logout, updateUser]
+    [user, token, loading, isAuthenticated, isNewUser, login, loginWithToken, logout, updateUser, mergeUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -31,6 +31,18 @@ function isDeliveryCategory(category) {
   return String(category || '').trim().toLowerCase() === 'delivery';
 }
 
+async function clearExpiredFreelancerPickupBlock(user) {
+  if (!user || !user._id) return;
+  const raw = user.freelancerPickupBlockedUntil;
+  if (raw == null) return;
+  const until = new Date(raw);
+  const ms = until.getTime();
+  if (Number.isNaN(ms) || ms <= Date.now()) {
+    await User.updateOne({ _id: user._id }, { $unset: { freelancerPickupBlockedUntil: 1 } });
+    user.freelancerPickupBlockedUntil = null;
+  }
+}
+
 /** Normalize verification/profile gender to Job schema values. */
 function normalizeFreelancerProfileGender(genderRaw) {
   if (genderRaw == null) return null;
@@ -1465,6 +1477,18 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       });
     }
 
+    await clearExpiredFreelancerPickupBlock(user);
+    const blockedUntilPickup = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntilPickup && blockedUntilPickup.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot pick jobs right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        reason: 'support_cancel_unassign_cooldown',
+        blockedUntil: blockedUntilPickup,
+      });
+    }
+
     const freelancerId = user._id || user.id;
 
     // Check unpaid dues - cannot pickup jobs if dues > 450rs
@@ -1573,6 +1597,18 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       return res.status(403).json({
         success: false,
         error: 'Only freelancers can apply to jobs',
+      });
+    }
+
+    await clearExpiredFreelancerPickupBlock(user);
+    const blockedUntilApply = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntilApply && blockedUntilApply.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot apply for jobs right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        reason: 'support_cancel_unassign_cooldown',
+        blockedUntil: blockedUntilApply,
       });
     }
 
@@ -1712,6 +1748,18 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       return res.status(403).json({
         success: false,
         error: 'Only freelancers can make offers',
+      });
+    }
+
+    await clearExpiredFreelancerPickupBlock(user);
+    const blockedUntilOffer = user.freelancerPickupBlockedUntil ? new Date(user.freelancerPickupBlockedUntil) : null;
+    if (blockedUntilOffer && blockedUntilOffer.getTime() > Date.now()) {
+      return res.status(403).json({
+        success: false,
+        error: 'You cannot make offers right now. Please try again later.',
+        code: 'FREELANCER_PICKUP_BLOCKED',
+        reason: 'support_cancel_unassign_cooldown',
+        blockedUntil: blockedUntilOffer,
       });
     }
 

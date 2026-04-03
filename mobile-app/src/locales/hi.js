@@ -184,7 +184,11 @@ export default {
     cannotApplyActiveJob: 'आपके पास पहले से सक्रिय नौकरी है। नई नौकरी पर आवेदन से पहले उसे पूरा करें।',
     failedApply: 'आवेदन भेजने में विफल',
     pickupApplyBlockedDetail:
-      'सर्वर पर पुराना कूलडाउन लगा हो सकता है। कूलडाउन तक: {time}\n\nऐप अपडेट करके फिर कोशिश करें, या सपोर्ट से कूलडाउन हटवाएं।',
+      'पिकअप, आवेदन और ऑफर तब तक रुके: {time} (सपोर्ट से अनअसाइन के बाद)।\n\nगलत लगे तो सपोर्ट से संपर्क करें।',
+    workCooldownBanner: 'आप दोबारा काम शुरू कर सकते हैं:',
+    workCooldownShort: '8 घंटे प्रतीक्षा',
+    workCooldownBlocked:
+      'सपोर्ट से अनअसाइन के बाद 8 घंटे तक पिकअप, आवेदन और ऑफर बंद रहते हैं।',
     appliedSuccessfully: 'सफलतापूर्वक आवेदन किया गया',
     viewApplications: 'आवेदन देखें',
     openDirectionsA11y: 'Google Maps में दिशा-निर्देश — नौकरी स्थल से आपके स्थान तक, साइकिल मोड',
@@ -499,6 +503,7 @@ export default {
     endChat: 'End chat',
     common: {
       back: 'वापस',
+      mainMenu: 'मुख्य मेनू',
       cancelChat: 'चैट बंद करें',
     },
     root: {
@@ -512,9 +517,9 @@ export default {
       cancelOrder: 'ऑर्डर कैंसल करना है',
       cannotContact: 'कस्टमर से संपर्क नहीं हो रहा',
       customerAskingCancel: 'कस्टमर ऑर्डर कैंसल करने को कह रहा है',
-      cancelConfirmTitle: 'अपनी नौकरी अनअसाइन करें?',
+      cancelConfirmTitle: 'ऑर्डर कैंसल?',
       cancelConfirmBody:
-        'अगर आपकी कोई असाइन नौकरी है, तो आगे बढ़ने पर वह अनअसाइन हो जाएगी और नौकरी दोबारा ओपन लिस्ट में चली जाएगी। केवल तभी जारी रखें जब वाकई जरूरी हो।',
+        'अगर आप नौकरी अनअसाइन करते हैं, तो अगले 8 घंटे तक आप किसी भी नौकरी पर आवेदन या ऑफर नहीं कर पाएंगे।',
       cancelConfirmContinue: 'जारी रखें',
     },
     wallet: {
@@ -587,7 +592,7 @@ export default {
     },
     bot: {
       blocked8hAndEnd:
-        'अनअसाइन के बाद लगभग {hours} घंटे तक नई जॉब लेने से बचें। हो जाए तो End chat पर टैप करें।',
+        'अनअसाइन के बाद लगभग {hours} घंटे तक पिकअप, आवेदन और ऑफर नहीं कर सकते। हो जाए तो End chat पर टैप करें।',
     },
   },
   legalAcceptance: {

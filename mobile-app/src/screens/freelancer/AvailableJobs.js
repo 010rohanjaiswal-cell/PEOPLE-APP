@@ -521,7 +521,7 @@ function createAvailableJobsStyles(colors) {
 });
 }
 
-const AvailableJobs = ({ onJobPickedUp }) => {
+const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
   const { user } = useAuth();
   const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords, requestPermission } = useLocation();
@@ -732,6 +732,10 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   }, [locale, jobs]);
 
   const handlePickupJob = async (job) => {
+    if (workCooldownRemainMs > 0) {
+      Alert.alert(t('jobs.cannotPickup'), t('jobs.workCooldownBlocked'));
+      return;
+    }
     if (!canWork) {
       Alert.alert(t('jobs.cannotPickup'), t('jobs.cannotPickupPayDues'));
       return;
@@ -773,6 +777,10 @@ const AvailableJobs = ({ onJobPickedUp }) => {
   };
 
   const handleApplyJob = (job) => {
+    if (workCooldownRemainMs > 0) {
+      Alert.alert(t('jobs.cannotApply'), t('jobs.workCooldownBlocked'));
+      return;
+    }
     if (!canWork) {
       Alert.alert(t('jobs.cannotApply'), t('jobs.cannotApplyPayDues'));
       return;
@@ -873,6 +881,10 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     t('postJob.category' + (JOB_CATEGORY_I18N_KEYS[cat] || cat.replace(/\s/g, '')));
 
   const openOfferModal = (job) => {
+    if (workCooldownRemainMs > 0) {
+      Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.workCooldownBlocked'));
+      return;
+    }
     if (!canWork) {
       Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.cannotMakeOfferPayDues'));
       return;
@@ -1000,9 +1012,11 @@ const AvailableJobs = ({ onJobPickedUp }) => {
     // Check if job is already picked up (by any freelancer)
     const isPickedUp = item.assignedFreelancer || item.status !== 'open';
     // Can only pickup if: canWork is true, job is not picked up, and freelancer doesn't have active job
-    const canPickup = canWork && !isPickedUp && !hasActiveJob;
+    const workCooldownActive = workCooldownRemainMs > 0;
+    const canPickup = canWork && !isPickedUp && !hasActiveJob && !workCooldownActive;
     // Can make offer if: canWork is true, no cooldown, job not picked up, and no active job
-    const canMakeOffer = canWork && cooldownMinutes === 0 && !isPickedUp && !hasActiveJob;
+    const canMakeOffer =
+      canWork && cooldownMinutes === 0 && !isPickedUp && !hasActiveJob && !workCooldownActive;
 
     const jobId = item._id || item.id;
     const tr = locale === 'hi' && translatedJobs[jobId];
@@ -1015,6 +1029,7 @@ const AvailableJobs = ({ onJobPickedUp }) => {
       canWork &&
       !isPickedUp &&
       !hasActiveJob &&
+      !workCooldownActive &&
       !isWaitingApp &&
       (myApp == null || myApp.status === 'rejected');
     const applyingThis = applyingJobId === jobId;
@@ -1110,9 +1125,11 @@ const AvailableJobs = ({ onJobPickedUp }) => {
               { color: canPickup ? '#FFFFFF' : colors.text.muted },
             ]}
           >
-            {!canWork 
-              ? t('jobs.payDues') 
-              : isPickedUp 
+            {!canWork
+              ? t('jobs.payDues')
+              : workCooldownActive
+              ? t('jobs.workCooldownShort')
+              : isPickedUp
               ? t('jobs.alreadyTaken')
               : t('jobs.pickupJob')}
           </Text>
@@ -1145,6 +1162,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           >
             {!canWork
               ? t('jobs.payDues')
+              : workCooldownActive
+              ? t('jobs.workCooldownShort')
               : isPickedUp
               ? t('jobs.alreadyTaken')
               : hasActiveJob
@@ -1179,6 +1198,8 @@ const AvailableJobs = ({ onJobPickedUp }) => {
           >
             {!canWork
               ? t('jobs.payDues')
+              : workCooldownActive
+              ? t('jobs.workCooldownShort')
               : isPickedUp
               ? t('jobs.alreadyTaken')
               : cooldownMinutes > 0

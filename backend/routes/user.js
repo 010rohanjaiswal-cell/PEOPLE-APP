@@ -118,6 +118,15 @@ router.get('/profile', authenticate, async (req, res) => {
     // For freelancers, prefer aggregate computed from per-client ratings (avoids drift if legacy fields exist).
     let averageRating = user.averageRating ?? 0;
     let ratingCount = user.ratingCount ?? 0;
+    let freelancerPickupBlockedUntil = user.freelancerPickupBlockedUntil || null;
+    if (user.role === 'freelancer' && freelancerPickupBlockedUntil) {
+      const blockMs = new Date(freelancerPickupBlockedUntil).getTime();
+      if (Number.isNaN(blockMs) || blockMs <= Date.now()) {
+        await User.updateOne({ _id: user._id }, { $unset: { freelancerPickupBlockedUntil: 1 } });
+        freelancerPickupBlockedUntil = null;
+      }
+    }
+
     if (user.role === 'freelancer') {
       try {
         const agg = await FreelancerRating.aggregate([
@@ -148,6 +157,9 @@ router.get('/profile', authenticate, async (req, res) => {
         verification: verificationData,
         averageRating,
         ratingCount,
+        ...(user.role === 'freelancer'
+          ? { freelancerPickupBlockedUntil }
+          : {}),
       }
     });
   } catch (error) {

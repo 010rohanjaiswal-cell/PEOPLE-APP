@@ -295,11 +295,57 @@ function createFreelancerDashboardStyles(colors) {
   logoutModalButton: {
     backgroundColor: colors.error.main,
   },
+  workCooldownBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.warning.light,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  workCooldownBannerTextCol: {
+    flex: 1,
+  },
+  workCooldownBannerTitle: {
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+  },
+  workCooldownBannerTimer: {
+    ...typography.h3,
+    color: colors.warning.main,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+  },
 });
 }
 
+function formatWorkCooldownHMS(remainingMs) {
+  const totalSec = Math.max(0, Math.floor(remainingMs / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+function WorkCooldownBanner({ remainingMs, styles, colors, t }) {
+  if (remainingMs <= 0) return null;
+  return (
+    <View style={styles.workCooldownBanner}>
+      <MaterialIcons name="timer" size={22} color={colors.warning.main} />
+      <View style={styles.workCooldownBannerTextCol}>
+        <Text style={styles.workCooldownBannerTitle}>{t('jobs.workCooldownBanner')}</Text>
+        <Text style={styles.workCooldownBannerTimer}>{formatWorkCooldownHMS(remainingMs)}</Text>
+      </View>
+    </View>
+  );
+}
+
 const FreelancerDashboard = () => {
-  const { user, logout, updateUser } = useAuth();
+  const { user, logout, mergeUser } = useAuth();
   const { t } = useLanguage();
   const { requestPermission, checkPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
@@ -331,18 +377,32 @@ const FreelancerDashboard = () => {
 
   const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
 
-  // Re-check when this screen gains focus (LocationContext also polls + AppState globally).
-  useFocusEffect(
-    useCallback(() => {
-      checkPermission();
-    }, [checkPermission])
-  );
+  const blockRaw = user?.freelancerPickupBlockedUntil;
+  const [workCooldownRemainMs, setWorkCooldownRemainMs] = useState(0);
+
+  useEffect(() => {
+    const tick = () => {
+      if (!blockRaw) {
+        setWorkCooldownRemainMs(0);
+        return;
+      }
+      const end = new Date(blockRaw).getTime();
+      if (Number.isNaN(end)) {
+        setWorkCooldownRemainMs(0);
+        return;
+      }
+      setWorkCooldownRemainMs(Math.max(0, end - Date.now()));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [blockRaw]);
 
   const refreshUserProfile = useCallback(async () => {
     try {
       const profileResponse = await userAPI.getProfile();
       if (profileResponse.success && profileResponse.user) {
-        await updateUser(profileResponse.user);
+        mergeUser(profileResponse.user);
 
         if (profileResponse.user.verification) {
           setVerification(profileResponse.user.verification);
@@ -371,12 +431,14 @@ const FreelancerDashboard = () => {
     } catch (error) {
       console.error('Error refreshing user profile:', error);
     }
-  }, [updateUser]);
+  }, [mergeUser]);
 
-  // Refresh user profile on mount to get updated profile photo/rating
-  useEffect(() => {
-    refreshUserProfile();
-  }, [refreshUserProfile]);
+  useFocusEffect(
+    useCallback(() => {
+      checkPermission();
+      refreshUserProfile();
+    }, [checkPermission, refreshUserProfile])
+  );
 
   const tabs = [
     { key: 'AvailableJobs', labelKey: 'available', icon: 'work', component: AvailableJobsScreen },
@@ -521,6 +583,12 @@ const FreelancerDashboard = () => {
       </View>
 
       <GpsBanner />
+      <WorkCooldownBanner
+        remainingMs={workCooldownRemainMs}
+        styles={styles}
+        colors={colors}
+        t={t}
+      />
       <NotificationPermissionBanner />
 
         {/* Error Message */}
@@ -569,7 +637,10 @@ const FreelancerDashboard = () => {
       {/* Tab Content */}
       <View style={styles.tabContent}>
         {activeTab === 'AvailableJobs' ? (
-          <AvailableJobsScreen onJobPickedUp={() => setActiveTab('MyJobs')} />
+          <AvailableJobsScreen
+            onJobPickedUp={() => setActiveTab('MyJobs')}
+            workCooldownRemainMs={workCooldownRemainMs}
+          />
         ) : (
           <ActiveScreen />
         )}

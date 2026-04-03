@@ -309,6 +309,9 @@ router.post('/verify-otp', async (req, res) => {
           email: user.email || null,
           verificationStatus: user.verificationStatus || null,
           isNewUser,
+          ...(user.role === 'freelancer'
+            ? { freelancerPickupBlockedUntil: user.freelancerPickupBlockedUntil || null }
+            : {}),
         }
       });
 

@@ -6,7 +6,7 @@
  * If you want a real AI bot (OpenAI, etc.), we should implement a backend endpoint so no secrets are exposed in the app.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -189,6 +189,94 @@ function createStyles(colors, insets) {
       ...typography.button,
       color: '#FFFFFF',
     },
+    modalRoot: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.lg,
+    },
+    modalBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.cardBackground,
+      borderRadius: spacing.lg,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+    },
+    modalTitle: {
+      ...typography.h3,
+      color: colors.text.primary,
+      marginBottom: spacing.sm,
+    },
+    modalBody: {
+      ...typography.body,
+      color: colors.text.secondary,
+      lineHeight: 22,
+      marginBottom: spacing.lg,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    modalButtonSecondary: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      borderRadius: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalButtonSecondaryText: {
+      ...typography.button,
+      color: colors.text.primary,
+      fontSize: 15,
+    },
+    modalButtonPrimary: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      borderRadius: spacing.md,
+      backgroundColor: colors.primary.main,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalButtonPrimaryText: {
+      ...typography.button,
+      color: '#FFFFFF',
+      fontSize: 15,
+    },
+    mainMenuRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.sm,
+      marginTop: spacing.xs,
+    },
+    mainMenuText: {
+      ...typography.small,
+      color: colors.text.muted,
+      fontWeight: '600',
+    },
+    composerStack: {
+      gap: spacing.sm,
+    },
+    mainMenuRowInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
   });
 }
 
@@ -204,8 +292,10 @@ export default function SupportChat({ onBack }) {
   const [nodeId, setNodeId] = useState('root');
   const [ticketId, setTicketId] = useState(null);
   const [ticketStatus, setTicketStatus] = useState('open');
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
 
   const flatListRef = useRef(null);
+  const cancelOrderPayloadRef = useRef(null);
 
   const nowId = () => `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const TICKET_KEY = 'supportTicketId';
@@ -321,6 +411,68 @@ export default function SupportChat({ onBack }) {
     } catch (_) {}
   };
 
+  const goToMainMenu = useCallback(async () => {
+    setNodeId('root');
+    if (ticketId) {
+      try {
+        await supportAPI.append(ticketId, {
+          botTextKey: 'supportBot.root.text',
+          nextNodeId: 'root',
+        });
+      } catch (_) {}
+    }
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [ticketId]);
+
+  const runCancelOrderAfterConfirm = async (opt, label) => {
+    if (!ticketId) return;
+    const userMsg = {
+      _id: nowId(),
+      sender: user?.id || user?._id || 'me',
+      message: label,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    try {
+      await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
+      const resp = await supportAPI.cancelOrderAction(ticketId);
+      if (resp?.success && resp.ticket) {
+        setNodeId(resp.ticket.currentNodeId || 'end_ready');
+        setTicketStatus(resp.ticket.status || 'open');
+        const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
+          _id: m._id || nowId(),
+          sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+          message: renderTicketText(m),
+          createdAt: m.createdAt || new Date(),
+        }));
+        setMessages(msgs);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+        return;
+      }
+    } catch (_) {}
+    const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
+    setNodeId(opt.next);
+    setTimeout(() => {
+      pushBotNode(opt.next);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+    }, 250);
+    try {
+      await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
+    } catch (_) {}
+  };
+
+  const closeCancelModal = () => {
+    setCancelModalVisible(false);
+    cancelOrderPayloadRef.current = null;
+  };
+
+  const confirmCancelOrder = () => {
+    const p = cancelOrderPayloadRef.current;
+    setCancelModalVisible(false);
+    cancelOrderPayloadRef.current = null;
+    if (p) void runCancelOrderAfterConfirm(p.opt, p.label);
+  };
+
   const selectOption = async (opt) => {
     if (!opt) return;
     const label = t(opt.labelKey);
@@ -337,50 +489,8 @@ export default function SupportChat({ onBack }) {
         setMessages((prev) => [...prev, userMsg]);
         return;
       }
-      Alert.alert(t('supportBot.orders.cancelConfirmTitle'), t('supportBot.orders.cancelConfirmBody'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('supportBot.orders.cancelConfirmContinue'),
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              const userMsg = {
-                _id: nowId(),
-                sender: user?.id || user?._id || 'me',
-                message: label,
-                createdAt: new Date(),
-              };
-              setMessages((prev) => [...prev, userMsg]);
-              try {
-                await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
-                const resp = await supportAPI.cancelOrderAction(ticketId);
-                if (resp?.success && resp.ticket) {
-                  setNodeId(resp.ticket.currentNodeId || 'end_ready');
-                  setTicketStatus(resp.ticket.status || 'open');
-                  const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
-                    _id: m._id || nowId(),
-                    sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
-                    message: renderTicketText(m),
-                    createdAt: m.createdAt || new Date(),
-                  }));
-                  setMessages(msgs);
-                  setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-                  return;
-                }
-              } catch (_) {}
-              const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
-              setNodeId(opt.next);
-              setTimeout(() => {
-                pushBotNode(opt.next);
-                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-              }, 250);
-              try {
-                await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
-              } catch (_) {}
-            })();
-          },
-        },
-      ]);
+      cancelOrderPayloadRef.current = { opt, label };
+      setCancelModalVisible(true);
       return;
     }
 
@@ -493,31 +603,73 @@ export default function SupportChat({ onBack }) {
             <Text style={styles.startChatText}>{t('supportBot.startChat')}</Text>
           </TouchableOpacity>
         ) : nodeId === 'end_ready' && ticketStatus === 'open' ? (
-          <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
-            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
-          </TouchableOpacity>
+          <View style={styles.composerStack}>
+            <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
+              <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+              <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalButtonSecondary}
+              onPress={goToMainMenu}
+              activeOpacity={0.85}
+            >
+              <View style={styles.mainMenuRowInline}>
+                <MaterialIcons name="arrow-back" size={20} color={colors.text.primary} />
+                <Text style={styles.modalButtonSecondaryText}>{t('supportBot.common.mainMenu')}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         ) : (
-          <View style={styles.quickReplies}>
-            {(currentNode?.options || []).map((opt) => {
-              const isPrimary = opt.id === 'orders' || opt.id === 'wallet' || opt.id === 'withdrawal';
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[
-                    styles.quickReply,
-                    isPrimary && styles.quickReplyPrimary,
-                  ]}
-                  onPress={() => selectOption(opt)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.quickReplyText}>{t(opt.labelKey)}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View>
+            <View style={styles.quickReplies}>
+              {(currentNode?.options || []).map((opt) => {
+                const isPrimary = opt.id === 'orders' || opt.id === 'wallet' || opt.id === 'withdrawal';
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[
+                      styles.quickReply,
+                      isPrimary && styles.quickReplyPrimary,
+                    ]}
+                    onPress={() => selectOption(opt)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.quickReplyText}>{t(opt.labelKey)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {nodeId !== 'root' ? (
+              <TouchableOpacity style={styles.mainMenuRow} onPress={goToMainMenu} activeOpacity={0.7}>
+                <MaterialIcons name="arrow-back" size={18} color={colors.text.muted} />
+                <Text style={styles.mainMenuText}>{t('supportBot.common.mainMenu')}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </View>
+      <Modal
+        visible={cancelModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCancelModal}
+      >
+        <View style={styles.modalRoot}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeCancelModal} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('supportBot.orders.cancelConfirmTitle')}</Text>
+            <Text style={styles.modalBody}>{t('supportBot.orders.cancelConfirmBody')}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalButtonSecondary} onPress={closeCancelModal} activeOpacity={0.85}>
+                <Text style={styles.modalButtonSecondaryText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalButtonPrimary} onPress={confirmCancelOrder} activeOpacity={0.85}>
+                <Text style={styles.modalButtonPrimaryText}>{t('supportBot.orders.cancelConfirmContinue')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

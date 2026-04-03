@@ -183,7 +183,11 @@ export default {
     cannotApplyActiveJob: 'You already have an active job. Complete it before applying to new jobs.',
     failedApply: 'Failed to submit application',
     pickupApplyBlockedDetail:
-      'Your account may still have an old cooldown on the server. Cooldown until: {time}\n\nUpdate the app and try again, or contact support to clear it.',
+      'Pickup, apply, and offers are paused until: {time} (after Support unassigned your job).\n\nIf this is wrong, contact support.',
+    workCooldownBanner: 'You can start working again after:',
+    workCooldownShort: '8h wait',
+    workCooldownBlocked:
+      'You cannot pick up jobs, apply, or make offers during the 8-hour period after unassigning via Support.',
     appliedSuccessfully: 'Applied Successfully',
     viewApplications: 'View Applications',
     openDirectionsA11y: 'Open directions in Google Maps from job location to your location, bicycle mode',
@@ -498,6 +502,7 @@ export default {
     endChat: 'End chat',
     common: {
       back: 'Back',
+      mainMenu: 'Main menu',
       cancelChat: 'Cancel chat',
     },
     root: {
@@ -511,9 +516,9 @@ export default {
       cancelOrder: 'Cancel the order',
       cannotContact: 'Not able to contact customer',
       customerAskingCancel: 'Customer is asking to cancel the order',
-      cancelConfirmTitle: 'Unassign your job?',
+      cancelConfirmTitle: 'Cancel the order?',
       cancelConfirmBody:
-        'If you have an assigned job, continuing will unassign it and put the job back on the open list. Only continue if you really need this.',
+        'If you unassign the job, you will not be able to apply or make offer to any job for the next 8 hours.',
       cancelConfirmContinue: 'Continue',
     },
     wallet: {
@@ -586,7 +591,7 @@ export default {
     },
     bot: {
       blocked8hAndEnd:
-        'Please avoid taking new jobs for about {hours} hours after this unassign. Tap End chat when you are done.',
+        'For about {hours} hours you cannot pick up jobs, apply, or make offers after this unassign. Tap End chat when you are done.',
     },
   },
   legalAcceptance: {

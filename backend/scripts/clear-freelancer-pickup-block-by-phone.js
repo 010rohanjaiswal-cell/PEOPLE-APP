@@ -1,5 +1,5 @@
 /**
- * Clear legacy freelancerPickupBlockedUntil by phone (field is no longer enforced by the API).
+ * Clear freelancerPickupBlockedUntil by phone (support/admin; field is enforced on pickup/apply/offer).
  *
  * Usage (from repo root):
  *   MONGODB_URI="..." node backend/scripts/clear-freelancer-pickup-block-by-phone.js 7021098460
