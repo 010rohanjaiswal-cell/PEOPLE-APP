@@ -228,8 +228,13 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
         meta: { unassignedJobId: null },
         createdAt: now(),
       });
-      // Keep the flow in orders menu (no End chat)
-      ticket.currentNodeId = 'orders';
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      // Same leaf as successful unassign: user can complete the ticket (no 8h block)
+      ticket.currentNodeId = 'end_ready';
     }
     await ticket.save();
 
