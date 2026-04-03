@@ -15,6 +15,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -323,6 +324,66 @@ export default function SupportChat({ onBack }) {
   const selectOption = async (opt) => {
     if (!opt) return;
     const label = t(opt.labelKey);
+
+    // Destructive support action: must confirm before unassign + 8h pickup/apply block
+    if (opt.id === 'orders_cancel') {
+      if (!ticketId) {
+        const userMsg = {
+          _id: nowId(),
+          sender: user?.id || user?._id || 'me',
+          message: label,
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        return;
+      }
+      Alert.alert(t('supportBot.orders.cancelConfirmTitle'), t('supportBot.orders.cancelConfirmBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('supportBot.orders.cancelConfirmContinue'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const userMsg = {
+                _id: nowId(),
+                sender: user?.id || user?._id || 'me',
+                message: label,
+                createdAt: new Date(),
+              };
+              setMessages((prev) => [...prev, userMsg]);
+              try {
+                await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
+                const resp = await supportAPI.cancelOrderAction(ticketId);
+                if (resp?.success && resp.ticket) {
+                  setNodeId(resp.ticket.currentNodeId || 'end_ready');
+                  setTicketStatus(resp.ticket.status || 'open');
+                  const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
+                    _id: m._id || nowId(),
+                    sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+                    message: renderTicketText(m),
+                    createdAt: m.createdAt || new Date(),
+                  }));
+                  setMessages(msgs);
+                  setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+                  return;
+                }
+              } catch (_) {}
+              const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
+              setNodeId(opt.next);
+              setTimeout(() => {
+                pushBotNode(opt.next);
+                setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+              }, 250);
+              try {
+                await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
+              } catch (_) {}
+            })();
+          },
+        },
+      ]);
+      return;
+    }
+
     const userMsg = {
       _id: nowId(),
       sender: user?.id || user?._id || 'me',
@@ -332,27 +393,6 @@ export default function SupportChat({ onBack }) {
     setMessages((prev) => [...prev, userMsg]);
 
     if (!ticketId) return;
-
-    // Special action: cancel order
-    if (opt.id === 'orders_cancel') {
-      try {
-        // Persist the user's choice as a key before running the backend action
-        await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
-        const resp = await supportAPI.cancelOrderAction(ticketId);
-        if (resp?.success && resp.ticket) {
-          setNodeId(resp.ticket.currentNodeId || 'end_ready');
-          setTicketStatus(resp.ticket.status || 'open');
-          const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
-            _id: m._id || nowId(),
-            sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
-            message: renderTicketText(m),
-            createdAt: m.createdAt || new Date(),
-          }));
-          setMessages(msgs);
-          return;
-        }
-      } catch (_) {}
-    }
 
     const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
     setNodeId(opt.next);

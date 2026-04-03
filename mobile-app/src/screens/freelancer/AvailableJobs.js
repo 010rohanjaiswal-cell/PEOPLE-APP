@@ -34,6 +34,15 @@ import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
 import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
 
+/** Backend returns code + blockedUntil when support unassign cooldown is active */
+function messageForFreelancerPickupBlocked(t, payload) {
+  if (!payload || payload.code !== 'FREELANCER_PICKUP_BLOCKED') return null;
+  if (!payload.blockedUntil) return null;
+  const d = new Date(payload.blockedUntil);
+  const timeStr = Number.isNaN(d.getTime()) ? String(payload.blockedUntil) : d.toLocaleString();
+  return t('jobs.pickupApplyBlockedDetail', { time: timeStr });
+}
+
 function createAvailableJobsStyles(colors) {
   return StyleSheet.create({
   container: {
@@ -746,13 +755,17 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         loadJobs();
         setApplySuccessModalVisible(true);
       } else {
-        Alert.alert(t('common.error'), response.error || t('jobs.failedApply'));
+        Alert.alert(
+          t('common.error'),
+          messageForFreelancerPickupBlocked(t, response) || response.error || t('jobs.failedApply')
+        );
       }
     } catch (err) {
       console.error('Error applying to job:', err);
+      const data = err.response?.data;
       Alert.alert(
         t('common.error'),
-        err.response?.data?.error || err.message || t('jobs.failedApply')
+        messageForFreelancerPickupBlocked(t, data) || data?.error || err.message || t('jobs.failedApply')
       );
     } finally {
       setApplyingJobId(null);
@@ -787,13 +800,17 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         loadJobs();
         checkActiveJob(); // Update active job status
       } else {
-        Alert.alert(t('common.error'), response.error || t('jobs.failedPickup'));
+        Alert.alert(
+          t('common.error'),
+          messageForFreelancerPickupBlocked(t, response) || response.error || t('jobs.failedPickup')
+        );
       }
     } catch (err) {
       console.error('Error picking up job:', err);
+      const data = err.response?.data;
       Alert.alert(
         t('common.error'),
-        err.response?.data?.error || err.message || t('jobs.failedPickup')
+        messageForFreelancerPickupBlocked(t, data) || data?.error || err.message || t('jobs.failedPickup')
       );
     } finally {
       setPickingUp(false);
@@ -900,13 +917,18 @@ const AvailableJobs = ({ onJobPickedUp }) => {
         loadJobs();
       } else {
         setSubmittingOffer(false);
-        setOfferErrorMessage(response.error || 'Failed to submit offer');
+        setOfferErrorMessage(
+          messageForFreelancerPickupBlocked(t, response) || response.error || 'Failed to submit offer'
+        );
         setOfferErrorModalVisible(true);
       }
     } catch (err) {
       console.error('Error submitting offer:', err);
       setSubmittingOffer(false);
-      setOfferErrorMessage(err.response?.data?.error || err.message || 'Failed to submit offer');
+      const data = err.response?.data;
+      setOfferErrorMessage(
+        messageForFreelancerPickupBlocked(t, data) || data?.error || err.message || 'Failed to submit offer'
+      );
       setOfferErrorModalVisible(true);
     }
   };

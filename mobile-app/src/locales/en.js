@@ -182,6 +182,8 @@ export default {
     cannotApplyPayDues: 'You have unpaid commission dues. Please pay dues in Wallet before applying.',
     cannotApplyActiveJob: 'You already have an active job. Complete it before applying to new jobs.',
     failedApply: 'Failed to submit application',
+    pickupApplyBlockedDetail:
+      'Pickup and apply are paused for 8 hours after Support unassigns your job (Support → Orders → Cancel the order).\n\nCooldown until: {time}\n\nIf you did not use that option, contact support — your account may need the cooldown cleared.',
     appliedSuccessfully: 'Applied Successfully',
     viewApplications: 'View Applications',
     openDirectionsA11y: 'Open directions in Google Maps from job location to your location, bicycle mode',
@@ -509,6 +511,10 @@ export default {
       cancelOrder: 'Cancel the order',
       cannotContact: 'Not able to contact customer',
       customerAskingCancel: 'Customer is asking to cancel the order',
+      cancelConfirmTitle: 'Unassign your job?',
+      cancelConfirmBody:
+        'If you have an assigned job, continuing will unassign it and you will not be able to pick up or apply for jobs for 8 hours. Only continue if you really need this.',
+      cancelConfirmContinue: 'Continue',
     },
     wallet: {
       text: 'Wallet issues — choose one:',
