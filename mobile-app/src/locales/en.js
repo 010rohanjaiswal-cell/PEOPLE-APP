@@ -473,6 +473,10 @@ export default {
     subtitle: 'Need help? Call us or chat with our team.',
     callToUs: 'Call to us',
     chatWithUs: 'Chat with us',
+    recentTickets: 'Recent tickets',
+    recentTicketsEmpty: 'No recent tickets yet.',
+    ticketStatusOpen: 'Open',
+    ticketStatusCompleted: 'Completed',
     phoneHint: 'Support: {phone}',
     chatTitle: 'Support',
     typeMessage: 'Type a message...',
@@ -496,6 +500,37 @@ export default {
       'Payment help:\n- If payment is pending/failed, wait 1–2 minutes and reopen Wallet.\n- Ensure UPI/bank app is working.\n- If charged but status not updated, refresh wallet and check again.\n\nTell me the payment status/error text.',
     botFallback:
       "I can help with OTP/login, wallet/withdrawal, address/pincode, verification, jobs, and payments.\n\nWhich one is your issue?",
+    categoriesTitle: 'What do you need help with?',
+  },
+  supportClientBot: {
+    greeting: "Hi! I'm the People Support bot for clients.",
+    root: {
+      text: 'Choose a topic below, or use Call / Chat for anything else.',
+    },
+    category: {
+      cancelJob: 'Cancel the job',
+      unassignFreelancer: 'Unassign the freelancer',
+    },
+    cancelJob: {
+      detail:
+        'Cancel the job:\n\nWe will try to cancel your most recent active job that is not completed. If you have a freelancer assigned, they will be removed and the job will be marked cancelled.\n\nTap Confirm only if you are sure.',
+    },
+    unassign: {
+      detail:
+        'Unassign the freelancer:\n\nWe will remove the assigned freelancer from your active job and reopen it for others. The freelancer will be temporarily blocked from applying or making offers for 8 hours (same as freelancer-initiated unassign).\n\nTap Confirm only if you are sure.',
+    },
+    confirmProceed: 'Confirm and submit',
+    cancelConfirmTitle: 'Cancel this job?',
+    cancelConfirmBody:
+      'Your latest active job will be cancelled. This cannot be undone from here. Continue?',
+    unassignConfirmTitle: 'Unassign the freelancer?',
+    unassignConfirmBody:
+      'The freelancer will be removed from your job and blocked from new applications for 8 hours. Continue?',
+    system: {
+      noAssignedJob: 'No active job with an assigned freelancer was found.',
+      noJobToCancel: 'No active job was found to cancel.',
+      jobCancelled: 'Your job “{title}” has been cancelled.',
+    },
   },
   supportBot: {
     greeting: "Hi! I'm the People Support bot.",

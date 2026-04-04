@@ -360,6 +360,8 @@ const FreelancerDashboard = () => {
 
   // Stack of drawer screens so back follows history: e.g. Dashboard -> Wallet -> Profile -> Settings -> Orders; back -> Orders -> Settings -> Profile -> Wallet -> Dashboard
   const [drawerScreenStack, setDrawerScreenStack] = useState([]);
+  /** When opening Support Chat right after startTicket, ticket is applied before first paint (no "Start chat" flash). */
+  const supportChatBootstrapTicketRef = useRef(null);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -461,7 +463,9 @@ const FreelancerDashboard = () => {
     Settings: SettingsScreen,
     Referral: ReferralScreen,
     Support: (props) => <SupportScreen {...props} onNavigate={handleDrawerNavigation} />,
-    SupportChat: (props) => <SupportChatScreen {...props} onBack={handleDrawerBack} />,
+    SupportChat: (props) => (
+      <SupportChatScreen {...props} onBack={handleDrawerBack} bootstrapTicketRef={supportChatBootstrapTicketRef} />
+    ),
   };
 
   // Determine which screen to show
@@ -502,9 +506,12 @@ const FreelancerDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
-  // Push drawer screen onto stack so back follows history
-  const handleDrawerNavigation = (screenKey) => {
-    setDrawerScreenStack(s => [...s, screenKey]);
+  // Push drawer screen onto stack so back follows history (optional second arg, e.g. { bootstrapTicket } for SupportChat)
+  const handleDrawerNavigation = (screenKey, extra) => {
+    if (screenKey === 'SupportChat' && extra?.bootstrapTicket) {
+      supportChatBootstrapTicketRef.current = extra.bootstrapTicket;
+    }
+    setDrawerScreenStack((s) => [...s, screenKey]);
     setActiveTab(null); // Clear tab selection when navigating to drawer screen
     closeDrawer();
   };

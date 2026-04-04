@@ -24,41 +24,9 @@ import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { userAPI } from '../../api';
+import { calculateAgeFromDob } from '../../utils/dob';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
-/** Same DOB parsing as freelancer Profile.js (YYYY-MM-DD, DD/MM/YYYY, etc.). */
-function parseDob(value) {
-  if (!value) return null;
-  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-  const s = String(value).trim();
-  if (!s) return null;
-  if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) {
-    const [y, m, d] = s.split(/[-/]/).map((p) => parseInt(p, 10));
-    const dt = new Date(y, m - 1, d);
-    return isNaN(dt.getTime()) ? null : dt;
-  }
-  if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s)) {
-    const [d, m, y] = s.split(/[-/]/).map((p) => parseInt(p, 10));
-    const dt = new Date(y, m - 1, d);
-    return isNaN(dt.getTime()) ? null : dt;
-  }
-  const dt = new Date(s);
-  return isNaN(dt.getTime()) ? null : dt;
-}
-
-function calculateAgeFromDob(dob) {
-  const birthDate = parseDob(dob);
-  if (!birthDate) return null;
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-  if (age < 0 || age > 150) return null;
-  return age;
-}
 
 /** Map stored gender to localized Male/Female only; avoid showing noisy or malformed values. */
 function normalizeGenderLabel(raw, t) {

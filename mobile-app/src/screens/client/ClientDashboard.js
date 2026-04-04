@@ -36,6 +36,8 @@ import MyJobsScreen from './MyJobs';
 import HistoryScreen from './History';
 import ProfileScreen from './Profile';
 import SettingsScreen from './Settings';
+import ClientSupportScreen from './ClientSupport';
+import ClientSupportChatScreen from './ClientSupportChat';
 
 function createClientDashboardStyles(colors) {
   return StyleSheet.create({
@@ -303,6 +305,8 @@ const ClientDashboard = () => {
   const [activeTab, setActiveTab] = useState('PostJob');
   // Stack of drawer screens so back goes through history: e.g. [Wallet, Profile, Settings] -> back -> [Wallet, Profile] -> back -> [Wallet] -> back -> []
   const [drawerScreenStack, setDrawerScreenStack] = useState([]);
+  /** When opening Support Chat after startTicket, ticket is applied before first paint. */
+  const supportChatBootstrapTicketRef = useRef(null);
   const [logoutError, setLogoutError] = useState('');
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -340,21 +344,15 @@ const ClientDashboard = () => {
     { key: 'MyJobs', labelKey: 'myJobs', icon: 'work', component: MyJobsScreen },
   ];
 
-  // Drawer menu items (screens accessible from drawer)
-  const drawerScreens = {
-    History: HistoryScreen,
-    Profile: ProfileScreen,
-    Settings: SettingsScreen,
+  const handleDrawerBack = () => {
+    setDrawerScreenStack((s) => {
+      const next = s.slice(0, -1);
+      if (next.length === 0) {
+        goToMainTabPreferringMyJobs();
+      }
+      return next;
+    });
   };
-
-  // Determine which screen to show
-  const getActiveScreen = () => {
-    if (activeDrawerScreen && drawerScreens[activeDrawerScreen]) {
-      return drawerScreens[activeDrawerScreen];
-    }
-    return tabs.find(tab => tab.key === activeTab)?.component || PostJobScreen;
-  };
-  const ActiveScreen = getActiveScreen();
 
   // Ask for GPS when user lands on client dashboard (ensures dialog shows at right time)
   useEffect(() => {
@@ -416,12 +414,32 @@ const ClientDashboard = () => {
     }).start(() => setDrawerVisible(false));
   };
 
-  // Push drawer screen onto stack so back follows history: Dashboard -> Wallet -> Profile -> Settings -> Orders
-  const handleDrawerNavigation = (screenKey) => {
-    setDrawerScreenStack(s => [...s, screenKey]);
-    setActiveTab(null); // Clear tab selection when navigating to drawer screen
+  const handleDrawerNavigation = (screenKey, extra) => {
+    if (screenKey === 'SupportChat' && extra?.bootstrapTicket) {
+      supportChatBootstrapTicketRef.current = extra.bootstrapTicket;
+    }
+    setDrawerScreenStack((s) => [...s, screenKey]);
+    setActiveTab(null);
     closeDrawer();
   };
+
+  const drawerScreens = {
+    History: HistoryScreen,
+    Profile: ProfileScreen,
+    Settings: SettingsScreen,
+    Support: (props) => <ClientSupportScreen {...props} onNavigate={handleDrawerNavigation} />,
+    SupportChat: (props) => (
+      <ClientSupportChatScreen {...props} onBack={handleDrawerBack} bootstrapTicketRef={supportChatBootstrapTicketRef} />
+    ),
+  };
+
+  const getActiveScreen = () => {
+    if (activeDrawerScreen && drawerScreens[activeDrawerScreen]) {
+      return drawerScreens[activeDrawerScreen];
+    }
+    return tabs.find((tab) => tab.key === activeTab)?.component || PostJobScreen;
+  };
+  const ActiveScreen = getActiveScreen();
 
   // Refs so BackHandler always reads latest state (useFocusEffect callback doesn't re-run when stack changes)
   const drawerVisibleRef = useRef(drawerVisible);
@@ -630,6 +648,14 @@ const ClientDashboard = () => {
                 >
                   <MaterialIcons name="settings" size={24} color={colors.text.primary} />
                   <Text style={styles.drawerMenuItemText}>{t('dashboard.settings')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDrawerNavigation('Support')}
+                  style={styles.drawerMenuItem}
+                >
+                  <MaterialIcons name="support-agent" size={24} color={colors.text.primary} />
+                  <Text style={styles.drawerMenuItemText}>{t('dashboard.support')}</Text>
                 </TouchableOpacity>
                 
                 <View style={styles.drawerMenuDivider} />

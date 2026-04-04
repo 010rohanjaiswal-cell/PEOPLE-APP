@@ -30,13 +30,64 @@ function requireFreelancer(req, res) {
   return user;
 }
 
+/** Freelancers and clients can open support tickets (separate flows in the app). */
+function requireSupportUser(req, res) {
+  const user = req.user;
+  if (!user || (user.role !== 'freelancer' && user.role !== 'client')) {
+    res.status(403).json({ success: false, error: 'Support is not available for this account' });
+    return null;
+  }
+  return user;
+}
+
+function requireClient(req, res) {
+  const user = req.user;
+  if (!user || user.role !== 'client') {
+    res.status(403).json({ success: false, error: 'Only clients can use this action' });
+    return null;
+  }
+  return user;
+}
+
+function buildClientStart(category) {
+  const greeting = { sender: 'bot', textKey: 'supportClientBot.greeting', createdAt: now() };
+  if (!category) {
+    return {
+      currentNodeId: 'client_root',
+      messages: [
+        greeting,
+        { sender: 'bot', textKey: 'supportClientBot.root.text', createdAt: now() },
+      ],
+    };
+  }
+  if (category === 'cancel_job') {
+    return {
+      currentNodeId: 'client_cancel_confirm',
+      messages: [
+        greeting,
+        { sender: 'bot', textKey: 'supportClientBot.cancelJob.detail', createdAt: now() },
+      ],
+    };
+  }
+  if (category === 'unassign_freelancer') {
+    return {
+      currentNodeId: 'client_unassign_confirm',
+      messages: [
+        greeting,
+        { sender: 'bot', textKey: 'supportClientBot.unassign.detail', createdAt: now() },
+      ],
+    };
+  }
+  return buildClientStart(null);
+}
+
 /**
  * Start a new support ticket
  * POST /api/support/tickets/start
  */
 router.post('/tickets/start', authenticate, async (req, res) => {
   try {
-    const user = requireFreelancer(req, res);
+    const user = requireSupportUser(req, res);
     if (!user) return;
 
     // Resume latest open ticket if it exists (prevents creating multiple open tickets)
@@ -44,6 +95,21 @@ router.post('/tickets/start', authenticate, async (req, res) => {
       .sort({ updatedAt: -1 });
     if (existing) {
       return res.json({ success: true, ticket: existing, resumed: true });
+    }
+
+    if (user.role === 'client') {
+      const category =
+        typeof req.body?.category === 'string' ? req.body.category.trim() : '';
+      const { messages, currentNodeId } = buildClientStart(
+        category === 'cancel_job' || category === 'unassign_freelancer' ? category : null
+      );
+      const ticket = await SupportTicket.create({
+        user: user._id,
+        status: 'open',
+        currentNodeId,
+        messages,
+      });
+      return res.json({ success: true, ticket, resumed: false });
     }
 
     const ticket = await SupportTicket.create({
@@ -72,7 +138,7 @@ const SUPPORT_TICKETS_RETAIN = 7;
  */
 router.get('/tickets', authenticate, async (req, res) => {
   try {
-    const user = requireFreelancer(req, res);
+    const user = requireSupportUser(req, res);
     if (!user) return;
 
     const limit = Math.min(
@@ -109,7 +175,7 @@ router.get('/tickets', authenticate, async (req, res) => {
  */
 router.get('/tickets/:id', authenticate, async (req, res) => {
   try {
-    const user = requireFreelancer(req, res);
+    const user = requireSupportUser(req, res);
     if (!user) return;
 
     const ticket = await SupportTicket.findOne({ _id: req.params.id, user: user._id }).lean();
@@ -129,7 +195,7 @@ router.get('/tickets/:id', authenticate, async (req, res) => {
  */
 router.post('/tickets/:id/append', authenticate, async (req, res) => {
   try {
-    const user = requireFreelancer(req, res);
+    const user = requireSupportUser(req, res);
     if (!user) return;
 
     const {
@@ -269,12 +335,169 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
 });
 
 /**
+ * Client: unassign freelancer from their active job (mirrors freelancer cancel-order on that job).
+ * POST /api/support/tickets/:id/actions/client-unassign
+ */
+router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, res) => {
+  try {
+    const user = requireClient(req, res);
+    if (!user) return;
+
+    const ticket = await SupportTicket.findOne({ _id: req.params.id, user: user._id });
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+    if (ticket.status !== 'open') return res.status(400).json({ success: false, error: 'Ticket is not open' });
+
+    const clientOid =
+      user._id instanceof mongoose.Types.ObjectId
+        ? user._id
+        : new mongoose.Types.ObjectId(String(user._id));
+
+    const job = await Job.findOne({
+      client: clientOid,
+      assignedFreelancer: { $ne: null },
+      status: { $in: ['assigned', 'work_done'] },
+    }).sort({ updatedAt: -1 });
+
+    let unassignedJobId = null;
+    let freelancerId = null;
+    if (job) {
+      freelancerId = job.assignedFreelancer;
+      job.assignedFreelancer = null;
+      job.status = 'open';
+      job.freelancerCompleted = false;
+      await job.save();
+      unassignedJobId = job._id;
+    }
+
+    ticket.effects.unassignedJobId = unassignedJobId;
+    if (unassignedJobId && freelancerId) {
+      const blockedUntil = hoursFromNow(8);
+      await User.updateOne(
+        { _id: freelancerId },
+        { $set: { freelancerPickupBlockedUntil: blockedUntil } }
+      );
+      ticket.effects.pickupBlockedUntil = blockedUntil;
+      ticket.messages.push({
+        sender: 'system',
+        textKey: 'supportTicket.system.unassigned',
+        meta: { unassignedJobId, blockedUntil },
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportTicket.bot.blocked8hAndEnd',
+        params: { hours: 8 },
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+    } else {
+      ticket.effects.pickupBlockedUntil = null;
+      ticket.messages = ticket.messages.filter((m) => m.textKey !== BOT_BLOCKED_8H_KEY);
+      ticket.messages.push({
+        sender: 'system',
+        textKey: 'supportClientBot.system.noAssignedJob',
+        meta: {},
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+    }
+    await ticket.save();
+
+    res.json({
+      success: true,
+      unassigned: Boolean(unassignedJobId),
+      unassignedJobId,
+      pickupBlockedUntil: ticket.effects.pickupBlockedUntil,
+      ticket,
+    });
+  } catch (e) {
+    console.error('Error client-unassign action:', e);
+    res.status(500).json({ success: false, error: e?.message || 'Failed to unassign' });
+  }
+});
+
+/**
+ * Client: cancel an active job (not completed) — sets status to cancelled.
+ * POST /api/support/tickets/:id/actions/client-cancel-job
+ */
+router.post('/tickets/:id/actions/client-cancel-job', authenticate, async (req, res) => {
+  try {
+    const user = requireClient(req, res);
+    if (!user) return;
+
+    const ticket = await SupportTicket.findOne({ _id: req.params.id, user: user._id });
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+    if (ticket.status !== 'open') return res.status(400).json({ success: false, error: 'Ticket is not open' });
+
+    const clientOid =
+      user._id instanceof mongoose.Types.ObjectId
+        ? user._id
+        : new mongoose.Types.ObjectId(String(user._id));
+
+    const job = await Job.findOne({
+      client: clientOid,
+      status: { $nin: ['completed', 'cancelled'] },
+    }).sort({ updatedAt: -1 });
+
+    if (!job) {
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportClientBot.system.noJobToCancel',
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+      await ticket.save();
+      return res.json({ success: true, cancelled: false, ticket });
+    }
+
+    job.status = 'cancelled';
+    job.assignedFreelancer = null;
+    job.freelancerCompleted = false;
+    await job.save();
+
+    ticket.messages.push({
+      sender: 'system',
+      textKey: 'supportClientBot.system.jobCancelled',
+      params: { title: job.title || '' },
+      createdAt: now(),
+    });
+    ticket.messages.push({
+      sender: 'bot',
+      textKey: 'supportBot.endReady.text',
+      createdAt: now(),
+    });
+    ticket.currentNodeId = 'end_ready';
+    await ticket.save();
+
+    res.json({
+      success: true,
+      cancelled: true,
+      jobId: job._id,
+      ticket,
+    });
+  } catch (e) {
+    console.error('Error client-cancel-job action:', e);
+    res.status(500).json({ success: false, error: e?.message || 'Failed to cancel job' });
+  }
+});
+
+/**
  * Complete ticket
  * POST /api/support/tickets/:id/complete
  */
 router.post('/tickets/:id/complete', authenticate, async (req, res) => {
   try {
-    const user = requireFreelancer(req, res);
+    const user = requireSupportUser(req, res);
     if (!user) return;
 
     const ticket = await SupportTicket.findOne({ _id: req.params.id, user: user._id });

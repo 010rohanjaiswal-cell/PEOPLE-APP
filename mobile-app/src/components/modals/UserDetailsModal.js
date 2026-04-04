@@ -22,6 +22,7 @@ import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
 import ChatModal from './ChatModal';
+import { calculateAgeFromDob } from '../../utils/dob';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -36,38 +37,6 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
 
   if (!visible || !user) return null;
 
-  // Helper function to calculate age
-  const calculateAge = (dob) => {
-    if (!dob) return null;
-    try {
-      let birthDate;
-      if (typeof dob === 'string' && dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) {
-          birthDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        } else {
-          birthDate = new Date(dob);
-        }
-      } else {
-        birthDate = new Date(dob);
-      }
-      
-      if (isNaN(birthDate.getTime())) return null;
-      
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      
-      if (age < 0 || age > 150) return null;
-      return age;
-    } catch (error) {
-      return null;
-    }
-  };
-
   // Show full details when viewing freelancer (client viewing freelancer)
   const isFreelancerView = roleLabel === 'Freelancer';
   // Show Call/Chat buttons when viewing freelancer OR when viewing client (freelancer viewing client)
@@ -77,7 +46,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   const profilePhoto = user.profilePhoto || user.verification?.profilePhoto || null;
   const phone = user.phone || 'N/A';
   const email = user.email || null;
-  const age = calculateAge(user.verification?.dob || user.dob);
+  const age = calculateAgeFromDob(user.verification?.dob || user.dob);
   const gender = user.verification?.gender || user.gender || null;
   const address = user.verification?.address || user.address || null;
 
@@ -137,7 +106,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
             {/* Show full details only when viewing freelancer */}
             {isFreelancerView && (
               <View style={styles.infoSection}>
-                {age ? (
+                {age != null ? (
                   <View style={styles.infoRow}>
                     <MaterialIcons name="cake" size={20} color={colors.text.secondary} />
                     <Text style={styles.infoText}>{age} years old</Text>

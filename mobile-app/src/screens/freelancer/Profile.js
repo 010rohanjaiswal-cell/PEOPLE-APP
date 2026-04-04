@@ -10,6 +10,7 @@ import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { calculateAgeFromDob } from '../../utils/dob';
 import { Card, CardContent } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 
@@ -145,64 +146,12 @@ const Profile = () => {
     }
   }, [user]);
 
-  const calculateAge = (dob) => {
-    if (!dob) {
-      return null;
-    }
-    try {
-      const parseDob = (value) => {
-        if (!value) return null;
-        if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-        const s = String(value).trim();
-        if (!s) return null;
-
-        // YYYY-MM-DD or YYYY/MM/DD
-        if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) {
-          const [y, m, d] = s.split(/[-/]/).map((p) => parseInt(p, 10));
-          const dt = new Date(y, m - 1, d);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-
-        // DD-MM-YYYY or DD/MM/YYYY (common in Aadhaar)
-        if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(s)) {
-          const [d, m, y] = s.split(/[-/]/).map((p) => parseInt(p, 10));
-          const dt = new Date(y, m - 1, d);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-
-        const dt = new Date(s);
-        return isNaN(dt.getTime()) ? null : dt;
-      };
-
-      const birthDate = parseDob(dob);
-      
-      if (!birthDate) {
-        return null;
-      }
-      
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-      
-      if (age < 0 || age > 150) {
-        return null;
-      }
-      
-      return age;
-    } catch (error) {
-      return null;
-    }
-  };
-
   if (!user) {
     return null;
   }
 
   const displayName = verification?.fullName || user.fullName || t('common.freelancer');
-  const age = calculateAge(verification?.dob);
+  const age = calculateAgeFromDob(verification?.dob);
   const gender = verification?.gender || null;
   const address = verification?.address || null;
   const phone = user.phone || t('freelancerProfile.notAvailable');

@@ -96,6 +96,7 @@ const Referral = () => {
 
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
+  const [referredCount, setReferredCount] = useState(0);
   const [error, setError] = useState('');
   const [justCopied, setJustCopied] = useState(false);
 

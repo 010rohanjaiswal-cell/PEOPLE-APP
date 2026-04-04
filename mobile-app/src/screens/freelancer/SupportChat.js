@@ -6,7 +6,7 @@
  * If you want a real AI bot (OpenAI, etc.), we should implement a backend endpoint so no secrets are exposed in the app.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -280,7 +280,7 @@ function createStyles(colors, insets) {
   });
 }
 
-export default function SupportChat({ onBack }) {
+export default function SupportChat({ onBack, bootstrapTicketRef }) {
   const { colors } = useTheme();
   const { t, locale } = useLanguage();
   const { user } = useAuth();
@@ -296,6 +296,7 @@ export default function SupportChat({ onBack }) {
 
   const flatListRef = useRef(null);
   const cancelOrderPayloadRef = useRef(null);
+  const skipStorageHydrationRef = useRef(false);
 
   const nowId = () => `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const TICKET_KEY = 'supportTicketId';
@@ -362,7 +363,7 @@ export default function SupportChat({ onBack }) {
 
   const currentNode = FLOW[nodeId] || FLOW.root;
 
-  const renderTicketText = (m) => {
+  const renderTicketText = useCallback((m) => {
     const key = m?.textKey;
     let out = key ? t(key) : (m?.text || '');
     const params = m?.params;
@@ -372,7 +373,28 @@ export default function SupportChat({ onBack }) {
       }
     }
     return out;
-  };
+  }, [t]);
+
+  useLayoutEffect(() => {
+    const boot = bootstrapTicketRef?.current;
+    if (!boot?._id) return;
+    bootstrapTicketRef.current = null;
+    skipStorageHydrationRef.current = true;
+    setTicketId(String(boot._id));
+    setTicketStatus(boot.status || 'open');
+    setChatStarted(boot.status === 'open');
+    setNodeId(boot.currentNodeId || 'root');
+    const msgs = ticketMessagesForDisplay(boot).map((m) => ({
+      _id: m._id || nowId(),
+      sender: m.sender === 'user' ? (user?.id || user?._id) : m.sender,
+      message: renderTicketText(m),
+      createdAt: m.createdAt || new Date(),
+    }));
+    setMessages(msgs);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 0);
+    // Parent sets ref before mount when opening from Support after startTicket / getTicket.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap ref is read once on mount
+  }, []);
 
   const pushBotNode = (id) => {
     const node = FLOW[id] || FLOW.root;
@@ -475,8 +497,8 @@ export default function SupportChat({ onBack }) {
     try {
       const resp = await supportAPI.complete(ticketId);
       if (resp?.success) {
-        setTicketStatus('completed');
         await AsyncStorage.removeItem(TICKET_KEY);
+        onBack?.();
       }
     } catch (_) {}
   };
@@ -841,6 +863,10 @@ export default function SupportChat({ onBack }) {
 
   useEffect(() => {
     (async () => {
+      if (skipStorageHydrationRef.current) {
+        skipStorageHydrationRef.current = false;
+        return;
+      }
       const id = await AsyncStorage.getItem(TICKET_KEY);
       if (!id) return;
       setTicketId(id);
@@ -860,6 +886,7 @@ export default function SupportChat({ onBack }) {
         }
       } catch (_) {}
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const renderMessage = ({ item }) => {
@@ -927,22 +954,10 @@ export default function SupportChat({ onBack }) {
             <Text style={styles.startChatText}>{t('supportBot.startChat')}</Text>
           </TouchableOpacity>
         ) : nodeId === 'end_ready' && ticketStatus === 'open' ? (
-          <View style={styles.composerStack}>
-            <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
-              <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
-              <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalButtonSecondary}
-              onPress={goToMainMenu}
-              activeOpacity={0.85}
-            >
-              <View style={styles.mainMenuRowInline}>
-                <MaterialIcons name="arrow-back" size={20} color={colors.text.primary} />
-                <Text style={styles.modalButtonSecondaryText}>{t('supportBot.common.mainMenu')}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
+            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
+          </TouchableOpacity>
         ) : (
           <View>
             <View style={styles.quickReplies}>
