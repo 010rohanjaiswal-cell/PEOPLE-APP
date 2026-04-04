@@ -24,6 +24,12 @@ function createStyles(colors) {
       borderColor: colors.border,
     },
     codeLabel: { ...typography.small, color: colors.text.secondary, fontWeight: '600' },
+    referredCount: {
+      ...typography.body,
+      color: colors.text.primary,
+      fontWeight: '700',
+      marginTop: spacing.sm,
+    },
     codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
     code: { fontSize: 22, fontWeight: '800', letterSpacing: 1.2, color: colors.primary.main },
     hint: { ...typography.small, color: colors.text.secondary, marginTop: spacing.md, lineHeight: 18 },
@@ -101,6 +107,8 @@ const Referral = () => {
       const c = resp?.referral?.code || '';
       if (!resp?.success || !c) throw new Error(resp?.error || 'Failed to load referral code');
       setCode(String(c));
+      const n = resp?.referral?.referredCount;
+      setReferredCount(Number.isFinite(Number(n)) ? Number(n) : 0);
     } catch (e) {
       setError(e?.response?.data?.error || e?.message || t('common.error'));
     } finally {
@@ -161,6 +169,9 @@ const Referral = () => {
             </View>
           ) : (
             <>
+              <Text style={styles.referredCount}>
+                {t('referral.referredCount').replace('{count}', String(referredCount))}
+              </Text>
               <View style={styles.codeRow}>
                 <Text selectable style={styles.code}>
                   {code}

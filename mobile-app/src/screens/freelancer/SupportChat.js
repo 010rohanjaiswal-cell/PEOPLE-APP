@@ -323,7 +323,6 @@ export default function SupportChat({ onBack }) {
         options: [
           { id: 'wallet_dues_not_reflecting', labelKey: 'supportBot.wallet.duesNotReflecting', next: 'wallet_dues_not_reflecting' },
           { id: 'wallet_processing', labelKey: 'supportBot.wallet.paymentProcessing', next: 'wallet_processing' },
-          { id: 'wallet_status', labelKey: 'supportBot.wallet.paymentStatus', next: 'wallet_status' },
         ],
       },
       withdrawal: {
@@ -331,9 +330,6 @@ export default function SupportChat({ onBack }) {
         options: [
           { id: 'withdrawal_add_bank', labelKey: 'supportBot.withdrawal.cannotAddBank', next: 'withdrawal_add_bank' },
           { id: 'withdrawal_not_credited', labelKey: 'supportBot.withdrawal.withdrawalNotCredited', next: 'withdrawal_not_credited' },
-          { id: 'withdrawal_status', labelKey: 'supportBot.withdrawal.paymentStatus', next: 'withdrawal_status' },
-          { id: 'withdrawal_amount', labelKey: 'supportBot.withdrawal.withdrawalAmount', next: 'withdrawal_amount' },
-          { id: 'withdrawal_not_received', labelKey: 'supportBot.withdrawal.notReceived', next: 'withdrawal_not_received' },
         ],
       },
       orders_cancel: { botTextKey: 'supportBot.ordersCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
@@ -358,11 +354,7 @@ export default function SupportChat({ onBack }) {
       },
       wallet_received_after_yes: { botTextKey: 'supportBot.walletReceivedAfterYes.text', options: [] },
       wallet_received_after_no: { botTextKey: 'supportBot.walletReceivedAfterNo.text', options: [] },
-      wallet_status: { botTextKey: 'supportBot.walletStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
-      withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
-      withdrawal_status: { botTextKey: 'supportBot.withdrawalStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
-      withdrawal_amount: { botTextKey: 'supportBot.withdrawalAmountHelp.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
-      withdrawal_not_received: { botTextKey: 'supportBot.withdrawalNotReceived.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [] },
       end_ready: { botTextKey: 'supportBot.endReady.text', options: [] },
     }),
     []
@@ -789,6 +781,31 @@ export default function SupportChat({ onBack }) {
       setNodeId('end_ready');
       setTimeout(() => {
         pushBotNode('orders_customer_cancel');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.id === 'withdrawal_add_bank') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.withdrawal_add_bank.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('withdrawal_add_bank');
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
       }, 250);
       try {

@@ -32,6 +32,7 @@ export default {
     subtitle:
       'Invite your friends to join as freelancers. When they start completing jobs, you’ll keep earning lifetime rewards.',
     yourCode: 'Your referral code',
+    referredCount: 'People you’ve referred: {count}',
     codeHint: 'Share this code with your friend. They can enter it during verification (optional).',
     bulletLifetime: 'Lifetime rewards when your referred friend completes jobs.',
     bulletVerification: 'Works best when they enter your code during verification.',
@@ -592,7 +593,7 @@ export default {
     },
     withdrawalAddBank: {
       text:
-        'Not able to add bank account:\n- Check account number and IFSC.\n- Ensure bank account name matches your profile name.\n- Try again after some time.\n- If still failing, call support.',
+        'While entering the details, make sure you have your bank account details with you. Any mistake in account details can lead to failure when adding a bank account.\n\n• The bank must be a registered bank in India.\n• The account number must not contain any special characters (e.g. -, /).\n• The IFSC must be a valid branch code.\n• The IFSC must be exactly 11 characters (not fewer, not more).\n• Your Aadhaar name and the bank account holder name must match clearly; otherwise you cannot add that bank account.\n• The account must not be a current account, corporate account, trust account, or virtual bank account.',
     },
     withdrawalStatus: {
       text:

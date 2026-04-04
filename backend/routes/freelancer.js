@@ -980,12 +980,14 @@ router.get('/referral/my-code', authenticate, async (req, res) => {
     if (user.role !== 'freelancer') return res.status(403).json({ success: false, error: 'This endpoint is only for freelancers' });
 
     const code = await ensureUserReferralCode(user._id);
+    const referredCount = await User.countDocuments({ referredBy: user._id });
     return res.json({
       success: true,
       referral: {
         code,
         referredBy: user.referredBy ? String(user.referredBy) : null,
         lockedAt: user.referralLockedAt || null,
+        referredCount,
       },
     });
   } catch (e) {
