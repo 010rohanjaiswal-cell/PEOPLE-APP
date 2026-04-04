@@ -24,7 +24,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supportAPI } from '../../api';
+import { supportAPI, walletAPI } from '../../api';
 
 /** Must match backend key for the 8h pickup block bot line (strip when cancel finds no job). */
 const BOT_BLOCKED_8H_TEXT_KEY = 'supportTicket.bot.blocked8hAndEnd';
@@ -282,7 +282,7 @@ function createStyles(colors, insets) {
 
 export default function SupportChat({ onBack }) {
   const { colors } = useTheme();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors, insets), [colors, insets]);
@@ -321,7 +321,6 @@ export default function SupportChat({ onBack }) {
       wallet: {
         botTextKey: 'supportBot.wallet.text',
         options: [
-          { id: 'wallet_withdraw_not_credited', labelKey: 'supportBot.wallet.withdrawnNotCredited', next: 'wallet_withdraw_not_credited' },
           { id: 'wallet_dues_not_reflecting', labelKey: 'supportBot.wallet.duesNotReflecting', next: 'wallet_dues_not_reflecting' },
           { id: 'wallet_processing', labelKey: 'supportBot.wallet.paymentProcessing', next: 'wallet_processing' },
           { id: 'wallet_status', labelKey: 'supportBot.wallet.paymentStatus', next: 'wallet_status' },
@@ -331,16 +330,25 @@ export default function SupportChat({ onBack }) {
         botTextKey: 'supportBot.withdrawal.text',
         options: [
           { id: 'withdrawal_add_bank', labelKey: 'supportBot.withdrawal.cannotAddBank', next: 'withdrawal_add_bank' },
+          { id: 'withdrawal_not_credited', labelKey: 'supportBot.withdrawal.withdrawalNotCredited', next: 'withdrawal_not_credited' },
           { id: 'withdrawal_status', labelKey: 'supportBot.withdrawal.paymentStatus', next: 'withdrawal_status' },
           { id: 'withdrawal_amount', labelKey: 'supportBot.withdrawal.withdrawalAmount', next: 'withdrawal_amount' },
           { id: 'withdrawal_not_received', labelKey: 'supportBot.withdrawal.notReceived', next: 'withdrawal_not_received' },
         ],
       },
       orders_cancel: { botTextKey: 'supportBot.ordersCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
-      orders_contact: { botTextKey: 'supportBot.ordersContact.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
-      orders_customer_cancel: { botTextKey: 'supportBot.ordersCustomerCancel.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'orders' }] },
-      wallet_withdraw_not_credited: { botTextKey: 'supportBot.walletWithdrawNotCredited.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
-      wallet_dues_not_reflecting: { botTextKey: 'supportBot.walletDuesNotReflecting.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      orders_contact: { botTextKey: 'supportBot.ordersContact.text', options: [] },
+      orders_customer_cancel: { botTextKey: 'supportBot.ordersCustomerCancel.text', options: [] },
+      withdrawal_not_credited: { botTextKey: 'supportBot.withdrawalNotCredited.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
+      wallet_dues_ask_confirm: {
+        botTextKey: 'supportBot.root.text',
+        options: [
+          { id: 'wallet_dues_confirm_yes', labelKey: 'supportBot.common.yes', next: 'wallet_dues_after_yes' },
+          { id: 'wallet_dues_confirm_no', labelKey: 'supportBot.common.no', next: 'wallet_dues_after_no' },
+        ],
+      },
+      wallet_dues_after_yes: { botTextKey: 'supportBot.walletDuesAfterYes.text', options: [] },
+      wallet_dues_after_no: { botTextKey: 'supportBot.walletDuesAfterNo.text', options: [] },
       wallet_processing: { botTextKey: 'supportBot.walletProcessing.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
       wallet_status: { botTextKey: 'supportBot.walletStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
       withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
@@ -378,6 +386,42 @@ export default function SupportChat({ onBack }) {
       },
     ]);
   };
+
+  const pushBotRawMessage = useCallback((text) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        _id: nowId(),
+        sender: 'bot',
+        message: text,
+        createdAt: new Date(),
+      },
+    ]);
+  }, []);
+
+  const buildWalletDuesBotMessage = useCallback(
+    (lastPayment) => {
+      if (!lastPayment) return t('supportBot.walletDuesNoPaidRecordBlock');
+      const amount =
+        lastPayment.amount != null ? `₹${Math.round(Number(lastPayment.amount))}` : '—';
+      const dateSrc = lastPayment.paymentDate || lastPayment.createdAt;
+      const dateStr = dateSrc
+        ? new Date(dateSrc).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '—';
+      const orderRef = String(lastPayment.orderId || lastPayment.id || '—');
+      return t('supportBot.walletDuesLastPaidBlock')
+        .replace('{amount}', amount)
+        .replace('{date}', dateStr)
+        .replace('{orderId}', orderRef);
+    },
+    [t, locale]
+  );
 
   const startChat = async () => {
     if (!user) return;
@@ -491,6 +535,146 @@ export default function SupportChat({ onBack }) {
       }
       cancelOrderPayloadRef.current = { opt, label };
       setCancelModalVisible(true);
+      return;
+    }
+
+    if (opt.id === 'wallet_dues_not_reflecting') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+
+      const run = async () => {
+        let botText = t('supportBot.walletDuesNoPaidRecordBlock');
+        try {
+          const wResp = await walletAPI.getWallet();
+          const list = wResp?.wallet?.paymentTransactions;
+          const last = Array.isArray(list) && list.length > 0 ? list[0] : null;
+          botText = buildWalletDuesBotMessage(last);
+        } catch (_) {
+          /* keep fallback */
+        }
+
+        setTimeout(() => {
+          pushBotRawMessage(botText);
+          setNodeId('wallet_dues_ask_confirm');
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+        }, 250);
+
+        if (ticketId) {
+          try {
+            await supportAPI.append(ticketId, {
+              userTextKey: opt.labelKey,
+              botText,
+              nextNodeId: 'wallet_dues_ask_confirm',
+            });
+          } catch (_) {}
+        }
+      };
+      void run();
+      return;
+    }
+
+    if (opt.id === 'wallet_dues_confirm_yes') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.wallet_dues_after_yes.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('wallet_dues_after_yes');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.id === 'wallet_dues_confirm_no') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.wallet_dues_after_no.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('wallet_dues_after_no');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.id === 'orders_contact') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.orders_contact.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('orders_contact');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.id === 'orders_customer_cancel') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.orders_customer_cancel.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('orders_customer_cancel');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
       return;
     }
 

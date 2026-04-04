@@ -505,6 +505,8 @@ export default {
       back: 'Back',
       mainMenu: 'Main menu',
       cancelChat: 'Cancel chat',
+      yes: 'Yes',
+      no: 'No',
     },
     root: {
       text: 'Please choose a category:',
@@ -524,7 +526,6 @@ export default {
     },
     wallet: {
       text: 'Wallet issues — choose one:',
-      withdrawnNotCredited: 'Withdrawn not credited',
       duesNotReflecting: 'Paid dues but not reflecting in wallet',
       paymentProcessing: 'Payment is in processing',
       paymentStatus: 'Payment status',
@@ -532,6 +533,7 @@ export default {
     withdrawal: {
       text: 'Withdrawal issues — choose one:',
       cannotAddBank: 'Not able to add bank account',
+      withdrawalNotCredited: 'Withdrawal not credited',
       paymentStatus: 'Payment status',
       withdrawalAmount: 'Withdrawal amount',
       notReceived: 'Not received',
@@ -542,19 +544,31 @@ export default {
     },
     ordersContact: {
       text:
-        'Not able to contact customer:\n- Check network.\n- Try calling again after 1–2 minutes.\n- If still not reachable, message the customer (if available) and wait.\n- If urgent, call support.',
+        'If the customer is not picking up your call, wait for some time and call again. Do this at least three times with a gap of 5–10 minutes between attempts. If the customer still does not pick up, you can call our team directly and we will try to resolve the issue from our end.',
     },
     ordersCustomerCancel: {
       text:
-        'Customer asking to cancel:\n- Ask the customer to cancel from their side if possible.\n- If you can cancel from Orders, do it.\n- If neither works, call support.',
+        'If the customer is asking to cancel the order, call us. Our backend team will take confirmation from the customer and from you, and then we will cancel the order. You do not need to worry — cancellation from the customer’s side will not affect your profile performance or ratings.',
     },
-    walletWithdrawNotCredited: {
+    withdrawalNotCredited: {
       text:
-        'Withdrawn not credited:\n- Check if status is Processing/Paid in wallet history.\n- If Processing, wait for bank transfer.\n- If Paid but not received after some time, call support with transaction details.',
+        'Withdrawal not credited:\n- Check if status is Processing/Paid in wallet history.\n- If Processing, wait for bank transfer.\n- If Paid but not received after some time, call support with transaction details.',
     },
     walletDuesNotReflecting: {
       text:
         'Paid dues not reflecting:\n- Refresh Wallet.\n- Wait 1–2 minutes and reopen Wallet.\n- If still not updated, note payment time and call support.',
+    },
+    /** Placeholders: {amount}, {date}, {orderId} */
+    walletDuesLastPaidBlock:
+      'Your last paid dues entry:\n\nAmount: {amount}\nPaid on: {date}\nOrder reference: {orderId}\n\nWere you asking about this transaction?',
+    walletDuesNoPaidRecordBlock:
+      'We could not find a previous paid dues entry in your wallet. If you paid very recently, it may not appear yet.\n\nWere you asking about a recent payment?',
+    walletDuesAfterYes: {
+      text:
+        'Paying dues into your wallet usually takes 7–8 hours to reflect. Please wait and check your wallet again after that time.',
+    },
+    walletDuesAfterNo: {
+      text: 'Recent transactions can take some time to show up in your wallet. Please try again later.',
     },
     walletProcessing: {
       text:

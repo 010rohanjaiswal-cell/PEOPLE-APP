@@ -1033,13 +1033,14 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
       !workCooldownActive &&
       !isWaitingApp &&
       applicationAllowsNewApply;
+    // Offers are independent of apply flow; backend only enforces offer cooldown. Block only when application was accepted (parallel path closed).
     const canMakeOffer =
       canWork &&
       cooldownMinutes === 0 &&
       !isPickedUp &&
       !hasActiveJob &&
       !workCooldownActive &&
-      (delivery || applicationAllowsNewApply);
+      (delivery || appStatus !== 'accepted');
     const applyingThis = applyingJobId === jobId;
 
     return (
@@ -1212,8 +1213,6 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
               ? t('jobs.workCooldownShort')
               : isPickedUp
               ? t('jobs.alreadyTaken')
-              : !delivery && appStatus === 'pending'
-              ? t('jobs.waitingForClient')
               : !delivery && appStatus === 'accepted'
               ? t('jobs.applicationAcceptedShort')
               : cooldownMinutes > 0
