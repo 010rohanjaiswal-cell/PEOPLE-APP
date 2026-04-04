@@ -501,28 +501,31 @@ export default {
     botFallback:
       "I can help with OTP/login, wallet/withdrawal, address/pincode, verification, jobs, and payments.\n\nWhich one is your issue?",
     categoriesTitle: 'What do you need help with?',
+    clientInitFailed: 'Could not start support chat. Check your connection and try again.',
   },
   supportClientBot: {
     greeting: "Hi! I'm the People Support bot for clients.",
     root: {
-      text: 'Choose a topic below, or use Call / Chat for anything else.',
+      text: 'Use the buttons below to get help with your job.',
     },
     category: {
       cancelJob: 'Cancel the job',
       unassignFreelancer: 'Unassign the freelancer',
     },
-    cancelJob: {
-      detail:
-        'Cancel the job:\n\nWe will try to cancel your most recent active job that is not completed. If you have a freelancer assigned, they will be removed and the job will be marked cancelled.\n\nTap Confirm only if you are sure.',
-    },
+    cancelAskAboutJob:
+      'Were you asking about this job?\n\n{title}\nBudget: ₹{budget}\n\nTap Yes to continue with this job, or No if this is not the one.',
+    cancelNoActiveJob: 'We could not find an open or active job on your account. Post or check My Jobs, then try again.',
+    cancelCannotWorkDone:
+      'The freelancer has already marked work as done for this job (waiting for payment). You cannot cancel it from here. Use My Jobs or call support if you need help.',
+    cancelJobDeleted: 'The job “{title}” has been removed.',
+    cancelJobAlreadyClosed: 'This job (“{title}”) is already closed. Check My Jobs.',
+    cancelWrongJob:
+      'If the job you want to cancel is still pending or was rejected, check My Jobs and try again. Tap End chat when you are done.',
     unassign: {
       detail:
-        'Unassign the freelancer:\n\nWe will remove the assigned freelancer from your active job and reopen it for others. The freelancer will be temporarily blocked from applying or making offers for 8 hours (same as freelancer-initiated unassign).\n\nTap Confirm only if you are sure.',
+        'We will remove the assigned freelancer from your active job and reopen it for others. The freelancer will be temporarily blocked from applying or making offers for 8 hours.\n\nTap Confirm only if you are sure.',
     },
     confirmProceed: 'Confirm and submit',
-    cancelConfirmTitle: 'Cancel this job?',
-    cancelConfirmBody:
-      'Your latest active job will be cancelled. This cannot be undone from here. Continue?',
     unassignConfirmTitle: 'Unassign the freelancer?',
     unassignConfirmBody:
       'The freelancer will be removed from your job and blocked from new applications for 8 hours. Continue?',

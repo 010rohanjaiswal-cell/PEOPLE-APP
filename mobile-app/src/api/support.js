@@ -5,7 +5,6 @@
 import apiClient from './client';
 
 export const supportAPI = {
-  /** @param {{ category?: 'cancel_job' | 'unassign_freelancer' }} [payload] — client-only category when starting chat */
   startTicket: async (payload) => {
     const res = await apiClient.post('/api/support/tickets/start', payload || {});
     return res.data;
@@ -32,6 +31,12 @@ export const supportAPI = {
   },
   clientCancelJob: async (ticketId) => {
     const res = await apiClient.post(`/api/support/tickets/${ticketId}/actions/client-cancel-job`);
+    return res.data;
+  },
+  clientConfirmDeleteJob: async (ticketId, jobId) => {
+    const res = await apiClient.post(`/api/support/tickets/${ticketId}/actions/client-confirm-delete-job`, {
+      jobId,
+    });
     return res.data;
   },
   complete: async (ticketId) => {

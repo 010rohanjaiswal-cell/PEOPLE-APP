@@ -14,6 +14,12 @@ export const clientJobsAPI = {
     return response.data;
   },
 
+  /** For Support chat: primary job to offer cancel (title, budget, status). */
+  getSupportCancelContext: async () => {
+    const response = await apiClient.get('/api/client/jobs/support-cancel-context');
+    return response.data;
+  },
+
   /**
    * Get job history for client
    * @returns {Promise} List of completed jobs

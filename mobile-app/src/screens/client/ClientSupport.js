@@ -131,34 +131,6 @@ function createStyles(colors) {
     actionTextPrimary: {
       color: '#FFFFFF',
     },
-    sectionLabel: {
-      ...typography.small,
-      color: colors.text.muted,
-      fontWeight: '700',
-      marginBottom: spacing.xs,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    categoryRow: {
-      gap: spacing.sm,
-    },
-    categoryChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      borderRadius: spacing.md,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.background,
-    },
-    categoryChipText: {
-      ...typography.body,
-      color: colors.text.primary,
-      fontWeight: '600',
-      flex: 1,
-    },
   });
 }
 
@@ -209,11 +181,9 @@ export default function ClientSupport({ onNavigate }) {
     loadTickets();
   }, []);
 
-  const startChat = async (category) => {
+  const startChat = async () => {
     try {
-      const body =
-        category === 'cancel_job' || category === 'unassign_freelancer' ? { category } : {};
-      const resp = await supportAPI.startTicket(body);
+      const resp = await supportAPI.startTicket();
       if (resp?.success && resp.ticket?._id) {
         await AsyncStorage.setItem(SUPPORT_TICKET_ID_KEY, String(resp.ticket._id));
         onNavigate?.('SupportChat', { bootstrapTicket: resp.ticket });
@@ -259,30 +229,6 @@ export default function ClientSupport({ onNavigate }) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionLabel}>{t('support.categoriesTitle')}</Text>
-        <View style={styles.categoryRow}>
-          <TouchableOpacity
-            style={styles.categoryChip}
-            onPress={() => startChat('cancel_job')}
-            activeOpacity={0.85}
-          >
-            <MaterialIcons name="cancel" size={22} color={colors.error.main} />
-            <Text style={styles.categoryChipText}>{t('supportClientBot.category.cancelJob')}</Text>
-            <MaterialIcons name="chevron-right" size={22} color={colors.text.muted} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.categoryChip}
-            onPress={() => startChat('unassign_freelancer')}
-            activeOpacity={0.85}
-          >
-            <MaterialIcons name="person-off" size={22} color={colors.text.primary} />
-            <Text style={styles.categoryChipText}>{t('supportClientBot.category.unassignFreelancer')}</Text>
-            <MaterialIcons name="chevron-right" size={22} color={colors.text.muted} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.card}>
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.action} onPress={handleCall} activeOpacity={0.85}>
             <MaterialIcons name="phone" size={20} color={colors.text.primary} />
@@ -291,7 +237,7 @@ export default function ClientSupport({ onNavigate }) {
 
           <TouchableOpacity
             style={[styles.action, styles.actionPrimary]}
-            onPress={() => startChat()}
+            onPress={startChat}
             activeOpacity={0.85}
           >
             <MaterialIcons name="chat" size={20} color="#FFFFFF" />

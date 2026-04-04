@@ -2,7 +2,7 @@
  * Client support chat — guided quick replies for cancel job / unassign freelancer.
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -21,6 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supportAPI } from '../../api';
+import clientJobsAPI from '../../api/clientJobs';
 
 const BOT_BLOCKED_8H_TEXT_KEY = 'supportTicket.bot.blocked8hAndEnd';
 
@@ -56,6 +58,7 @@ function createStyles(colors, insets) {
       paddingHorizontal: spacing.lg,
     },
     emptyText: { ...typography.body, color: colors.text.muted, textAlign: 'center' },
+    loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: spacing.xxl },
     messagesList: { padding: spacing.md, paddingBottom: spacing.lg },
     messageContainer: { marginBottom: spacing.sm },
     myMessage: { alignItems: 'flex-end' },
@@ -170,7 +173,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
           {
             id: 'cat_cancel',
             labelKey: 'supportClientBot.category.cancelJob',
-            next: 'client_cancel_confirm',
           },
           {
             id: 'cat_unassign',
@@ -179,9 +181,20 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
           },
         ],
       },
-      client_cancel_confirm: {
-        botTextKey: 'supportClientBot.cancelJob.detail',
-        options: [{ id: 'confirm_cancel_job', labelKey: 'supportClientBot.confirmProceed', action: 'cancel_job' }],
+      client_cancel_ask_job: {
+        botTextKey: 'supportClientBot.root.text',
+        options: [
+          {
+            id: 'cancel_job_yes',
+            labelKey: 'supportBot.common.yes',
+            action: 'confirm_delete_job',
+          },
+          {
+            id: 'cancel_job_no',
+            labelKey: 'supportBot.common.no',
+            action: 'reject_cancel_not_this_job',
+          },
+        ],
       },
       client_unassign_confirm: {
         botTextKey: 'supportClientBot.unassign.detail',
@@ -193,15 +206,17 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
   );
 
   const [messages, setMessages] = useState([]);
-  const [chatStarted, setChatStarted] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [initError, setInitError] = useState(null);
   const [nodeId, setNodeId] = useState('client_root');
   const [ticketId, setTicketId] = useState(null);
   const [ticketStatus, setTicketStatus] = useState('open');
   const [destructiveModal, setDestructiveModal] = useState(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [pendingCancelJobId, setPendingCancelJobId] = useState(null);
 
   const flatListRef = useRef(null);
   const pendingDestructiveRef = useRef(null);
-  const skipStorageHydrationRef = useRef(false);
 
   const nowId = () => `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const TICKET_KEY = 'supportTicketId';
@@ -220,24 +235,69 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     return out;
   }, [t]);
 
-  useLayoutEffect(() => {
-    const boot = bootstrapTicketRef?.current;
-    if (!boot?._id) return;
-    bootstrapTicketRef.current = null;
-    skipStorageHydrationRef.current = true;
-    setTicketId(String(boot._id));
-    setTicketStatus(boot.status || 'open');
-    setChatStarted(boot.status === 'open');
-    setNodeId(boot.currentNodeId || 'client_root');
-    const msgs = ticketMessagesForDisplay(boot).map((m) => ({
-      _id: m._id || nowId(),
-      sender: m.sender === 'user' ? user?.id || user?._id : m.sender,
-      message: renderTicketText(m),
-      createdAt: m.createdAt || new Date(),
-    }));
-    setMessages(msgs);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const hydrateFromTicket = useCallback(
+    (ticket) => {
+      setTicketId(String(ticket._id));
+      setTicketStatus(ticket.status || 'open');
+      setNodeId(ticket.currentNodeId || 'client_root');
+      const msgs = ticketMessagesForDisplay(ticket).map((m) => ({
+        _id: m._id || nowId(),
+        sender: m.sender === 'user' ? user?.id || user?._id : m.sender,
+        message: renderTicketText(m),
+        createdAt: m.createdAt || new Date(),
+      }));
+      setMessages(msgs);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 0);
+    },
+    [renderTicketText, user?.id, user?._id]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setInitializing(true);
+      setInitError(null);
+
+      const boot = bootstrapTicketRef?.current;
+      if (boot?._id) {
+        bootstrapTicketRef.current = null;
+        hydrateFromTicket(boot);
+        if (!cancelled) setInitializing(false);
+        return;
+      }
+
+      try {
+        const id = await AsyncStorage.getItem(TICKET_KEY);
+        if (id) {
+          const resp = await supportAPI.getTicket(id);
+          if (!cancelled && resp?.success && resp.ticket && resp.ticket.status === 'open') {
+            hydrateFromTicket(resp.ticket);
+            setInitializing(false);
+            return;
+          }
+          await AsyncStorage.removeItem(TICKET_KEY);
+        }
+
+        const resp = await supportAPI.startTicket();
+        if (cancelled) return;
+        if (resp?.success && resp.ticket?._id) {
+          await AsyncStorage.setItem(TICKET_KEY, String(resp.ticket._id));
+          hydrateFromTicket(resp.ticket);
+        } else {
+          setInitError(t('support.clientInitFailed'));
+        }
+      } catch (_) {
+        if (!cancelled) setInitError(t('support.clientInitFailed'));
+      } finally {
+        if (!cancelled) setInitializing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time load; avoid re-init when user/hydrate updates
   }, []);
 
   const pushBotNode = (id) => {
@@ -267,24 +327,21 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
   };
 
-  const startChat = async () => {
-    if (!user) return;
-    const resp = await supportAPI.startTicket();
-    if (resp?.success && resp.ticket?._id) {
-      const id = String(resp.ticket._id);
-      await AsyncStorage.setItem(TICKET_KEY, id);
-      setTicketId(id);
-      setTicketStatus(resp.ticket.status || 'open');
-      setChatStarted(true);
-      setNodeId(resp.ticket.currentNodeId || 'client_root');
-      const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
-        _id: m._id || nowId(),
-        sender: m.sender === 'user' ? user?.id || user?._id : m.sender,
-        message: renderTicketText(m),
-        createdAt: m.createdAt || new Date(),
-      }));
-      setMessages(msgs);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+  const retryInit = async () => {
+    setInitError(null);
+    setInitializing(true);
+    try {
+      const resp = await supportAPI.startTicket();
+      if (resp?.success && resp.ticket?._id) {
+        await AsyncStorage.setItem(TICKET_KEY, String(resp.ticket._id));
+        hydrateFromTicket(resp.ticket);
+      } else {
+        setInitError(t('support.clientInitFailed'));
+      }
+    } catch (_) {
+      setInitError(t('support.clientInitFailed'));
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -301,6 +358,7 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
 
   const goToMainMenu = useCallback(async () => {
     setNodeId('client_root');
+    setPendingCancelJobId(null);
     if (ticketId) {
       try {
         await supportAPI.append(ticketId, {
@@ -316,8 +374,8 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     const p = pendingDestructiveRef.current;
     setDestructiveModal(null);
     pendingDestructiveRef.current = null;
-    if (!p || !ticketId) return;
-    const { opt, label, action } = p;
+    if (!p || !ticketId || p.action !== 'unassign') return;
+    const { opt, label } = p;
     const userMsg = {
       _id: nowId(),
       sender: user?.id || user?._id || 'me',
@@ -327,10 +385,7 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     setMessages((prev) => [...prev, userMsg]);
     try {
       await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
-      const resp =
-        action === 'cancel_job'
-          ? await supportAPI.clientCancelJob(ticketId)
-          : await supportAPI.clientUnassign(ticketId);
+      const resp = await supportAPI.clientUnassign(ticketId);
       if (resp?.success && resp.ticket) {
         applyTicketFromResponse(resp.ticket);
         return;
@@ -340,71 +395,98 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     setNodeId('end_ready');
   };
 
-  const selectOption = async (opt) => {
+  const handleOption = async (opt) => {
     if (!opt) return;
+    if (!ticketId) return;
     const label = t(opt.labelKey);
 
-    if (opt.action === 'cancel_job' || opt.action === 'unassign') {
-      if (!ticketId) {
-        setMessages((prev) => [
-          ...prev,
-          { _id: nowId(), sender: user?.id || user?._id || 'me', message: label, createdAt: new Date() },
-        ]);
-        return;
+    if (opt.id === 'cat_cancel') {
+      setCancelLoading(true);
+      setPendingCancelJobId(null);
+      try {
+        let r = await supportAPI.append(ticketId, {
+          userTextKey: 'supportClientBot.category.cancelJob',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+
+        const ctx = await clientJobsAPI.getSupportCancelContext();
+        if (!ctx?.success || !ctx.hasJob) {
+          r = await supportAPI.append(ticketId, {
+            botTextKey: 'supportClientBot.cancelNoActiveJob',
+            nextNodeId: 'end_ready',
+          });
+          if (r?.ticket) applyTicketFromResponse(r.ticket);
+          return;
+        }
+
+        const budget = Math.round(Number(ctx.job.budget ?? 0));
+        r = await supportAPI.append(ticketId, {
+          botTextKey: 'supportClientBot.cancelAskAboutJob',
+          botParams: { title: ctx.job.title || '—', budget: String(budget) },
+          nextNodeId: 'client_cancel_ask_job',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+        setPendingCancelJobId(String(ctx.job._id));
+        setNodeId('client_cancel_ask_job');
+      } catch (_) {
+        /* ignore */
+      } finally {
+        setCancelLoading(false);
       }
-      pendingDestructiveRef.current = { opt, label, action: opt.action };
-      setDestructiveModal(opt.action);
       return;
     }
 
-    const userMsg = {
-      _id: nowId(),
-      sender: user?.id || user?._id || 'me',
-      message: label,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-
-    if (!ticketId) return;
-
-    const botTextKey = (FLOW[opt.next] || FLOW.client_root).botTextKey;
-    setNodeId(opt.next);
-    setTimeout(() => {
-      pushBotNode(opt.next);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-    }, 250);
-    try {
-      await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    (async () => {
-      if (skipStorageHydrationRef.current) {
-        skipStorageHydrationRef.current = false;
-        return;
-      }
-      const id = await AsyncStorage.getItem(TICKET_KEY);
-      if (!id) return;
-      setTicketId(id);
+    if (opt.action === 'confirm_delete_job') {
+      if (!pendingCancelJobId) return;
       try {
-        const resp = await supportAPI.getTicket(id);
-        if (resp?.success && resp.ticket) {
-          setChatStarted(resp.ticket.status === 'open');
-          setTicketStatus(resp.ticket.status || 'open');
-          setNodeId(resp.ticket.currentNodeId || 'client_root');
-          const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
-            _id: m._id || nowId(),
-            sender: m.sender === 'user' ? user?.id || user?._id : m.sender,
-            message: renderTicketText(m),
-            createdAt: m.createdAt || new Date(),
-          }));
-          setMessages(msgs);
+        const r = await supportAPI.clientConfirmDeleteJob(ticketId, pendingCancelJobId);
+        if (r?.success && r.ticket) {
+          applyTicketFromResponse(r.ticket);
+          setPendingCancelJobId(null);
         }
       } catch (_) {}
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      return;
+    }
+
+    if (opt.action === 'reject_cancel_not_this_job') {
+      try {
+        const r = await supportAPI.append(ticketId, {
+          userTextKey: 'supportBot.common.no',
+          botTextKey: 'supportClientBot.cancelWrongJob',
+          nextNodeId: 'end_ready',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+        setPendingCancelJobId(null);
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.action === 'unassign') {
+      pendingDestructiveRef.current = { opt, label, action: 'unassign' };
+      setDestructiveModal('unassign');
+      return;
+    }
+
+    if (opt.id === 'cat_unassign' && opt.next) {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      const botTextKey = (FLOW[opt.next] || FLOW.client_root).botTextKey;
+      setNodeId(opt.next);
+      setTimeout(() => {
+        pushBotNode(opt.next);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
+      } catch (_) {}
+      return;
+    }
+  };
 
   const renderMessage = ({ item }) => {
     const senderId = item.sender?._id || item.sender?.id || item.sender;
@@ -430,18 +512,8 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     );
   };
 
-  const modalTitle =
-    destructiveModal === 'cancel_job'
-      ? t('supportClientBot.cancelConfirmTitle')
-      : destructiveModal === 'unassign'
-        ? t('supportClientBot.unassignConfirmTitle')
-        : '';
-  const modalBody =
-    destructiveModal === 'cancel_job'
-      ? t('supportClientBot.cancelConfirmBody')
-      : destructiveModal === 'unassign'
-        ? t('supportClientBot.unassignConfirmBody')
-        : '';
+  const modalTitle = destructiveModal === 'unassign' ? t('supportClientBot.unassignConfirmTitle') : '';
+  const modalBody = destructiveModal === 'unassign' ? t('supportClientBot.unassignConfirmBody') : '';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -459,30 +531,42 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
         </View>
 
         <View style={styles.messagesContainer}>
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(it) => it._id || it.id || `msg_${it.createdAt}`}
-            renderItem={renderMessage}
-            contentContainerStyle={styles.messagesList}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>{t('supportBot.tapStart')}</Text>
-              </View>
-            }
-          />
+          {initializing ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color={colors.primary.main} />
+            </View>
+          ) : initError ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{initError}</Text>
+              <TouchableOpacity style={[styles.startChatButton, { marginTop: spacing.lg }]} onPress={retryInit} activeOpacity={0.85}>
+                <Text style={styles.startChatText}>{t('common.retry')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(it) => it._id || it.id || `msg_${it.createdAt}`}
+              renderItem={renderMessage}
+              contentContainerStyle={styles.messagesList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>{t('support.recentTicketsEmpty')}</Text>
+                </View>
+              }
+            />
+          )}
         </View>
 
         <View style={styles.composer}>
-          {!chatStarted ? (
-            <TouchableOpacity style={styles.startChatButton} onPress={startChat} activeOpacity={0.85}>
-              <MaterialIcons name="chat" size={20} color="#FFFFFF" />
-              <Text style={styles.startChatText}>{t('supportBot.startChat')}</Text>
-            </TouchableOpacity>
-          ) : nodeId === 'end_ready' && ticketStatus === 'open' ? (
+          {initializing || initError ? null : cancelLoading ? (
+            <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
+              <ActivityIndicator color={colors.primary.main} />
+            </View>
+          ) : ticketStatus !== 'open' ? null : nodeId === 'end_ready' ? (
             <TouchableOpacity style={styles.startChatButton} onPress={endChat} activeOpacity={0.85}>
               <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
               <Text style={styles.startChatText}>{t('supportBot.endChat')}</Text>
@@ -491,8 +575,11 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
             <View>
               <View style={styles.quickReplies}>
                 {(currentNode?.options || []).map((opt) => {
-                  const isPrimary = opt.id === 'cat_cancel' || opt.id === 'cat_unassign';
-                  const isDanger = Boolean(opt.action);
+                  const isPrimary =
+                    opt.id === 'cat_cancel' ||
+                    opt.id === 'cat_unassign' ||
+                    opt.id === 'cancel_job_yes';
+                  const isDanger = opt.action === 'unassign';
                   return (
                     <TouchableOpacity
                       key={opt.id}
@@ -501,7 +588,7 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
                         isPrimary && styles.quickReplyPrimary,
                         isDanger && styles.quickReplyDanger,
                       ]}
-                      onPress={() => selectOption(opt)}
+                      onPress={() => handleOption(opt)}
                       activeOpacity={0.85}
                     >
                       <Text style={styles.quickReplyText}>{t(opt.labelKey)}</Text>

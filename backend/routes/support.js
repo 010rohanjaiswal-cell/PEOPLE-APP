@@ -21,10 +21,14 @@ function hoursFromNow(h) {
   return new Date(Date.now() + h * 60 * 60 * 1000);
 }
 
+/** Freelancer-only: cancel-order / unassign-from-freelancer side of support. */
 function requireFreelancer(req, res) {
   const user = req.user;
   if (!user || user.role !== 'freelancer') {
-    res.status(403).json({ success: false, error: 'Only freelancers can use support tickets' });
+    res.status(403).json({
+      success: false,
+      error: 'Only freelancers can use this support action (order cancellation).',
+    });
     return null;
   }
   return user;
@@ -49,36 +53,15 @@ function requireClient(req, res) {
   return user;
 }
 
-function buildClientStart(category) {
+function buildClientStart() {
   const greeting = { sender: 'bot', textKey: 'supportClientBot.greeting', createdAt: now() };
-  if (!category) {
-    return {
-      currentNodeId: 'client_root',
-      messages: [
-        greeting,
-        { sender: 'bot', textKey: 'supportClientBot.root.text', createdAt: now() },
-      ],
-    };
-  }
-  if (category === 'cancel_job') {
-    return {
-      currentNodeId: 'client_cancel_confirm',
-      messages: [
-        greeting,
-        { sender: 'bot', textKey: 'supportClientBot.cancelJob.detail', createdAt: now() },
-      ],
-    };
-  }
-  if (category === 'unassign_freelancer') {
-    return {
-      currentNodeId: 'client_unassign_confirm',
-      messages: [
-        greeting,
-        { sender: 'bot', textKey: 'supportClientBot.unassign.detail', createdAt: now() },
-      ],
-    };
-  }
-  return buildClientStart(null);
+  return {
+    currentNodeId: 'client_root',
+    messages: [
+      greeting,
+      { sender: 'bot', textKey: 'supportClientBot.root.text', createdAt: now() },
+    ],
+  };
 }
 
 /**
@@ -98,11 +81,7 @@ router.post('/tickets/start', authenticate, async (req, res) => {
     }
 
     if (user.role === 'client') {
-      const category =
-        typeof req.body?.category === 'string' ? req.body.category.trim() : '';
-      const { messages, currentNodeId } = buildClientStart(
-        category === 'cancel_job' || category === 'unassign_freelancer' ? category : null
-      );
+      const { messages, currentNodeId } = buildClientStart();
       const ticket = await SupportTicket.create({
         user: user._id,
         status: 'open',
@@ -418,6 +397,100 @@ router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, re
   } catch (e) {
     console.error('Error client-unassign action:', e);
     res.status(500).json({ success: false, error: e?.message || 'Failed to unassign' });
+  }
+});
+
+/**
+ * Client: confirm delete after "Was this your job?" Yes — blocks if work_done, else deletes job.
+ * POST /api/support/tickets/:id/actions/client-confirm-delete-job
+ * Body: { jobId: string }
+ */
+router.post('/tickets/:id/actions/client-confirm-delete-job', authenticate, async (req, res) => {
+  try {
+    const user = requireClient(req, res);
+    if (!user) return;
+
+    const rawId = req.body?.jobId;
+    if (!rawId || !mongoose.Types.ObjectId.isValid(String(rawId))) {
+      return res.status(400).json({ success: false, error: 'Invalid jobId' });
+    }
+
+    const ticket = await SupportTicket.findOne({ _id: req.params.id, user: user._id });
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
+    if (ticket.status !== 'open') return res.status(400).json({ success: false, error: 'Ticket is not open' });
+
+    const clientOid =
+      user._id instanceof mongoose.Types.ObjectId
+        ? user._id
+        : new mongoose.Types.ObjectId(String(user._id));
+    const jid = new mongoose.Types.ObjectId(String(rawId));
+
+    const job = await Job.findOne({ _id: jid, client: clientOid });
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    const title = job.title || '';
+
+    ticket.messages.push({
+      sender: 'user',
+      textKey: 'supportBot.common.yes',
+      createdAt: now(),
+    });
+
+    if (job.status === 'work_done') {
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportClientBot.cancelCannotWorkDone',
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+      await ticket.save();
+      return res.json({ success: true, ticket, deleted: false, reason: 'work_done' });
+    }
+
+    if (job.status === 'completed' || job.status === 'cancelled') {
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportClientBot.cancelJobAlreadyClosed',
+        params: { title },
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+      await ticket.save();
+      return res.json({ success: true, ticket, deleted: false });
+    }
+
+    await job.deleteOne();
+
+    ticket.messages.push({
+      sender: 'bot',
+      textKey: 'supportClientBot.cancelJobDeleted',
+      params: { title },
+      createdAt: now(),
+    });
+    ticket.messages.push({
+      sender: 'bot',
+      textKey: 'supportBot.endReady.text',
+      createdAt: now(),
+    });
+    ticket.currentNodeId = 'end_ready';
+    await ticket.save();
+
+    return res.json({ success: true, ticket, deleted: true, jobId: jid });
+  } catch (e) {
+    console.error('Error client-confirm-delete-job:', e);
+    res.status(500).json({ success: false, error: e?.message || 'Failed to delete job' });
   }
 });
 

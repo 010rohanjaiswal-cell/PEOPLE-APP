@@ -405,6 +405,56 @@ router.get('/jobs/active', authenticate, async (req, res) => {
 });
 
 /**
+ * Primary job for Support "cancel job" flow (most recently updated open / assigned / work_done).
+ * GET /api/client/jobs/support-cancel-context
+ */
+router.get('/jobs/support-cancel-context', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can use this',
+      });
+    }
+
+    const clientOid =
+      user._id instanceof mongoose.Types.ObjectId
+        ? user._id
+        : new mongoose.Types.ObjectId(String(user._id));
+
+    const job = await Job.findOne({
+      client: clientOid,
+      status: { $in: ['open', 'assigned', 'work_done'] },
+    })
+      .sort({ updatedAt: -1 })
+      .select('title budget status assignedFreelancer')
+      .lean();
+
+    if (!job) {
+      return res.json({ success: true, hasJob: false });
+    }
+
+    return res.json({
+      success: true,
+      hasJob: true,
+      job: {
+        _id: job._id,
+        title: job.title,
+        budget: job.budget,
+        status: job.status,
+      },
+    });
+  } catch (error) {
+    console.error('Error support-cancel-context:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to load job context',
+    });
+  }
+});
+
+/**
  * Get job history for client
  * GET /api/client/jobs/history
  */
