@@ -314,7 +314,7 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
 });
 
 /**
- * Client: unassign freelancer from their active job (mirrors freelancer cancel-order on that job).
+ * Client: unassign freelancer from their active job (job reopens; no 8h pickup block — that applies only when the freelancer unassigns via cancel-order).
  * POST /api/support/tickets/:id/actions/client-unassign
  */
 router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, res) => {
@@ -368,9 +368,7 @@ router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, re
     }
 
     let unassignedJobId = null;
-    let freelancerId = null;
     if (job && job.assignedFreelancer) {
-      freelancerId = job.assignedFreelancer;
       job.assignedFreelancer = null;
       job.status = 'open';
       job.freelancerCompleted = false;
@@ -379,23 +377,17 @@ router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, re
     }
 
     ticket.effects.unassignedJobId = unassignedJobId;
-    if (unassignedJobId && freelancerId) {
-      const blockedUntil = hoursFromNow(8);
-      await User.updateOne(
-        { _id: freelancerId },
-        { $set: { freelancerPickupBlockedUntil: blockedUntil } }
-      );
-      ticket.effects.pickupBlockedUntil = blockedUntil;
+    if (unassignedJobId) {
+      ticket.effects.pickupBlockedUntil = null;
       ticket.messages.push({
         sender: 'system',
-        textKey: 'supportTicket.system.unassigned',
-        meta: { unassignedJobId, blockedUntil },
+        textKey: 'supportClientBot.system.freelancerUnassigned',
+        meta: { unassignedJobId },
         createdAt: now(),
       });
       ticket.messages.push({
         sender: 'bot',
-        textKey: 'supportTicket.bot.blocked8hAndEnd',
-        params: { hours: 8 },
+        textKey: 'supportBot.endReady.text',
         createdAt: now(),
       });
       ticket.currentNodeId = 'end_ready';

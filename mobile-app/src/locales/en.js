@@ -539,6 +539,7 @@ export default {
       'The freelancer will be removed from your job and blocked from new applications for 8 hours. Continue?',
     system: {
       noAssignedJob: 'No active job with an assigned freelancer was found.',
+      freelancerUnassigned: 'The freelancer has been removed from your job. The job is open again for others to apply.',
       noJobToCancel: 'No active job was found to cancel.',
       jobCancelled: 'Your job “{title}” has been cancelled.',
     },
