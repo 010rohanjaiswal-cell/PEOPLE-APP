@@ -138,9 +138,18 @@ export default function Support({ onNavigate }) {
   const loadTickets = async () => {
     try {
       setLoadingTickets(true);
-      const resp = await supportAPI.listTickets(10);
-      if (resp?.success) setTickets(resp.tickets || []);
-      else setTickets([]);
+      const resp = await supportAPI.listTickets(7);
+      if (resp?.success) {
+        const list = resp.tickets || [];
+        setTickets(list);
+        const ids = new Set(list.map((tk) => String(tk._id)));
+        const stored = await AsyncStorage.getItem(SUPPORT_TICKET_ID_KEY);
+        if (stored && !ids.has(stored)) {
+          await AsyncStorage.removeItem(SUPPORT_TICKET_ID_KEY);
+        }
+      } else {
+        setTickets([]);
+      }
     } catch (_) {
       setTickets([]);
     } finally {

@@ -9,7 +9,7 @@ export const supportAPI = {
     const res = await apiClient.post('/api/support/tickets/start');
     return res.data;
   },
-  listTickets: async (limit = 10) => {
+  listTickets: async (limit = 7) => {
     const res = await apiClient.get('/api/support/tickets', { params: { limit } });
     return res.data;
   },

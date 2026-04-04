@@ -349,7 +349,15 @@ export default function SupportChat({ onBack }) {
       },
       wallet_dues_after_yes: { botTextKey: 'supportBot.walletDuesAfterYes.text', options: [] },
       wallet_dues_after_no: { botTextKey: 'supportBot.walletDuesAfterNo.text', options: [] },
-      wallet_processing: { botTextKey: 'supportBot.walletProcessing.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
+      wallet_received_ask_confirm: {
+        botTextKey: 'supportBot.root.text',
+        options: [
+          { id: 'wallet_received_confirm_yes', labelKey: 'supportBot.common.yes', next: 'wallet_received_after_yes' },
+          { id: 'wallet_received_confirm_no', labelKey: 'supportBot.common.no', next: 'wallet_received_after_no' },
+        ],
+      },
+      wallet_received_after_yes: { botTextKey: 'supportBot.walletReceivedAfterYes.text', options: [] },
+      wallet_received_after_no: { botTextKey: 'supportBot.walletReceivedAfterNo.text', options: [] },
       wallet_status: { botTextKey: 'supportBot.walletStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'wallet' }] },
       withdrawal_add_bank: { botTextKey: 'supportBot.withdrawalAddBank.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
       withdrawal_status: { botTextKey: 'supportBot.withdrawalStatus.text', options: [{ id: 'back', labelKey: 'supportBot.common.back', next: 'withdrawal' }] },
@@ -417,6 +425,32 @@ export default function SupportChat({ onBack }) {
       const orderRef = String(lastPayment.orderId || lastPayment.id || '—');
       return t('supportBot.walletDuesLastPaidBlock')
         .replace('{amount}', amount)
+        .replace('{date}', dateStr)
+        .replace('{orderId}', orderRef);
+    },
+    [t, locale]
+  );
+
+  const buildWalletReceivedBotMessage = useCallback(
+    (lastOnline) => {
+      if (!lastOnline) return t('supportBot.walletReceivedNoPaidBlock');
+      const amount =
+        lastOnline.amount != null ? `₹${Math.round(Number(lastOnline.amount))}` : '—';
+      const dateSrc = lastOnline.paidAt;
+      const dateStr = dateSrc
+        ? new Date(dateSrc).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '—';
+      const jobTitle = lastOnline.jobTitle ? String(lastOnline.jobTitle) : '—';
+      const orderRef = lastOnline.merchantOrderId ? String(lastOnline.merchantOrderId) : '—';
+      return t('supportBot.walletReceivedLastPaidBlock')
+        .replace('{amount}', amount)
+        .replace('{jobTitle}', jobTitle)
         .replace('{date}', dateStr)
         .replace('{orderId}', orderRef);
     },
@@ -575,6 +609,95 @@ export default function SupportChat({ onBack }) {
         }
       };
       void run();
+      return;
+    }
+
+    if (opt.id === 'wallet_processing') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+
+      const run = async () => {
+        let botText = t('supportBot.walletReceivedNoPaidBlock');
+        try {
+          const wResp = await walletAPI.getWallet();
+          const last = wResp?.wallet?.lastOnlineClientPayment || null;
+          botText = buildWalletReceivedBotMessage(last);
+        } catch (_) {
+          /* keep fallback */
+        }
+
+        setTimeout(() => {
+          pushBotRawMessage(botText);
+          setNodeId('wallet_received_ask_confirm');
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+        }, 250);
+
+        if (ticketId) {
+          try {
+            await supportAPI.append(ticketId, {
+              userTextKey: opt.labelKey,
+              botText,
+              nextNodeId: 'wallet_received_ask_confirm',
+            });
+          } catch (_) {}
+        }
+      };
+      void run();
+      return;
+    }
+
+    if (opt.id === 'wallet_received_confirm_yes') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.wallet_received_after_yes.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('wallet_received_after_yes');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.id === 'wallet_received_confirm_no') {
+      const userMsg = {
+        _id: nowId(),
+        sender: user?.id || user?._id || 'me',
+        message: label,
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      if (!ticketId) return;
+      const botTextKey = FLOW.wallet_received_after_no.botTextKey;
+      setNodeId('end_ready');
+      setTimeout(() => {
+        pushBotNode('wallet_received_after_no');
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+      }, 250);
+      try {
+        await supportAPI.append(ticketId, {
+          userTextKey: opt.labelKey,
+          botTextKey,
+          nextNodeId: 'end_ready',
+        });
+      } catch (_) {}
       return;
     }
 

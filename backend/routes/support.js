@@ -63,16 +63,34 @@ router.post('/tickets/start', authenticate, async (req, res) => {
   }
 });
 
+/** Max tickets stored per user; older tickets are removed when listing. */
+const SUPPORT_TICKETS_RETAIN = 7;
+
 /**
- * List recent tickets for current user
- * GET /api/support/tickets?limit=10
+ * List recent tickets for current user (keeps only the latest SUPPORT_TICKETS_RETAIN; deletes the rest).
+ * GET /api/support/tickets?limit=7
  */
 router.get('/tickets', authenticate, async (req, res) => {
   try {
     const user = requireFreelancer(req, res);
     if (!user) return;
 
-    const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10) || 10, 1), 30);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit || String(SUPPORT_TICKETS_RETAIN), 10) || SUPPORT_TICKETS_RETAIN, 1),
+      SUPPORT_TICKETS_RETAIN
+    );
+
+    const keep = await SupportTicket.find({ user: user._id })
+      .sort({ updatedAt: -1 })
+      .limit(SUPPORT_TICKETS_RETAIN)
+      .select('_id')
+      .lean();
+    const keepIds = keep.map((t) => t._id);
+
+    if (keepIds.length > 0) {
+      await SupportTicket.deleteMany({ user: user._id, _id: { $nin: keepIds } });
+    }
+
     const tickets = await SupportTicket.find({ user: user._id })
       .sort({ updatedAt: -1 })
       .limit(limit)

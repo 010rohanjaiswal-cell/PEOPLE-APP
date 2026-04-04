@@ -11,6 +11,7 @@ const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const Job = require('../models/Job');
 const CommissionTransaction = require('../models/CommissionTransaction');
+const PhonePeJobPayment = require('../models/PhonePeJobPayment');
 const { getStateFromCoords, getCoordsFromPincode, haversineDistanceKm } = require('../services/locationService');
 const multer = require('multer');
 const streamifier = require('streamifier');
@@ -2103,6 +2104,31 @@ router.get('/wallet', authenticate, async (req, res) => {
     const paymentTransactions = Array.from(paymentTransactionsMap.values())
       .sort((a, b) => new Date(b.paymentDate) - new Date(a.paymentDate));
 
+    /** Last online client→freelancer job payment (PhonePe), for support / UI. */
+    let lastOnlineClientPayment = null;
+    try {
+      const lastJobPay = await PhonePeJobPayment.find({
+        freelancer: freelancerId,
+        status: 'COMPLETED',
+      })
+        .sort({ updatedAt: -1 })
+        .limit(1)
+        .populate('job', 'title')
+        .lean();
+      const jp = lastJobPay[0];
+      if (jp) {
+        lastOnlineClientPayment = {
+          amount: jp.amount,
+          jobTitle: (jp.job && jp.job.title) || jp.jobTitle || 'Job',
+          paidAt: jp.updatedAt || jp.createdAt,
+          merchantOrderId: jp.merchantOrderId || null,
+          jobId: jp.job?._id ? String(jp.job._id) : jp.job ? String(jp.job) : null,
+        };
+      }
+    } catch (e) {
+      console.error('[Wallet API] lastOnlineClientPayment:', e?.message || e);
+    }
+
     res.json({
       success: true,
       wallet: {
@@ -2110,6 +2136,7 @@ router.get('/wallet', authenticate, async (req, res) => {
         canWork,
         transactions: mappedTransactions,
         paymentTransactions, // New: List of dues payments made
+        lastOnlineClientPayment,
       },
     });
   } catch (error) {

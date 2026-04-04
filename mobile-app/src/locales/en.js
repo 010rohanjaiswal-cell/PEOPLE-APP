@@ -527,7 +527,7 @@ export default {
     wallet: {
       text: 'Wallet issues — choose one:',
       duesNotReflecting: 'Paid dues but not reflecting in wallet',
-      paymentProcessing: 'Payment is in processing',
+      paymentProcessing: 'Received payment is not reflecting in wallet',
       paymentStatus: 'Payment status',
     },
     withdrawal: {
@@ -572,7 +572,19 @@ export default {
     },
     walletProcessing: {
       text:
-        'Payment processing:\n- Wait 1–2 minutes.\n- Reopen Wallet and refresh.\n- Avoid paying again if you were already charged.\n- If stuck for long, call support.',
+        'Received payment not reflecting in wallet:\n- Pull to refresh or reopen Wallet and wait 1–2 minutes.\n- If you were charged but the balance did not update, do not pay again.\n- If it still does not show after some time, call support with the payment time and details.',
+    },
+    /** Last online client payment; placeholders: {jobTitle}, {amount}, {date}, {orderId} */
+    walletReceivedLastPaidBlock:
+      'Your last online payment from a client:\n\nJob: {jobTitle}\nAmount: {amount}\nPaid on: {date}\nOrder reference: {orderId}\n\nWere you asking about this?',
+    walletReceivedNoPaidBlock:
+      'We could not find a completed online client payment in your records yet. If a payment was made very recently, it may not appear here yet.\n\nWere you asking about a recent payment?',
+    walletReceivedAfterYes: {
+      text:
+        'Received payments usually take 7–8 hours to reflect in your wallet. Please try again later.',
+    },
+    walletReceivedAfterNo: {
+      text: 'Please contact our team for a fast and better solution.',
     },
     walletStatus: {
       text:
