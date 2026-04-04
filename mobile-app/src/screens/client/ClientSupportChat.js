@@ -11,7 +11,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Modal,
   ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -108,44 +107,6 @@ function createStyles(colors, insets) {
       backgroundColor: colors.primary.main,
     },
     startChatText: { ...typography.button, color: '#FFFFFF' },
-    modalRoot: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.45)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: spacing.lg,
-    },
-    modalBackdrop: { ...StyleSheet.absoluteFillObject },
-    modalCard: {
-      width: '100%',
-      maxWidth: 400,
-      backgroundColor: colors.cardBackground,
-      borderRadius: spacing.lg,
-      padding: spacing.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    modalTitle: { ...typography.h3, color: colors.text.primary, marginBottom: spacing.sm },
-    modalBody: { ...typography.body, color: colors.text.secondary, lineHeight: 22, marginBottom: spacing.lg },
-    modalActions: { flexDirection: 'row', gap: spacing.sm },
-    modalButtonSecondary: {
-      flex: 1,
-      paddingVertical: spacing.md,
-      borderRadius: spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.background,
-      alignItems: 'center',
-    },
-    modalButtonSecondaryText: { ...typography.button, color: colors.text.primary, fontSize: 15 },
-    modalButtonPrimary: {
-      flex: 1,
-      paddingVertical: spacing.md,
-      borderRadius: spacing.md,
-      backgroundColor: colors.primary.main,
-      alignItems: 'center',
-    },
-    modalButtonPrimaryText: { ...typography.button, color: '#FFFFFF', fontSize: 15 },
     mainMenuRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -177,7 +138,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
           {
             id: 'cat_unassign',
             labelKey: 'supportClientBot.category.unassignFreelancer',
-            next: 'client_unassign_confirm',
           },
         ],
       },
@@ -196,9 +156,20 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
           },
         ],
       },
-      client_unassign_confirm: {
-        botTextKey: 'supportClientBot.unassign.detail',
-        options: [{ id: 'confirm_unassign', labelKey: 'supportClientBot.confirmProceed', action: 'unassign' }],
+      client_unassign_ask: {
+        botTextKey: 'supportClientBot.unassignAskAboutJob',
+        options: [
+          {
+            id: 'unassign_yes',
+            labelKey: 'supportBot.common.yes',
+            action: 'unassign_confirm_yes',
+          },
+          {
+            id: 'unassign_no',
+            labelKey: 'supportBot.common.no',
+            action: 'unassign_confirm_no',
+          },
+        ],
       },
       end_ready: { botTextKey: 'supportBot.endReady.text', options: [] },
     }),
@@ -211,12 +182,12 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
   const [nodeId, setNodeId] = useState('client_root');
   const [ticketId, setTicketId] = useState(null);
   const [ticketStatus, setTicketStatus] = useState('open');
-  const [destructiveModal, setDestructiveModal] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [unassignLoading, setUnassignLoading] = useState(false);
   const [pendingCancelJobId, setPendingCancelJobId] = useState(null);
+  const [pendingUnassignJobId, setPendingUnassignJobId] = useState(null);
 
   const flatListRef = useRef(null);
-  const pendingDestructiveRef = useRef(null);
 
   const nowId = () => `m_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const TICKET_KEY = 'supportTicketId';
@@ -300,19 +271,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time load; avoid re-init when user/hydrate updates
   }, []);
 
-  const pushBotNode = (id) => {
-    const node = FLOW[id] || FLOW.client_root;
-    setMessages((prev) => [
-      ...prev,
-      {
-        _id: nowId(),
-        sender: 'bot',
-        message: t(node.botTextKey),
-        createdAt: new Date(),
-      },
-    ]);
-  };
-
   const applyTicketFromResponse = (respTicket) => {
     if (!respTicket) return;
     setNodeId(respTicket.currentNodeId || 'end_ready');
@@ -359,6 +317,7 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
   const goToMainMenu = useCallback(async () => {
     setNodeId('client_root');
     setPendingCancelJobId(null);
+    setPendingUnassignJobId(null);
     if (ticketId) {
       try {
         await supportAPI.append(ticketId, {
@@ -369,31 +328,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
     }
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }, [ticketId]);
-
-  const runDestructiveAction = async () => {
-    const p = pendingDestructiveRef.current;
-    setDestructiveModal(null);
-    pendingDestructiveRef.current = null;
-    if (!p || !ticketId || p.action !== 'unassign') return;
-    const { opt, label } = p;
-    const userMsg = {
-      _id: nowId(),
-      sender: user?.id || user?._id || 'me',
-      message: label,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    try {
-      await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
-      const resp = await supportAPI.clientUnassign(ticketId);
-      if (resp?.success && resp.ticket) {
-        applyTicketFromResponse(resp.ticket);
-        return;
-      }
-    } catch (_) {}
-    pushBotNode('end_ready');
-    setNodeId('end_ready');
-  };
 
   const handleOption = async (opt) => {
     if (!opt) return;
@@ -436,6 +370,71 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
       return;
     }
 
+    if (opt.id === 'cat_unassign') {
+      setUnassignLoading(true);
+      setPendingUnassignJobId(null);
+      try {
+        let r = await supportAPI.append(ticketId, {
+          userTextKey: 'supportClientBot.category.unassignFreelancer',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+
+        const ctx = await clientJobsAPI.getSupportUnassignContext();
+        if (!ctx?.success || !ctx.hasJob) {
+          r = await supportAPI.append(ticketId, {
+            botTextKey: 'supportClientBot.unassignNoActiveJob',
+            nextNodeId: 'end_ready',
+          });
+          if (r?.ticket) applyTicketFromResponse(r.ticket);
+          return;
+        }
+
+        r = await supportAPI.append(ticketId, {
+          botTextKey: 'supportClientBot.unassignAskAboutJob',
+          botParams: {
+            title: ctx.job.title || '—',
+            freelancerName: ctx.job.freelancerName || '—',
+          },
+          nextNodeId: 'client_unassign_ask',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+        setPendingUnassignJobId(String(ctx.job._id));
+        setNodeId('client_unassign_ask');
+      } catch (_) {
+        /* ignore */
+      } finally {
+        setUnassignLoading(false);
+      }
+      return;
+    }
+
+    if (opt.action === 'unassign_confirm_yes') {
+      if (!pendingUnassignJobId) return;
+      try {
+        let r = await supportAPI.append(ticketId, { userTextKey: 'supportBot.common.yes' });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+        const resp = await supportAPI.clientUnassign(ticketId, pendingUnassignJobId);
+        if (resp?.success && resp.ticket) {
+          applyTicketFromResponse(resp.ticket);
+          setPendingUnassignJobId(null);
+        }
+      } catch (_) {}
+      return;
+    }
+
+    if (opt.action === 'unassign_confirm_no') {
+      try {
+        const r = await supportAPI.append(ticketId, {
+          userTextKey: 'supportBot.common.no',
+          botTextKey: 'supportClientBot.unassignRejectNo',
+          nextNodeId: 'end_ready',
+        });
+        if (r?.ticket) applyTicketFromResponse(r.ticket);
+        setPendingUnassignJobId(null);
+      } catch (_) {}
+      return;
+    }
+
     if (opt.action === 'confirm_delete_job') {
       if (!pendingCancelJobId) return;
       try {
@@ -457,32 +456,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
         });
         if (r?.ticket) applyTicketFromResponse(r.ticket);
         setPendingCancelJobId(null);
-      } catch (_) {}
-      return;
-    }
-
-    if (opt.action === 'unassign') {
-      pendingDestructiveRef.current = { opt, label, action: 'unassign' };
-      setDestructiveModal('unassign');
-      return;
-    }
-
-    if (opt.id === 'cat_unassign' && opt.next) {
-      const userMsg = {
-        _id: nowId(),
-        sender: user?.id || user?._id || 'me',
-        message: label,
-        createdAt: new Date(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
-      const botTextKey = (FLOW[opt.next] || FLOW.client_root).botTextKey;
-      setNodeId(opt.next);
-      setTimeout(() => {
-        pushBotNode(opt.next);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-      }, 250);
-      try {
-        await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
       } catch (_) {}
       return;
     }
@@ -511,9 +484,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
       </View>
     );
   };
-
-  const modalTitle = destructiveModal === 'unassign' ? t('supportClientBot.unassignConfirmTitle') : '';
-  const modalBody = destructiveModal === 'unassign' ? t('supportClientBot.unassignConfirmBody') : '';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -562,7 +532,7 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
         </View>
 
         <View style={styles.composer}>
-          {initializing || initError ? null : cancelLoading ? (
+          {initializing || initError ? null : cancelLoading || unassignLoading ? (
             <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
               <ActivityIndicator color={colors.primary.main} />
             </View>
@@ -578,8 +548,9 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
                   const isPrimary =
                     opt.id === 'cat_cancel' ||
                     opt.id === 'cat_unassign' ||
-                    opt.id === 'cancel_job_yes';
-                  const isDanger = opt.action === 'unassign';
+                    opt.id === 'cancel_job_yes' ||
+                    opt.id === 'unassign_yes';
+                  const isDanger = false;
                   return (
                     <TouchableOpacity
                       key={opt.id}
@@ -605,46 +576,6 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
             </View>
           )}
         </View>
-
-        <Modal
-          visible={Boolean(destructiveModal)}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            setDestructiveModal(null);
-            pendingDestructiveRef.current = null;
-          }}
-        >
-          <View style={styles.modalRoot}>
-            <TouchableOpacity
-              style={styles.modalBackdrop}
-              activeOpacity={1}
-              onPress={() => {
-                setDestructiveModal(null);
-                pendingDestructiveRef.current = null;
-              }}
-            />
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{modalTitle}</Text>
-              <Text style={styles.modalBody}>{modalBody}</Text>
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalButtonSecondary}
-                  onPress={() => {
-                    setDestructiveModal(null);
-                    pendingDestructiveRef.current = null;
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalButtonPrimary} onPress={runDestructiveAction} activeOpacity={0.85}>
-                  <Text style={styles.modalButtonPrimaryText}>{t('supportBot.orders.cancelConfirmContinue')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

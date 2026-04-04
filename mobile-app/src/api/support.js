@@ -25,8 +25,10 @@ export const supportAPI = {
     const res = await apiClient.post(`/api/support/tickets/${ticketId}/actions/cancel-order`);
     return res.data;
   },
-  clientUnassign: async (ticketId) => {
-    const res = await apiClient.post(`/api/support/tickets/${ticketId}/actions/client-unassign`);
+  clientUnassign: async (ticketId, jobId) => {
+    const res = await apiClient.post(`/api/support/tickets/${ticketId}/actions/client-unassign`, {
+      ...(jobId ? { jobId: String(jobId) } : {}),
+    });
     return res.data;
   },
   clientCancelJob: async (ticketId) => {

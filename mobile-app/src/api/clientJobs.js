@@ -20,6 +20,12 @@ export const clientJobsAPI = {
     return response.data;
   },
 
+  /** For Support chat: job + assigned freelancer name for unassign confirmation. */
+  getSupportUnassignContext: async () => {
+    const response = await apiClient.get('/api/client/jobs/support-unassign-context');
+    return response.data;
+  },
+
   /**
    * Get job history for client
    * @returns {Promise} List of completed jobs

@@ -455,6 +455,62 @@ router.get('/jobs/support-cancel-context', authenticate, async (req, res) => {
 });
 
 /**
+ * Job with an assigned freelancer for Support "unassign" flow (latest assigned/work_done with assignee).
+ * GET /api/client/jobs/support-unassign-context
+ */
+router.get('/jobs/support-unassign-context', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only clients can use this',
+      });
+    }
+
+    const clientOid =
+      user._id instanceof mongoose.Types.ObjectId
+        ? user._id
+        : new mongoose.Types.ObjectId(String(user._id));
+
+    const job = await Job.findOne({
+      client: clientOid,
+      assignedFreelancer: { $ne: null },
+      status: { $in: ['assigned', 'work_done'] },
+    })
+      .sort({ updatedAt: -1 })
+      .populate('assignedFreelancer', 'fullName')
+      .select('title status assignedFreelancer')
+      .lean();
+
+    if (!job) {
+      return res.json({ success: true, hasJob: false });
+    }
+
+    const fl = job.assignedFreelancer;
+    const freelancerName =
+      (fl && (fl.fullName || fl.name)) || 'Freelancer';
+
+    return res.json({
+      success: true,
+      hasJob: true,
+      job: {
+        _id: job._id,
+        title: job.title,
+        status: job.status,
+        freelancerName: String(freelancerName).trim() || 'Freelancer',
+      },
+    });
+  } catch (error) {
+    console.error('Error support-unassign-context:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to load unassign context',
+    });
+  }
+});
+
+/**
  * Get job history for client
  * GET /api/client/jobs/history
  */

@@ -331,15 +331,45 @@ router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, re
         ? user._id
         : new mongoose.Types.ObjectId(String(user._id));
 
-    const job = await Job.findOne({
-      client: clientOid,
-      assignedFreelancer: { $ne: null },
-      status: { $in: ['assigned', 'work_done'] },
-    }).sort({ updatedAt: -1 });
+    const rawJobId = req.body?.jobId;
+    let job;
+    if (rawJobId && mongoose.Types.ObjectId.isValid(String(rawJobId))) {
+      job = await Job.findOne({
+        _id: new mongoose.Types.ObjectId(String(rawJobId)),
+        client: clientOid,
+      });
+    } else {
+      job = await Job.findOne({
+        client: clientOid,
+        assignedFreelancer: { $ne: null },
+        status: { $in: ['assigned', 'work_done'] },
+      }).sort({ updatedAt: -1 });
+    }
+
+    if (job && job.status === 'work_done' && job.assignedFreelancer) {
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportClientBot.unassignCannotWorkDone',
+        createdAt: now(),
+      });
+      ticket.messages.push({
+        sender: 'bot',
+        textKey: 'supportBot.endReady.text',
+        createdAt: now(),
+      });
+      ticket.currentNodeId = 'end_ready';
+      await ticket.save();
+      return res.json({
+        success: true,
+        ticket,
+        blocked: true,
+        reason: 'work_done',
+      });
+    }
 
     let unassignedJobId = null;
     let freelancerId = null;
-    if (job) {
+    if (job && job.assignedFreelancer) {
       freelancerId = job.assignedFreelancer;
       job.assignedFreelancer = null;
       job.status = 'open';

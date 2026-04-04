@@ -521,6 +521,14 @@ export default {
     cancelJobAlreadyClosed: 'This job (“{title}”) is already closed. Check My Jobs.',
     cancelWrongJob:
       'If the job you want to cancel is still pending or was rejected, check My Jobs and try again. Tap End chat when you are done.',
+    unassignAskAboutJob:
+      'Unassign the freelancer from this job?\n\n{title}\nAssigned freelancer: {freelancerName}\n\nTap Yes to unassign, or No to go back.',
+    unassignNoActiveJob:
+      'We could not find a job with an assigned freelancer on your account. Check My Jobs, wait a moment, and try again.',
+    unassignCannotWorkDone:
+      'Work has already been done by the freelancer for this job (waiting for payment). You cannot unassign the freelancer from here.',
+    unassignRejectNo:
+      'No assigned freelancer was found for your jobs. Wait a moment and try again.',
     unassign: {
       detail:
         'We will remove the assigned freelancer from your active job and reopen it for others. The freelancer will be temporarily blocked from applying or making offers for 8 hours.\n\nTap Confirm only if you are sure.',
