@@ -8,8 +8,9 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
-// Do not require chatMessageNotifications at top level — use runtime require in send_message
-// so the export is always resolved after the full module graph is ready.
+// Call createNotification directly — avoids chatMessageNotifications / partial exports on some hosts.
+// notificationService does not require socketio at load time (getIO is lazy inside createNotification).
+const { createNotification } = require('../services/notificationService');
 const VERBOSE_SOCKET_LOGS = process.env.VERBOSE_SOCKET_LOGS === 'true';
 
 let io = null;
@@ -120,11 +121,20 @@ const setupSocketIO = (server) => {
           const messageText = newMessage.message || '';
           const senderOid =
             newMessage.sender?._id || newMessage.sender?.id || socket.userId;
-          const notify = require('../services/chatMessageNotifications').notifyChatMessage;
-          if (typeof notify !== 'function') {
-            throw new Error('chatMessageNotifications.notifyChatMessage is not a function');
-          }
-          await notify(recipientRoomId, senderName, messageText, senderOid);
+          const sid = senderOid != null ? String(senderOid) : null;
+          const preview =
+            messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText;
+          await createNotification({
+            userId: recipientRoomId,
+            type: 'chat_message',
+            title: 'New Message',
+            message: `${senderName}: ${preview}`,
+            data: {
+              senderName,
+              messagePreview: messageText,
+              ...(sid ? { senderId: sid } : {}),
+            },
+          });
         } catch (notifError) {
           console.error('Error creating chat message notification:', notifError);
           // Don't fail message sending if notification fails
