@@ -2,7 +2,7 @@
  * Login Screen - People App
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,13 +19,16 @@ import { colors, spacing, typography } from '../../theme';
 import { Input } from '../../components/common';
 import { validatePhone, formatPhone } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI } from '../../api';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import { firebaseConfig } from '../../config/firebase';
+import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
 
 const Login = ({ navigation }) => {
   const [phone, setPhone] = useState('+91 ');
   const [selectedRole, setSelectedRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const recaptchaVerifier = useRef(null);
 
   const handlePhoneChange = (text) => {
     const formatted = formatPhone(text);
@@ -54,19 +57,20 @@ const Login = ({ navigation }) => {
 
     try {
       const formattedPhone = phone.replace(/\s/g, '');
-      const result = await authAPI.sendOTP(formattedPhone, selectedRole);
-
-      if (result.success) {
-        await AsyncStorage.setItem('selectedRole', selectedRole);
-        await AsyncStorage.setItem('phoneNumber', phone);
-
-        navigation.navigate('OTP', {
-          phoneNumber: phone,
-          selectedRole,
-        });
-      } else {
-        throw new Error(result.error || 'Failed to send OTP');
+      if (!firebaseConfig?.apiKey) {
+        throw new Error('Firebase is not configured in this build. Check EXPO_PUBLIC_FIREBASE_* env.');
       }
+
+      const verificationId = await sendPhoneVerificationCode(formattedPhone, recaptchaVerifier);
+
+      await AsyncStorage.setItem('selectedRole', selectedRole);
+      await AsyncStorage.setItem('phoneNumber', phone);
+
+      navigation.navigate('OTP', {
+        phoneNumber: phone,
+        selectedRole,
+        verificationId,
+      });
 
       setLoading(false);
     } catch (err) {
@@ -78,6 +82,13 @@ const Login = ({ navigation }) => {
         errorMessage = err.response.data.message;
       } else if (err.message) {
         errorMessage = err.message;
+      }
+      if (err.code === 'auth/invalid-phone-number') {
+        errorMessage = 'Invalid phone number. Please check and try again.';
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please try again later.';
+      } else if (err.code === 'auth/quota-exceeded') {
+        errorMessage = 'SMS quota exceeded. Please try again later.';
       }
 
       setError(errorMessage);
@@ -194,6 +205,12 @@ const Login = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification
+      />
     </SafeAreaView>
   );
 };

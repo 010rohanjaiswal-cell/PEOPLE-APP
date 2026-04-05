@@ -20,13 +20,17 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PhoneAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { authAPI } from '../../api';
+import { auth, firebaseConfig } from '../../config/firebase';
+import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getDeviceId } from '../../utils/deviceId';
 
 const OTP = ({ navigation, route }) => {
-  const { phoneNumber, selectedRole } = route?.params || {};
+  const { phoneNumber, selectedRole, verificationId: routeVerificationId } = route?.params || {};
   const { loginWithToken } = useAuth();
   const { t } = useLanguage();
 
@@ -34,9 +38,11 @@ const OTP = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [forceLoginModalVisible, setForceLoginModalVisible] = useState(false);
+  const [verificationId, setVerificationId] = useState(routeVerificationId);
   // Start at 60s: OTP was just sent from Login; resend only after cooldown.
   const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
+  const recaptchaVerifier = useRef(null);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -46,6 +52,12 @@ const OTP = ({ navigation, route }) => {
       return () => clearTimeout(timer);
     }
   }, [resendCooldown]);
+
+  useEffect(() => {
+    if (!routeVerificationId) {
+      setError('Missing verification session. Go back and request a new code.');
+    }
+  }, [routeVerificationId]);
 
   const handleOTPChange = (text) => {
     const digits = text.replace(/\D/g, '').slice(0, 6);
@@ -66,6 +78,9 @@ const OTP = ({ navigation, route }) => {
       if (!phoneNumber) {
         throw new Error('Phone number not found. Please go back and try again.');
       }
+      if (!verificationId) {
+        throw new Error('Missing verification session. Go back and request a new code.');
+      }
 
       const formattedPhone = phoneNumber.replace(/\s/g, '');
       let deviceId;
@@ -78,7 +93,23 @@ const OTP = ({ navigation, route }) => {
         deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       }
       const shouldForceLogin = forceLogin === true;
-      const result = await authAPI.verifyOTP(formattedPhone, otp, deviceId, shouldForceLogin);
+
+      const role = selectedRole || (await AsyncStorage.getItem('selectedRole'));
+      if (!role || !['client', 'freelancer'].includes(role)) {
+        throw new Error('Account type missing. Go back and select Client or Freelancer.');
+      }
+
+      const cred = PhoneAuthProvider.credential(verificationId, otp);
+      const userCred = await signInWithCredential(auth, cred);
+      const idToken = await userCred.user.getIdToken();
+      await signOut(auth);
+
+      const result = await authAPI.verifyFirebaseIdToken(
+        idToken,
+        role,
+        deviceId,
+        shouldForceLogin
+      );
 
       if (result.success) {
         await loginWithToken(result.token, result.user);
@@ -108,6 +139,9 @@ const OTP = ({ navigation, route }) => {
       } else if (err.message) {
         errorMessage = err.message;
       }
+      if (err.code === 'auth/invalid-verification-code' || err.code === 'auth/code-expired') {
+        errorMessage = 'Invalid or expired code. Please try again or request a new code.';
+      }
 
       setError(errorMessage);
       setLoading(false);
@@ -131,14 +165,15 @@ const OTP = ({ navigation, route }) => {
         return;
       }
 
-      const result = await authAPI.sendOTP(formattedPhone, storedRole);
-
-      if (result.success) {
-        setResendCooldown(60);
-        setError('');
-      } else {
-        throw new Error(result.error || 'Failed to resend OTP');
+      if (!firebaseConfig?.apiKey) {
+        setError('Firebase is not configured in this build.');
+        return;
       }
+
+      const newVid = await sendPhoneVerificationCode(formattedPhone, recaptchaVerifier);
+      setVerificationId(newVid);
+      setResendCooldown(60);
+      setError('');
     } catch (err) {
       console.error('Error resending OTP:', err);
       setError(
@@ -277,6 +312,12 @@ const OTP = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={firebaseConfig}
+        attemptInvisibleVerification
+      />
     </SafeAreaView>
   );
 };

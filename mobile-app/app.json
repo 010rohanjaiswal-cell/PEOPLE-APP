@@ -54,8 +54,8 @@
       [
         "expo-notifications",
         {
-          "android": { "defaultChannel": "people-alerts" },
-          "sounds": ["./assets/sounds/notification_sound.wav"]
+          "android": { "defaultChannel": "people-alerts-v2" },
+          "sounds": ["./assets/sounds/new_sound.wav"]
         }
       ],
       "expo-location",

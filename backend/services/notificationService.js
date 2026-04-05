@@ -15,10 +15,10 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 
 /** Must match bundled sound basename in mobile app (expo-notifications `sounds` in app.json). */
-const EXPO_PUSH_SOUND = 'notification_sound.wav';
+const EXPO_PUSH_SOUND = 'new_sound.wav';
 
 /** Must match `NOTIFICATION_CHANNEL_ID` + app.json `expo-notifications` → `android.defaultChannel`. */
-const EXPO_PUSH_CHANNEL_ID = 'people-alerts';
+const EXPO_PUSH_CHANNEL_ID = 'people-alerts-v2';
 
 function toUserIdString(userId) {
   if (userId == null) return '';

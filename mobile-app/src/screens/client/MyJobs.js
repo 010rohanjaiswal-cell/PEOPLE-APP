@@ -3,7 +3,8 @@
  * Display active jobs for client with all features from documentation
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -32,6 +33,9 @@ import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/** Poll active jobs while this tab is focused so status changes (e.g. work_done → Pay) show without manual refresh */
+const MY_JOBS_POLL_MS = 5000;
 
 function createClientMyJobsStyles(colors) {
   return StyleSheet.create({
@@ -343,31 +347,55 @@ const MyJobs = ({
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [translatedJobs, setTranslatedJobs] = useState({});
 
-  const loadJobs = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const response = await clientJobsAPI.getActiveJobs();
-      if (response?.success && Array.isArray(response.jobs)) {
-        setJobs(response.jobs);
-      } else if (Array.isArray(response)) {
-        setJobs(response);
-      } else {
-        setJobs([]);
+  const fetchInFlightRef = useRef(false);
+
+  const loadJobs = useCallback(
+    async (opts = {}) => {
+      const silent = opts.silent === true;
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+      try {
+        if (!silent) {
+          setLoading(true);
+          setError('');
+        }
+        const response = await clientJobsAPI.getActiveJobs();
+        if (response?.success && Array.isArray(response.jobs)) {
+          setJobs(response.jobs);
+        } else if (Array.isArray(response)) {
+          setJobs(response);
+        } else {
+          setJobs([]);
+        }
+      } catch (err) {
+        console.error('Error loading client jobs:', err);
+        if (!silent) {
+          setError(err.response?.data?.error || err.message || t('jobs.failedLoadClientJobs'));
+          setJobs([]);
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+        setRefreshing(false);
+        fetchInFlightRef.current = false;
       }
-    } catch (err) {
-      console.error('Error loading client jobs:', err);
-      setError(err.response?.data?.error || err.message || t('jobs.failedLoadClientJobs'));
-      setJobs([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    },
+    [t]
+  );
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [loadJobs]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const id = setInterval(() => {
+        loadJobs({ silent: true });
+      }, MY_JOBS_POLL_MS);
+      return () => clearInterval(id);
+    }, [loadJobs])
+  );
 
   useEffect(() => {
     if (!openApplicationsJobId) return;

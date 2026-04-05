@@ -27,6 +27,22 @@ export const authAPI = {
    * @param {boolean} [forceLogin] - If true, logout other device and login here
    * @returns {Promise} User data and JWT token, or { success: false, code: 'ALREADY_LOGGED_IN_ELSEWHERE', message }
    */
+  /**
+   * After Firebase client verifies OTP, exchange ID token for app JWT.
+   */
+  verifyFirebaseIdToken: async (idToken, role, deviceId = null, forceLogin = false) => {
+    const body = {
+      idToken,
+      role,
+      forceLogin: forceLogin || undefined,
+    };
+    if (deviceId != null && String(deviceId).trim() !== '') {
+      body.deviceId = String(deviceId).trim();
+    }
+    const response = await apiClient.post('/api/auth/verify-firebase-id-token', body);
+    return response.data;
+  },
+
   verifyOTP: async (phoneNumber, otp, deviceId = null, forceLogin = false) => {
     const body = {
       phoneNumber,

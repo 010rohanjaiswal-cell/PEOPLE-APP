@@ -10,16 +10,16 @@ import { userAPI } from '../api/user';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Basename only — must match a file listed under `expo-notifications` → `sounds` in app.json */
-export const NOTIFICATION_SOUND = 'notification_sound.wav';
+export const NOTIFICATION_SOUND = 'new_sound.wav';
 
 /**
  * Must match `expo-notifications` plugin `android.defaultChannel` in app.json and `channelId` in Expo push payloads.
  * Using a stable id avoids stale channels from older builds that pointed at the wrong sound.
  */
-export const NOTIFICATION_CHANNEL_ID = 'people-alerts';
+export const NOTIFICATION_CHANNEL_ID = 'people-alerts-v2';
 
-/** Pattern: wait, vibrate, pause, vibrate (ms) — used for Android channel + foreground feedback */
-export const NOTIFICATION_VIBRATION_PATTERN = [0, 380, 160, 380];
+/** Pattern: wait, vibrate, pause, vibrate (ms) — keep first pulse short so it does not mask notification sound start on some devices */
+export const NOTIFICATION_VIBRATION_PATTERN = [0, 90, 120, 90];
 
 // Show notification when app is in foreground (banner + sound + system can vibrate via channel when background)
 Notifications.setNotificationHandler({
@@ -62,7 +62,10 @@ export async function ensureNotificationChannelAsync() {
 export function subscribeForegroundNotificationVibration() {
   return Notifications.addNotificationReceivedListener(() => {
     if (Platform.OS === 'android') {
-      Vibration.vibrate(NOTIFICATION_VIBRATION_PATTERN);
+      // Let the bundled notification sound start first; immediate heavy vibration can delay or duck sound on some OEMs
+      setTimeout(() => {
+        Vibration.vibrate(NOTIFICATION_VIBRATION_PATTERN);
+      }, 120);
     } else {
       Vibration.vibrate(400);
     }

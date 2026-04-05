@@ -4,7 +4,8 @@
  * assigned -> work_done -> waiting for payment -> completed -> fully completed
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -29,6 +30,9 @@ import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/** Poll assigned jobs while this tab is focused so status changes sync without manual refresh */
+const MY_JOBS_POLL_MS = 5000;
 
 function createFreelancerMyJobsStyles(colors) {
   return StyleSheet.create({
@@ -335,36 +339,57 @@ const MyJobs = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
 
-  const loadJobs = async () => {
-    try {
-      if (!refreshing) setLoading(true);
-      setError('');
-      const response = await freelancerJobsAPI.getAssignedJobs();
-      if (response?.success && Array.isArray(response.jobs)) {
-        setJobs(response.jobs);
-      } else if (Array.isArray(response)) {
-        setJobs(response);
-      } else {
-        setJobs([]);
+  const fetchInFlightRef = useRef(false);
+
+  const loadJobs = useCallback(
+    async (opts = {}) => {
+      const silent = opts.silent === true;
+      const pullRefresh = opts.pullRefresh === true;
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+      try {
+        if (!silent && !pullRefresh) setLoading(true);
+        if (!silent) setError('');
+        const response = await freelancerJobsAPI.getAssignedJobs();
+        if (response?.success && Array.isArray(response.jobs)) {
+          setJobs(response.jobs);
+        } else if (Array.isArray(response)) {
+          setJobs(response);
+        } else {
+          setJobs([]);
+        }
+      } catch (err) {
+        console.error('Error loading assigned jobs for freelancer:', err);
+        if (!silent) {
+          setError(err.response?.data?.error || err.message || t('jobs.failedLoadAssigned'));
+          setJobs([]);
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+        fetchInFlightRef.current = false;
       }
-    } catch (err) {
-      console.error('Error loading assigned jobs for freelancer:', err);
-      setError(err.response?.data?.error || err.message || t('jobs.failedLoadAssigned'));
-      setJobs([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    },
+    [t]
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadJobs();
+    loadJobs({ pullRefresh: true });
   };
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [loadJobs]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const id = setInterval(() => {
+        loadJobs({ silent: true });
+      }, MY_JOBS_POLL_MS);
+      return () => clearInterval(id);
+    }, [loadJobs])
+  );
 
   const handleWorkDone = async (job) => {
     setWorkDoneJob(job);
