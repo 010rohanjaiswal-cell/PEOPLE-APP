@@ -6,7 +6,7 @@ import { auth } from '../config/firebase';
 
 /**
  * @param {string} phoneE164 e.g. +919876543210
- * @param {import('react').RefObject} recaptchaVerifierRef ref to FirebaseRecaptchaVerifierModal
+ * @param {import('react').RefObject} recaptchaVerifierRef ref to FirebasePhoneRecaptchaModal (ApplicationVerifier)
  * @returns {Promise<string>} verificationId for PhoneAuthProvider.credential(verificationId, code)
  */
 export async function sendPhoneVerificationCode(phoneE164, recaptchaVerifierRef) {

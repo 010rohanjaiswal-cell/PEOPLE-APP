@@ -21,7 +21,7 @@ import { colors, spacing, typography } from '../../theme';
 import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PhoneAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import FirebaseRecaptchaVerifierModal from '../../components/phoneAuth/FirebasePhoneRecaptchaModal';
 import { authAPI } from '../../api';
 import { auth, firebaseConfig } from '../../config/firebase';
 import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
@@ -59,6 +59,14 @@ const OTP = ({ navigation, route }) => {
     }
   }, [routeVerificationId]);
 
+  // Warm device id + role so verify isn’t blocked on AsyncStorage on submit.
+  useEffect(() => {
+    getDeviceId().catch(() => {});
+    if (!selectedRole) {
+      AsyncStorage.getItem('selectedRole').catch(() => {});
+    }
+  }, [selectedRole]);
+
   const handleOTPChange = (text) => {
     const digits = text.replace(/\D/g, '').slice(0, 6);
     setOtp(digits);
@@ -83,18 +91,22 @@ const OTP = ({ navigation, route }) => {
       }
 
       const formattedPhone = phoneNumber.replace(/\s/g, '');
-      let deviceId;
-      try {
-        deviceId = await getDeviceId();
-      } catch (e) {
-        deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      }
-      if (!deviceId || typeof deviceId !== 'string') {
-        deviceId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      }
       const shouldForceLogin = forceLogin === true;
 
-      const role = selectedRole || (await AsyncStorage.getItem('selectedRole'));
+      const fallbackDevice = () =>
+        `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+      const [deviceIdRaw, roleFromStorage] = await Promise.all([
+        getDeviceId().catch(() => fallbackDevice()),
+        selectedRole ? Promise.resolve(selectedRole) : AsyncStorage.getItem('selectedRole'),
+      ]);
+
+      let deviceId =
+        deviceIdRaw && typeof deviceIdRaw === 'string' && deviceIdRaw.trim()
+          ? deviceIdRaw.trim()
+          : fallbackDevice();
+
+      const role = selectedRole || roleFromStorage;
       if (!role || !['client', 'freelancer'].includes(role)) {
         throw new Error('Account type missing. Go back and select Client or Freelancer.');
       }
@@ -102,14 +114,11 @@ const OTP = ({ navigation, route }) => {
       const cred = PhoneAuthProvider.credential(verificationId, otp);
       const userCred = await signInWithCredential(auth, cred);
       const idToken = await userCred.user.getIdToken();
-      await signOut(auth);
-
-      const result = await authAPI.verifyFirebaseIdToken(
-        idToken,
-        role,
-        deviceId,
-        shouldForceLogin
-      );
+      // Don’t block the server round-trip on Firebase sign-out (token is already issued).
+      const result = await Promise.all([
+        signOut(auth).catch(() => {}),
+        authAPI.verifyFirebaseIdToken(idToken, role, deviceId, shouldForceLogin),
+      ]).then(([, r]) => r);
 
       if (result.success) {
         await loginWithToken(result.token, result.user);

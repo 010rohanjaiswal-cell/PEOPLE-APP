@@ -6,34 +6,35 @@
  *   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_key
  * Required for in-app Hindi translation (any language → Hindi via OpenAI):
  *   EXPO_PUBLIC_OPENAI_API_KEY=sk-...
+ *
+ * Uses `({ config })` so Expo merges `app.json` first and expo-doctor recognizes static config usage.
+ * `config` here is the flattened Expo config (not `{ expo: ... }`).
  */
-const appJson = require('./app.json');
+module.exports = ({ config }) => {
+  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
-const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-const openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
-
-module.exports = {
-  expo: {
-    ...appJson.expo,
+  return {
+    ...config,
     extra: {
-      ...(appJson.expo.extra || {}),
+      ...(config.extra || {}),
       openaiApiKey,
     },
     android: {
-      ...appJson.expo.android,
+      ...config.android,
       config: {
-        ...(appJson.expo.android?.config || {}),
+        ...(config.android?.config || {}),
         googleMaps: {
           apiKey: googleMapsApiKey,
         },
       },
     },
     ios: {
-      ...appJson.expo.ios,
+      ...config.ios,
       config: {
-        ...(appJson.expo.ios?.config || {}),
+        ...(config.ios?.config || {}),
         googleMapsApiKey: googleMapsApiKey,
       },
     },
-  },
+  };
 };

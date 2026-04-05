@@ -19,7 +19,7 @@ import { colors, spacing, typography } from '../../theme';
 import { Input } from '../../components/common';
 import { validatePhone, formatPhone } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import FirebaseRecaptchaVerifierModal from '../../components/phoneAuth/FirebasePhoneRecaptchaModal';
 import { firebaseConfig } from '../../config/firebase';
 import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
 

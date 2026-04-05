@@ -104,14 +104,16 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
   }
 
   const token = generateJWT(user);
-  const profilePhoto = await getUserProfilePhoto(user._id);
+  const [profilePhoto, freelancerVerification] = await Promise.all([
+    getUserProfilePhoto(user._id, user),
+    FreelancerVerification.findOne({ user: user._id })
+      .select('fullName')
+      .sort({ createdAt: -1 })
+      .lean(),
+  ]);
 
   let displayFullName = user.fullName || null;
-  const freelancerVerification = await FreelancerVerification.findOne({ user: user._id })
-    .select('fullName')
-    .lean()
-    .sort({ createdAt: -1 });
-  if (freelancerVerification && freelancerVerification.fullName) {
+  if (freelancerVerification?.fullName) {
     displayFullName = freelancerVerification.fullName;
   }
 
@@ -138,30 +140,31 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
  * Helper function to get the appropriate profile photo for a user
  * Priority: Freelancer verification profilePhoto > User profilePhoto > null
  */
-async function getUserProfilePhoto(userId) {
+async function getUserProfilePhoto(userId, userDoc = null) {
   try {
-    // First, check if user has a freelancer verification with profilePhoto
-    const verification = await FreelancerVerification.findOne({ 
+    const verification = await FreelancerVerification.findOne({
       user: userId,
-      profilePhoto: { $exists: true, $ne: null }
-    }).sort({ createdAt: -1 }); // Get the most recent verification
-    
-    if (verification && verification.profilePhoto) {
+      profilePhoto: { $exists: true, $ne: null },
+    })
+      .sort({ createdAt: -1 })
+      .select('profilePhoto')
+      .lean();
+
+    if (verification?.profilePhoto) {
       return verification.profilePhoto;
     }
-    
-    // If no freelancer verification photo, check user's profilePhoto (from client profile setup)
-    const user = await User.findById(userId);
-    if (user && user.profilePhoto) {
-      return user.profilePhoto;
+
+    if (userDoc?.profilePhoto) {
+      return userDoc.profilePhoto;
     }
-    
-    return null;
+
+    const user = await User.findById(userId).select('profilePhoto').lean();
+    return user?.profilePhoto || null;
   } catch (error) {
     console.error('Error getting user profile photo:', error);
-    // Fallback to user's profilePhoto if verification lookup fails
     try {
-      const user = await User.findById(userId);
+      if (userDoc?.profilePhoto) return userDoc.profilePhoto;
+      const user = await User.findById(userId).select('profilePhoto').lean();
       return user?.profilePhoto || null;
     } catch (err) {
       return null;
