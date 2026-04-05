@@ -9,6 +9,8 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { getIO } = require('../config/socketio');
+const { notifyChatMessage } = require('../services/notificationService');
 
 /**
  * Get messages between current user and recipient
@@ -108,17 +110,35 @@ router.post('/send', authenticate, async (req, res) => {
     await newMessage.populate('sender', 'fullName profilePhoto phone');
     await newMessage.populate('recipient', 'fullName profilePhoto phone');
 
+    const messagePayload = {
+      _id: newMessage._id,
+      sender: newMessage.sender,
+      recipient: newMessage.recipient,
+      message: newMessage.message,
+      status: newMessage.status,
+      readAt: newMessage.readAt,
+      createdAt: newMessage.createdAt,
+    };
+
+    // Match socket send_message: notify recipient (push + in-app) + real-time message
+    try {
+      const senderName = newMessage.sender?.fullName || 'Someone';
+      const messageText = newMessage.message || '';
+      const senderOid =
+        newMessage.sender?._id || newMessage.sender?.id || userId;
+      await notifyChatMessage(recipientId, senderName, messageText, senderOid);
+    } catch (notifError) {
+      console.error('Error creating chat message notification:', notifError);
+    }
+
+    const io = getIO();
+    if (io) {
+      io.to(`user_${recipientId}`).emit('new_message', messagePayload);
+    }
+
     res.json({
       success: true,
-      message: {
-        _id: newMessage._id,
-        sender: newMessage.sender,
-        recipient: newMessage.recipient,
-        message: newMessage.message,
-        status: newMessage.status,
-        readAt: newMessage.readAt,
-        createdAt: newMessage.createdAt,
-      },
+      message: messagePayload,
     });
   } catch (error) {
     console.error('Error sending message:', error);
