@@ -164,7 +164,7 @@ const Login = ({ navigation }) => {
                   >
                     Freelancer
                   </Text>
-                  <Text style={styles.roleSub}>Find and complete work</Text>
+                  <Text style={styles.roleSub}>Find work and earn</Text>
                 </TouchableOpacity>
               </View>
 

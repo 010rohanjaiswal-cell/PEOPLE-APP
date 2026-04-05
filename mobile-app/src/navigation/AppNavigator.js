@@ -10,6 +10,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { addNotificationResponseListener } from '../utils/pushNotifications';
+import { notifyChatNotificationTap } from '../utils/chatNotificationBridge';
 import * as Notifications from 'expo-notifications';
 
 // Auth Screens
@@ -107,23 +108,32 @@ const AppNavigator = () => {
     }
   }, [isAuthenticated, user, loading]);
 
-  // When user taps a push notification, app opens; ensure we're on the right dashboard (no-op if already there)
+  // Push tap: open chat when type is chat_message (senderId in payload), then ensure dashboard is focused
   useEffect(() => {
-    const handleNotificationTap = () => {
+    const handleNotificationData = (data) => {
+      if (data?.type === 'chat_message' && data?.senderId) {
+        notifyChatNotificationTap(String(data.senderId));
+      }
       if (!navigationRef.current?.isReady() || !user) return;
-      const route = user?.role === 'client' ? 'ClientDashboard' : user?.role === 'freelancer' ? 'FreelancerDashboard' : null;
+      const route =
+        user?.role === 'client'
+          ? 'ClientDashboard'
+          : user?.role === 'freelancer'
+            ? 'FreelancerDashboard'
+            : null;
       if (route) navigationRef.current.navigate(route);
     };
 
-    const sub = addNotificationResponseListener(handleNotificationTap);
+    const sub = addNotificationResponseListener(handleNotificationData);
 
-    // Handle app opened from killed state by tapping notification
     Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response && user) handleNotificationTap();
+      if (!response || !user) return;
+      const data = response.notification.request.content.data || {};
+      handleNotificationData(data);
     });
 
     return () => sub.remove();
-  }, [user?.role]);
+  }, [user?.role, user?._id, user?.id]);
 
   if (loading) {
     return <LoadingSpinner />;

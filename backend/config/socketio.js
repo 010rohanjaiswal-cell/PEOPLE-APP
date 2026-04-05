@@ -114,15 +114,13 @@ const setupSocketIO = (server) => {
         // Emit to recipient (new message)
         io.to(`user_${recipientId}`).emit('new_message', messageData);
 
-        // Create notification for recipient
+        // Create notification for recipient (includes push + in-app; senderId opens chat on tap)
         try {
           const senderName = newMessage.sender?.fullName || 'Someone';
           const messageText = newMessage.message || '';
-          await notifyChatMessage(
-            recipientId,
-            senderName,
-            messageText
-          );
+          const senderOid =
+            newMessage.sender?._id || newMessage.sender?.id || socket.userId;
+          await notifyChatMessage(recipientId, senderName, messageText, senderOid);
         } catch (notifError) {
           console.error('Error creating chat message notification:', notifError);
           // Don't fail message sending if notification fails

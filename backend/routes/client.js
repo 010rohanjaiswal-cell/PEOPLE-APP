@@ -215,6 +215,14 @@ router.post('/jobs', authenticate, async (req, res) => {
       });
     }
 
+    const budgetNum = Number(budget);
+    if (!Number.isFinite(budgetNum) || budgetNum < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Budget must be at least ₹10',
+      });
+    }
+
     let state = null;
     let jobLat = null;
     let jobLng = null;

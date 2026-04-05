@@ -582,8 +582,9 @@ const PostJob = ({ onJobPosted }) => {
     }
 
     const budgetNum = parseFloat(String(formData.budget || '').replace(/,/g, ''));
-    if (!Number.isFinite(budgetNum) || budgetNum < 1) {
+    if (!Number.isFinite(budgetNum) || budgetNum < 10) {
       runErrorBorderAnimation(borderOpacity.budget);
+      Alert.alert(t('common.error'), t('jobs.budgetMin10'));
       return;
     }
 

@@ -18,6 +18,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { notifyChatNotificationTap } from '../../utils/chatNotificationBridge';
 import { useLanguage } from '../../context/LanguageContext';
 import { translateNotificationToHindi } from '../../utils/translate';
 import EmptyState from '../common/EmptyState';
@@ -257,7 +258,9 @@ const NotificationModal = ({ visible, onClose }) => {
     if (!notification.read) {
       await markAsRead(notification._id);
     }
-    // TODO: Navigate to relevant screen based on notification type
+    if (notification.type === 'chat_message' && notification.data?.senderId) {
+      notifyChatNotificationTap(String(notification.data.senderId));
+    }
     onClose();
   };
 

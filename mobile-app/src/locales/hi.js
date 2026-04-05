@@ -169,7 +169,7 @@ export default {
     pleaseSelectCategory: 'कृपया श्रेणी चुनें',
     pleaseEnterAddress: 'कृपया पता दर्ज करें',
     pleaseEnterValidPincode: 'कृपया मान्य 6 अंकों का पिन कोड दर्ज करें',
-    budgetMin10: 'बजट कम से कम ₹1 होना चाहिए',
+    budgetMin10: 'बजट कम से कम ₹10 होना चाहिए',
     pleaseSelectGender: 'कृपया लिंग वरीयता चुनें',
     deliveryRoute: 'मार्ग',
     fromShort: 'से',

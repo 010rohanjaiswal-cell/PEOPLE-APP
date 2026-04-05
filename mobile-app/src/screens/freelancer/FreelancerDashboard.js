@@ -19,10 +19,21 @@ import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import NotificationPermissionBanner from '../../components/common/NotificationPermissionBanner';
 import { useLocation } from '../../context/LocationContext';
-import { userAPI, verificationAPI } from '../../api';
+import { userAPI, verificationAPI, freelancerJobsAPI } from '../../api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
+
+function parseAssignedJobsResponse(response) {
+  if (response?.success && Array.isArray(response.jobs)) return response.jobs;
+  if (Array.isArray(response?.jobs)) return response.jobs;
+  if (Array.isArray(response)) return response;
+  return [];
+}
+
+function hasActiveAssignedJob(jobs) {
+  return jobs.some((job) => job.freelancerCompleted !== true && job.status !== 'cancelled');
+}
 
 // Tab Screens
 import AvailableJobsScreen from './AvailableJobs';
@@ -34,6 +45,8 @@ import SettingsScreen from './Settings';
 import ReferralScreen from './Referral';
 import SupportScreen from './Support';
 import SupportChatScreen from './SupportChat';
+import ChatModal from '../../components/modals/ChatModal';
+import { setChatNotificationTapHandler } from '../../utils/chatNotificationBridge';
 
 function createFreelancerDashboardStyles(colors) {
   return StyleSheet.create({
@@ -350,6 +363,34 @@ const FreelancerDashboard = () => {
   const { requestPermission, checkPermission } = useLocation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
 
+  /** When returning to main tabs: My Jobs if an active assigned job exists, else Available Jobs (matches client dashboard). */
+  const goToMainTabPreferringMyJobs = useCallback(async () => {
+    try {
+      const response = await freelancerJobsAPI.getAssignedJobs();
+      const list = parseAssignedJobsResponse(response);
+      setActiveTab(hasActiveAssignedJob(list) ? 'MyJobs' : 'AvailableJobs');
+    } catch (e) {
+      console.warn('FreelancerDashboard: assigned jobs check failed', e?.message);
+      setActiveTab('AvailableJobs');
+    }
+  }, []);
+
+  /** On first load: switch to My Jobs if freelancer already has an active assigned job. */
+  const switchToMyJobsIfAssignedJob = useCallback(async () => {
+    try {
+      const response = await freelancerJobsAPI.getAssignedJobs();
+      const list = parseAssignedJobsResponse(response);
+      if (hasActiveAssignedJob(list)) setActiveTab('MyJobs');
+    } catch (e) {
+      console.warn('FreelancerDashboard: assigned jobs check failed', e?.message);
+    }
+  }, []);
+
+  // Only prefer My Jobs once when the dashboard first mounts (same pattern as ClientDashboard).
+  useEffect(() => {
+    switchToMyJobsIfAssignedJob();
+  }, [switchToMyJobsIfAssignedJob]);
+
   // Ask for GPS when user lands on freelancer dashboard (ensures dialog shows at right time)
   useEffect(() => {
     const t = setTimeout(() => {
@@ -368,6 +409,8 @@ const FreelancerDashboard = () => {
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [verification, setVerification] = useState(null);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  /** Opens when user taps a chat push / in-app notification. */
+  const [pushChatRecipient, setPushChatRecipient] = useState(null);
 
   const formatRatingCount = (rawCount) => {
     const count = Number(rawCount || 0);
@@ -442,6 +485,19 @@ const FreelancerDashboard = () => {
     }, [checkPermission, refreshUserProfile])
   );
 
+  useEffect(() => {
+    const handler = async (senderId) => {
+      try {
+        const res = await userAPI.getUserProfile(senderId);
+        if (res?.success && res?.user) setPushChatRecipient(res.user);
+      } catch (e) {
+        console.warn('FreelancerDashboard: open chat from notification failed', e?.message);
+      }
+    };
+    setChatNotificationTapHandler(handler);
+    return () => setChatNotificationTapHandler(null);
+  }, []);
+
   const tabs = [
     { key: 'AvailableJobs', labelKey: 'available', icon: 'work', component: AvailableJobsScreen },
     { key: 'MyJobs', labelKey: 'myJobs', icon: 'check-circle', component: MyJobsScreen },
@@ -450,7 +506,7 @@ const FreelancerDashboard = () => {
   const handleDrawerBack = () => {
     setDrawerScreenStack((s) => {
       const next = s.slice(0, -1);
-      if (next.length === 0) setActiveTab('AvailableJobs');
+      if (next.length === 0) void goToMainTabPreferringMyJobs();
       return next;
     });
   };
@@ -534,7 +590,7 @@ const FreelancerDashboard = () => {
         if (drawerScreenStackRef.current.length > 0) {
           setDrawerScreenStack(s => {
             const next = s.slice(0, -1);
-            if (next.length === 0) setActiveTab('AvailableJobs');
+            if (next.length === 0) void goToMainTabPreferringMyJobs();
             return next;
           });
           return true;
@@ -714,7 +770,7 @@ const FreelancerDashboard = () => {
                 <TouchableOpacity 
                   onPress={() => {
                     setDrawerScreenStack([]);
-                    setActiveTab('AvailableJobs');
+                    void goToMainTabPreferringMyJobs();
                     closeDrawer();
                   }} 
                   style={styles.drawerMenuItem}
@@ -825,6 +881,12 @@ const FreelancerDashboard = () => {
       <NotificationModal
         visible={notificationModalVisible}
         onClose={() => setNotificationModalVisible(false)}
+      />
+
+      <ChatModal
+        visible={!!pushChatRecipient}
+        recipient={pushChatRecipient}
+        onClose={() => setPushChatRecipient(null)}
       />
     </SafeAreaView>
   );

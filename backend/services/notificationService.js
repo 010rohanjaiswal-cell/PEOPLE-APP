@@ -316,9 +316,10 @@ async function notifyApplicationRejected(freelancerId, clientName, jobTitle, rea
 }
 
 /**
- * Create notification for chat message
+ * Create notification for chat message (push data must include senderId for opening ChatModal).
  */
-async function notifyChatMessage(recipientId, senderName, messagePreview) {
+async function notifyChatMessage(recipientId, senderName, messagePreview, senderId) {
+  const sid = senderId != null ? String(senderId) : null;
   return createNotification({
     userId: recipientId,
     type: 'chat_message',
@@ -327,6 +328,7 @@ async function notifyChatMessage(recipientId, senderName, messagePreview) {
     data: {
       senderName,
       messagePreview,
+      ...(sid ? { senderId: sid } : {}),
     },
   });
 }
