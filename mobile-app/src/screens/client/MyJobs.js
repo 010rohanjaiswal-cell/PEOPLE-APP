@@ -319,7 +319,10 @@ function createClientMyJobsStyles(colors) {
 });
 }
 
-const MyJobs = () => {
+const MyJobs = ({
+  openApplicationsJobId = null,
+  onConsumeOpenApplicationsJobId,
+}) => {
   const { t, locale } = useLanguage();
   const { colors } = useTheme();
   const styles = useMemo(() => createClientMyJobsStyles(colors), [colors]);
@@ -365,6 +368,20 @@ const MyJobs = () => {
   useEffect(() => {
     loadJobs();
   }, []);
+
+  useEffect(() => {
+    if (!openApplicationsJobId) return;
+    if (loading) return;
+    const want = String(openApplicationsJobId);
+    const job = jobs.find((j) => String(j._id || j.id) === want);
+    if (job) {
+      setSelectedJob(job);
+      setApplicationsModalVisible(true);
+      onConsumeOpenApplicationsJobId?.();
+    } else {
+      onConsumeOpenApplicationsJobId?.();
+    }
+  }, [openApplicationsJobId, jobs, loading, onConsumeOpenApplicationsJobId]);
 
   // When locale is Hindi, translate job title/description/address/pincode for display
   useEffect(() => {

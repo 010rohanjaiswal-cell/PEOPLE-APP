@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions, ActivityIndicator, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -359,6 +359,8 @@ const FreelancerDashboard = () => {
   const { user, logout, mergeUser } = useAuth();
   const { t } = useLanguage();
   const { requestPermission, checkPermission } = useLocation();
+  const route = useRoute();
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('AvailableJobs');
 
   /** When returning to main tabs: My Jobs if an active assigned job exists, else Available Jobs (matches client dashboard). */
@@ -407,6 +409,19 @@ const FreelancerDashboard = () => {
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [verification, setVerification] = useState(null);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+
+  // Push notification tap: My Jobs vs main dashboard tab (same as drawer "Dashboard")
+  useEffect(() => {
+    const pa = route.params?.pushAction;
+    if (!pa) return;
+    setDrawerScreenStack([]);
+    if (pa.tab === 'MyJobs') {
+      setActiveTab('MyJobs');
+    } else if (pa.tab === 'Dashboard') {
+      void goToMainTabPreferringMyJobs();
+    }
+    navigation.setParams({ pushAction: undefined });
+  }, [route.params?.pushAction, goToMainTabPreferringMyJobs, navigation]);
 
   const formatRatingCount = (rawCount) => {
     const count = Number(rawCount || 0);

@@ -948,7 +948,8 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
               app.freelancer.toString(),
               clientNameApps,
               job.title,
-              'other_selected'
+              'other_selected',
+              job._id
             );
           } catch (e) {
             console.error('Notify application not selected:', e);
@@ -974,13 +975,15 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
       await notifyOfferAccepted(
         offer.freelancer._id?.toString() || offer.freelancer.toString(),
         client?.fullName || 'The client',
-        job.title
+        job.title,
+        job._id
       );
       // Also notify about job assignment
       await notifyJobAssigned(
         offer.freelancer._id?.toString() || offer.freelancer.toString(),
         client?.fullName || 'The client',
-        job.title
+        job.title,
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending offer acceptance notification:', notifError);
@@ -1061,7 +1064,8 @@ router.post('/jobs/:id/reject-offer', authenticate, async (req, res) => {
       await notifyOfferRejected(
         freelancerId,
         client?.fullName || 'The client',
-        job.title
+        job.title,
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending offer rejection notification:', notifError);
@@ -1293,7 +1297,8 @@ router.post('/jobs/:id/reject-application', authenticate, async (req, res) => {
         freelancerId,
         client?.fullName || 'The client',
         job.title,
-        'rejected'
+        'rejected',
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending application rejection notification:', notifError);

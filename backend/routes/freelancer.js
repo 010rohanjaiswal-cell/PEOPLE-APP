@@ -1578,7 +1578,8 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
       await notifyJobAssigned(
         freelancerId,
         client?.fullName || 'The client',
-        job.title
+        job.title,
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending job assignment notification to freelancer:', notifError);
@@ -1723,7 +1724,8 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
       await notifyApplicationReceived(
         job.client.toString(),
         freelancer?.fullName || 'A freelancer',
-        job.title
+        job.title,
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending application notification:', notifError);
@@ -1879,7 +1881,8 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
         job.client.toString(),
         freelancer?.fullName || 'A freelancer',
         job.title,
-        Number(amount)
+        Number(amount),
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending offer notification:', notifError);
@@ -1946,7 +1949,8 @@ router.post('/jobs/:id/complete', authenticate, async (req, res) => {
       await notifyWorkDone(
         job.client.toString(),
         freelancer?.fullName || 'The freelancer',
-        job.title
+        job.title,
+        job._id
       );
     } catch (notifError) {
       console.error('Error sending work done notification:', notifError);

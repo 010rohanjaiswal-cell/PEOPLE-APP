@@ -171,7 +171,7 @@ async function createNotification({ userId, type, title, message, data = {} }) {
 /**
  * Create notification for offer received
  */
-async function notifyOfferReceived(clientId, freelancerName, jobTitle, offerAmount) {
+async function notifyOfferReceived(clientId, freelancerName, jobTitle, offerAmount, jobId) {
   return createNotification({
     userId: clientId,
     type: 'offer_received',
@@ -181,6 +181,7 @@ async function notifyOfferReceived(clientId, freelancerName, jobTitle, offerAmou
       jobTitle,
       offerAmount,
       freelancerName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -188,7 +189,7 @@ async function notifyOfferReceived(clientId, freelancerName, jobTitle, offerAmou
 /**
  * Create notification for offer accepted
  */
-async function notifyOfferAccepted(freelancerId, clientName, jobTitle) {
+async function notifyOfferAccepted(freelancerId, clientName, jobTitle, jobId) {
   return createNotification({
     userId: freelancerId,
     type: 'offer_accepted',
@@ -197,6 +198,7 @@ async function notifyOfferAccepted(freelancerId, clientName, jobTitle) {
     data: {
       jobTitle,
       clientName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -204,7 +206,7 @@ async function notifyOfferAccepted(freelancerId, clientName, jobTitle) {
 /**
  * Create notification for offer rejected
  */
-async function notifyOfferRejected(freelancerId, clientName, jobTitle) {
+async function notifyOfferRejected(freelancerId, clientName, jobTitle, jobId) {
   return createNotification({
     userId: freelancerId,
     type: 'offer_rejected',
@@ -213,6 +215,7 @@ async function notifyOfferRejected(freelancerId, clientName, jobTitle) {
     data: {
       jobTitle,
       clientName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -220,7 +223,7 @@ async function notifyOfferRejected(freelancerId, clientName, jobTitle) {
 /**
  * Create notification for job assigned
  */
-async function notifyJobAssigned(freelancerId, clientName, jobTitle) {
+async function notifyJobAssigned(freelancerId, clientName, jobTitle, jobId) {
   return createNotification({
     userId: freelancerId,
     type: 'job_assigned',
@@ -229,6 +232,7 @@ async function notifyJobAssigned(freelancerId, clientName, jobTitle) {
     data: {
       jobTitle,
       clientName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -286,7 +290,7 @@ async function notifyPaymentSent(clientId, freelancerName, amount, jobTitle) {
 /**
  * Create notification for work done
  */
-async function notifyWorkDone(clientId, freelancerName, jobTitle) {
+async function notifyWorkDone(clientId, freelancerName, jobTitle, jobId) {
   return createNotification({
     userId: clientId,
     type: 'work_done',
@@ -295,6 +299,7 @@ async function notifyWorkDone(clientId, freelancerName, jobTitle) {
     data: {
       jobTitle,
       freelancerName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -318,7 +323,7 @@ async function notifyJobPickedUp(clientId, freelancerName, jobTitle) {
 /**
  * Client: new application on a non-delivery job
  */
-async function notifyApplicationReceived(clientId, freelancerName, jobTitle) {
+async function notifyApplicationReceived(clientId, freelancerName, jobTitle, jobId) {
   return createNotification({
     userId: clientId,
     type: 'application_received',
@@ -327,6 +332,7 @@ async function notifyApplicationReceived(clientId, freelancerName, jobTitle) {
     data: {
       jobTitle,
       freelancerName,
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }
@@ -334,7 +340,7 @@ async function notifyApplicationReceived(clientId, freelancerName, jobTitle) {
 /**
  * Freelancer: application rejected or not selected
  */
-async function notifyApplicationRejected(freelancerId, clientName, jobTitle, reason) {
+async function notifyApplicationRejected(freelancerId, clientName, jobTitle, reason, jobId) {
   const msg =
     reason === 'other_selected'
       ? `${clientName} selected another freelancer for "${jobTitle}"`
@@ -348,6 +354,7 @@ async function notifyApplicationRejected(freelancerId, clientName, jobTitle, rea
       jobTitle,
       clientName,
       reason: reason || 'rejected',
+      ...(jobId != null ? { jobId: String(jobId) } : {}),
     },
   });
 }

@@ -6,7 +6,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -302,7 +302,10 @@ const ClientDashboard = () => {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const { requestPermission } = useLocation();
+  const route = useRoute();
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('PostJob');
+  const [pendingOpenApplicationsJobId, setPendingOpenApplicationsJobId] = useState(null);
   // Stack of drawer screens so back goes through history: e.g. [Wallet, Profile, Settings] -> back -> [Wallet, Profile] -> back -> [Wallet] -> back -> []
   const [drawerScreenStack, setDrawerScreenStack] = useState([]);
   /** When opening Support Chat after startTicket, ticket is applied before first paint. */
@@ -338,6 +341,8 @@ const ClientDashboard = () => {
     }
   }, []);
 
+  const clearPendingOpenApplications = useCallback(() => setPendingOpenApplicationsJobId(null), []);
+
   // Top tabs - only Post Job and My Jobs
   const tabs = [
     { key: 'PostJob', labelKey: 'postJob', icon: 'add-circle', component: PostJobScreen },
@@ -368,6 +373,18 @@ const ClientDashboard = () => {
   useEffect(() => {
     switchToMyJobsIfActiveJobs();
   }, [switchToMyJobsIfActiveJobs]);
+
+  // Push notification tap: switch tab / open applications modal (params from AppNavigator)
+  useEffect(() => {
+    const pa = route.params?.pushAction;
+    if (!pa) return;
+    setDrawerScreenStack([]);
+    if (pa.tab === 'MyJobs') {
+      setActiveTab('MyJobs');
+      setPendingOpenApplicationsJobId(pa.openApplicationsJobId ?? null);
+    }
+    navigation.setParams({ pushAction: undefined });
+  }, [route.params?.pushAction, navigation]);
 
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
@@ -562,6 +579,11 @@ const ClientDashboard = () => {
       <View style={styles.tabContent} {...panResponder.panHandlers}>
         {activeTab === 'PostJob' ? (
           <PostJobScreen onJobPosted={() => setActiveTab('MyJobs')} />
+        ) : activeTab === 'MyJobs' && !activeDrawerScreen ? (
+          <MyJobsScreen
+            openApplicationsJobId={pendingOpenApplicationsJobId}
+            onConsumeOpenApplicationsJobId={clearPendingOpenApplications}
+          />
         ) : (
           <ActiveScreen />
         )}

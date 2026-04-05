@@ -11,6 +11,10 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { addNotificationResponseListener } from '../utils/pushNotifications';
 import * as Notifications from 'expo-notifications';
+import {
+  normalizeExpoPushData,
+  resolvePushActionFromNotificationData,
+} from './pushNotificationRoutes';
 
 // Auth Screens
 import LoginScreen from '../screens/auth/Login';
@@ -107,17 +111,27 @@ const AppNavigator = () => {
     }
   }, [isAuthenticated, user, loading]);
 
-  // Push tap: focus dashboard (in-app chat between client and freelancer is disabled)
+  // Push tap: route by notification type (tabs / modals); unmapped types open root dashboard only
   useEffect(() => {
-    const handleNotificationData = () => {
+    const handleNotificationData = (rawData) => {
       if (!navigationRef.current?.isReady() || !user) return;
-      const route =
-        user?.role === 'client'
-          ? 'ClientDashboard'
-          : user?.role === 'freelancer'
-            ? 'FreelancerDashboard'
-            : null;
-      if (route) navigationRef.current.navigate(route);
+      const normalized = normalizeExpoPushData(rawData || {});
+      const action = resolvePushActionFromNotificationData(normalized, user?.role);
+      if (user?.role === 'client') {
+        if (action) {
+          navigationRef.current.navigate('ClientDashboard', { pushAction: action });
+        } else {
+          navigationRef.current.navigate('ClientDashboard');
+        }
+        return;
+      }
+      if (user?.role === 'freelancer') {
+        if (action) {
+          navigationRef.current.navigate('FreelancerDashboard', { pushAction: action });
+        } else {
+          navigationRef.current.navigate('FreelancerDashboard');
+        }
+      }
     };
 
     const sub = addNotificationResponseListener(handleNotificationData);
@@ -125,7 +139,7 @@ const AppNavigator = () => {
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response || !user) return;
       const data = response.notification.request.content.data || {};
-      handleNotificationData();
+      handleNotificationData(data);
     });
 
     return () => sub.remove();

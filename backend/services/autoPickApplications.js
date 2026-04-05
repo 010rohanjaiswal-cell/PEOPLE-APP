@@ -103,7 +103,7 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
       app.status = 'rejected';
       try {
         const fid = app.freelancer._id?.toString() || app.freelancer.toString();
-        await notifyApplicationRejected(fid, clientName, job.title, 'other_selected');
+        await notifyApplicationRejected(fid, clientName, job.title, 'other_selected', job._id);
       } catch (e) {
         console.error('Notify application not selected:', e);
       }
@@ -116,7 +116,7 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
         o.status = 'rejected';
         try {
           const fid = o.freelancer._id?.toString() || o.freelancer.toString();
-          await notifyOfferRejected(fid, clientName, job.title);
+          await notifyOfferRejected(fid, clientName, job.title, job._id);
         } catch (e) {
           console.error('Notify offer rejected:', e);
         }
@@ -135,7 +135,7 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
   await job.save();
 
   try {
-    await notifyJobAssigned(freelancerId, clientName, job.title);
+    await notifyJobAssigned(freelancerId, clientName, job.title, job._id);
   } catch (notifError) {
     console.error('Error sending job assignment notification:', notifError);
   }
