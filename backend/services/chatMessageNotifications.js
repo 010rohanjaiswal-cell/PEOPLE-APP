@@ -1,9 +1,8 @@
 /**
- * Chat message notifications — isolated from socketio.js to avoid circular requires
- * (socketio → this → notificationService; notificationService must not load socketio at init).
+ * Chat message notifications — no top-level require of notificationService so this module
+ * always exports a real function even under circular load (socketio ↔ notification graph).
+ * createNotification is required only when notifyChatMessage runs (after full boot).
  */
-
-const { createNotification } = require('./notificationService');
 
 function toUserIdString(userId) {
   if (userId == null) return '';
@@ -18,6 +17,7 @@ function toUserIdString(userId) {
  * Create notification for chat message (push data must include senderId for opening ChatModal).
  */
 async function notifyChatMessage(recipientId, senderName, messagePreview, senderId) {
+  const { createNotification } = require('./notificationService');
   const rid = toUserIdString(recipientId);
   if (!rid) {
     return null;

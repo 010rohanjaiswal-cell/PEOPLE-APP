@@ -108,6 +108,13 @@ async function startServer() {
     // Connect to database
     await connectDB();
 
+    // Fail fast if chat notification export is broken (avoids TypeError on every send_message)
+    const cm = require('./services/chatMessageNotifications');
+    if (typeof cm.notifyChatMessage !== 'function') {
+      throw new Error('BOOT: chatMessageNotifications.notifyChatMessage is not a function — check deploy / circular requires');
+    }
+    console.log('✅ chatMessageNotifications export OK');
+
     // Start HTTP server
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
