@@ -10,8 +10,10 @@ import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { registerPushTokenAsync } from '../../utils/pushNotifications';
+import { useAuth } from '../../context/AuthContext';
 
 export default function NotificationPermissionBanner() {
+  const { user } = useAuth();
   const { t } = useLanguage();
   const { colors } = useTheme();
   const [status, setStatus] = useState(null);
@@ -74,7 +76,8 @@ export default function NotificationPermissionBanner() {
     const { status: next } = await Notifications.requestPermissionsAsync();
     setStatus(next);
     if (next === 'granted') {
-      await registerPushTokenAsync();
+      const uid = user?._id || user?.id;
+      await registerPushTokenAsync(uid);
     }
   };
 

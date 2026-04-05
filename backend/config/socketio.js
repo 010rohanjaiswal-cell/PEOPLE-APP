@@ -76,8 +76,10 @@ const setupSocketIO = (server) => {
           return;
         }
 
+        const recipientRoomId = String(recipientId).trim();
+
         // Verify recipient exists
-        const recipient = await User.findById(recipientId);
+        const recipient = await User.findById(recipientRoomId);
         if (!recipient) {
           socket.emit('error', { message: 'Recipient not found' });
           return;
@@ -86,7 +88,7 @@ const setupSocketIO = (server) => {
         // Create message
         const newMessage = await Message.create({
           sender: socket.userId,
-          recipient: recipientId,
+          recipient: recipientRoomId,
           message: message.trim(),
           status: 'sent',
         });
@@ -112,7 +114,7 @@ const setupSocketIO = (server) => {
         socket.emit('message_sent', messageData);
 
         // Emit to recipient (new message)
-        io.to(`user_${recipientId}`).emit('new_message', messageData);
+        io.to(`user_${recipientRoomId}`).emit('new_message', messageData);
 
         // Create notification for recipient (includes push + in-app; senderId opens chat on tap)
         try {
@@ -120,20 +122,20 @@ const setupSocketIO = (server) => {
           const messageText = newMessage.message || '';
           const senderOid =
             newMessage.sender?._id || newMessage.sender?.id || socket.userId;
-          await notifyChatMessage(recipientId, senderName, messageText, senderOid);
+          await notifyChatMessage(recipientRoomId, senderName, messageText, senderOid);
         } catch (notifError) {
           console.error('Error creating chat message notification:', notifError);
           // Don't fail message sending if notification fails
         }
 
         // Update status to delivered if recipient is online
-        const recipientSocket = await io.in(`user_${recipientId}`).fetchSockets();
+        const recipientSocket = await io.in(`user_${recipientRoomId}`).fetchSockets();
         if (recipientSocket.length > 0) {
           await Message.findByIdAndUpdate(newMessage._id, { status: 'delivered' });
           messageData.status = 'delivered';
           // Update both sender and recipient with delivered status
           socket.emit('message_sent', messageData);
-          io.to(`user_${recipientId}`).emit('new_message', messageData);
+          io.to(`user_${recipientRoomId}`).emit('new_message', messageData);
         }
       } catch (error) {
         console.error('Error sending message via socket:', error);

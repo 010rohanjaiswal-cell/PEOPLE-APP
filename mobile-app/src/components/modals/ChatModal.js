@@ -20,7 +20,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { chatAPI } from '../../api/chat';
-import { useSocket } from '../../hooks/useSocket';
+import { useSocket } from '../../context/SocketContext';
 
 const ChatModal = ({ visible, recipient, onClose }) => {
   const { user } = useAuth();

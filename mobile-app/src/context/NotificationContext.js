@@ -5,7 +5,7 @@
 
 import React, { createContext, useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './AuthContext';
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from './SocketContext';
 import { notificationsAPI } from '../api';
 
 const NotificationContext = createContext();
@@ -20,7 +20,7 @@ export const useNotifications = () => {
 
 export const NotificationProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const userId = useMemo(() => (user?._id || user?.id || null), [user?._id, user?.id]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -166,19 +166,14 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [isAuthenticated, userId, loadNotifications]);
 
-  // Set up Socket.io listener for new notifications
+  // Set up Socket.io listener for new notifications (attach as soon as socket exists; works after connect)
   useEffect(() => {
     if (!socket) {
       console.log('⚠️ Socket not available for notifications');
       return;
     }
-    
-    if (!isConnected) {
-      console.log('⚠️ Socket not connected for notifications. Socket connected:', socket.connected);
-      return;
-    }
 
-    console.log('✅ Setting up notification listener on socket. Socket ID:', socket.id);
+    console.log('✅ Setting up notification listener on socket. Socket ID:', socket.id, 'connected:', socket.connected);
     
     const handleNewNotification = (data) => {
       const newNotification = data.notification;
@@ -222,7 +217,7 @@ export const NotificationProvider = ({ children }) => {
         socket.off('new_notification', handleNewNotification);
       }
     };
-  }, [socket, isConnected]);
+  }, [socket]);
 
   // Periodically refresh unread count (every 30 seconds)
   useEffect(() => {

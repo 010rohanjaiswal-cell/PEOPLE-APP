@@ -9,6 +9,7 @@ import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DigiLockerProvider } from '@cashfreepayments/react-native-digilocker';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SocketProvider } from './src/context/SocketContext';
 import { UserProvider } from './src/context/UserContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import { LocationProvider } from './src/context/LocationContext';
@@ -44,7 +45,7 @@ const AppContent = () => {
   useEffect(() => {
     if (userId) {
       warmupBackend();
-      registerPushTokenAsync();
+      registerPushTokenAsync(userId);
     }
   }, [userId]);
 
@@ -54,7 +55,7 @@ const AppContent = () => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         warmupBackend();
-        registerPushTokenAsync();
+        registerPushTokenAsync(userId);
       }
     });
     return () => sub?.remove();
@@ -89,6 +90,7 @@ export default function App() {
     <SafeAreaProvider>
       <DigiLockerProvider>
       <AuthProvider>
+        <SocketProvider>
         <LanguageProvider>
           <ThemeProvider>
             <UserProvider>
@@ -101,6 +103,7 @@ export default function App() {
             </UserProvider>
           </ThemeProvider>
         </LanguageProvider>
+        </SocketProvider>
       </AuthProvider>
       </DigiLockerProvider>
     </SafeAreaProvider>

@@ -131,9 +131,12 @@ router.post('/send', authenticate, async (req, res) => {
       console.error('Error creating chat message notification:', notifError);
     }
 
-    const io = getIO();
-    if (io) {
-      io.to(`user_${recipientId}`).emit('new_message', messagePayload);
+    try {
+      const io = getIO();
+      const rid = String(recipientId).trim();
+      io.to(`user_${rid}`).emit('new_message', messagePayload);
+    } catch (emitErr) {
+      console.warn('Socket emit new_message (REST) failed:', emitErr.message);
     }
 
     res.json({

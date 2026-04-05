@@ -19,24 +19,48 @@ const EXPO_PUSH_SOUND = 'notification_sound.wav';
 /** Must match `NOTIFICATION_CHANNEL_ID` + app.json `expo-notifications` → `android.defaultChannel`. */
 const EXPO_PUSH_CHANNEL_ID = 'people-alerts';
 
+function toUserIdString(userId) {
+  if (userId == null) return '';
+  try {
+    return String(userId).trim();
+  } catch {
+    return '';
+  }
+}
+
+/** FCM/Expo expect string values in `data` for reliable Android delivery. */
+function stringifyPushData(data = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v === null || v === undefined) continue;
+    out[k] = typeof v === 'string' ? v : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  }
+  return out;
+}
+
 /**
  * Send push notification via Expo Push API (non-blocking)
  */
 async function sendExpoPush(userId, title, body, data = {}) {
   try {
-    const tokens = await PushToken.find({ user: userId }).select('expoPushToken').lean();
+    const uid = toUserIdString(userId);
+    if (!uid) return;
+
+    const tokens = await PushToken.find({ user: uid }).select('expoPushToken').lean();
     if (!tokens.length) {
       if (VERBOSE_NOTIF_LOGS) {
-        console.log(`📲 No push tokens for user ${userId} – skip Expo push`);
+        console.log(`📲 No push tokens for user ${uid} – skip Expo push`);
       }
       return;
     }
+
+    const flatData = stringifyPushData(data);
 
     const messages = tokens.map((t) => ({
       to: t.expoPushToken,
       title,
       body,
-      data: { ...data },
+      data: flatData,
       // iOS: custom sound filename in app bundle (Expo Push API).
       sound: EXPO_PUSH_SOUND,
       // Android: sound + vibration come from the client channel with this id; high priority improves delivery.
@@ -45,7 +69,7 @@ async function sendExpoPush(userId, title, body, data = {}) {
     }));
 
     if (VERBOSE_NOTIF_LOGS) {
-      console.log(`📲 Sending Expo push to ${messages.length} device(s) for user ${userId}`);
+      console.log(`📲 Sending Expo push to ${messages.length} device(s) for user ${uid}`);
     }
     const { data: result } = await axios.post(EXPO_PUSH_URL, messages, {
       headers: { 'Content-Type': 'application/json' },
@@ -78,9 +102,14 @@ async function sendExpoPush(userId, title, body, data = {}) {
  * @returns {Promise<Object>} Created notification
  */
 async function createNotification({ userId, type, title, message, data = {} }) {
+  const userIdStr = toUserIdString(userId);
+  if (!userIdStr) {
+    throw new Error('createNotification: userId is required');
+  }
+
   try {
     const notification = new Notification({
-      user: userId,
+      user: userIdStr,
       type,
       title,
       message,
@@ -92,37 +121,37 @@ async function createNotification({ userId, type, title, message, data = {} }) {
     // Populate user field for response
     await notification.populate('user', 'fullName phone');
 
-    // Emit notification via Socket.io
-    const io = getIO();
-    if (io) {
-      const notificationData = {
-        notification: {
-          _id: notification._id,
-          type: notification.type,
-          title: notification.title,
-          message: notification.message,
-          data: notification.data,
-          read: notification.read,
-          createdAt: notification.createdAt,
-        },
-      };
-      
-      const userIdStr = userId.toString();
+    const notificationData = {
+      notification: {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        read: notification.read,
+        createdAt: notification.createdAt,
+      },
+    };
+
+    // Push even if socket emit fails (getIO can throw if misconfigured)
+    sendExpoPush(userIdStr, title, message, {
+      type,
+      notificationId: notification._id.toString(),
+      ...data,
+    });
+
+    try {
+      const io = getIO();
       if (VERBOSE_NOTIF_LOGS) {
         console.log(`📤 Emitting notification to user ${userIdStr} via Socket.io`);
       }
-      
-      // Emit to notifications room (each socket joins both rooms; emitting twice causes duplicates)
       io.to(`notifications_${userIdStr}`).emit('new_notification', notificationData);
       if (VERBOSE_NOTIF_LOGS) {
         console.log(`✅ Notification emitted to room: notifications_${userIdStr}`);
       }
-    } else {
-      console.warn('⚠️ Socket.io not available, notification will only be saved to database');
+    } catch (emitErr) {
+      console.warn('Socket emit for notification failed (push still attempted):', emitErr.message);
     }
-
-    // Push notification when app is in background/closed (Expo Push API)
-    sendExpoPush(userId, title, message, { type, notificationId: notification._id.toString(), ...data });
 
     return notification;
   } catch (error) {
@@ -319,9 +348,13 @@ async function notifyApplicationRejected(freelancerId, clientName, jobTitle, rea
  * Create notification for chat message (push data must include senderId for opening ChatModal).
  */
 async function notifyChatMessage(recipientId, senderName, messagePreview, senderId) {
+  const rid = toUserIdString(recipientId);
+  if (!rid) {
+    return null;
+  }
   const sid = senderId != null ? String(senderId) : null;
   return createNotification({
-    userId: recipientId,
+    userId: rid,
     type: 'chat_message',
     title: 'New Message',
     message: `${senderName}: ${messagePreview.length > 50 ? messagePreview.substring(0, 50) + '...' : messagePreview}`,

@@ -72,8 +72,9 @@ export function subscribeForegroundNotificationVibration() {
 /**
  * Request permission and get Expo push token; register with backend.
  * Call when user is authenticated.
+ * @param {string} [userId] - Current user id; required for correct deduping when the same device switches accounts (Expo token stays the same).
  */
-export async function registerPushTokenAsync() {
+export async function registerPushTokenAsync(userId) {
   if (Platform.OS === 'web') return null;
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
@@ -91,8 +92,9 @@ export async function registerPushTokenAsync() {
     const token = tokenResult?.data;
     if (!token) return null;
 
-    // Avoid spamming backend on every user/profile refresh
-    const key = `pushToken:lastRegistered:${Platform.OS}`;
+    // Per-user key: same Expo token must be re-registered when a different account logs in on this device
+    const uid = userId != null ? String(userId) : 'unknown';
+    const key = `pushToken:lastRegistered:${uid}:${Platform.OS}`;
     const last = await AsyncStorage.getItem(key);
     if (last && last === token) {
       return token;
