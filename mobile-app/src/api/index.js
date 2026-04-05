@@ -13,7 +13,6 @@ export { paymentAPI } from './payment';
 export { default as cashfreePaymentsAPI } from './cashfreePayments';
 export { default as cashfreeWalletAPI } from './cashfreeWallet';
 export { default as userAPI } from './user';
-export { chatAPI } from './chat';
 export { notificationsAPI } from './notifications';
 export { default as supportAPI } from './support';
 

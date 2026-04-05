@@ -18,7 +18,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { notifyChatNotificationTap } from '../../utils/chatNotificationBridge';
 import { useLanguage } from '../../context/LanguageContext';
 import { translateNotificationToHindi } from '../../utils/translate';
 import EmptyState from '../common/EmptyState';
@@ -209,8 +208,6 @@ const NotificationModal = ({ visible, onClose }) => {
         return 'send';
       case 'work_done':
         return 'check';
-      case 'chat_message':
-        return 'message';
       case 'profile_verified':
         return 'verified';
       default:
@@ -235,8 +232,6 @@ const NotificationModal = ({ visible, onClose }) => {
       case 'offer_rejected':
       case 'application_rejected':
         return colors.error.main;
-      case 'chat_message':
-        return colors.primary.main;
       default:
         return colors.text.secondary;
     }
@@ -257,9 +252,6 @@ const NotificationModal = ({ visible, onClose }) => {
   const handleNotificationPress = async (notification) => {
     if (!notification.read) {
       await markAsRead(notification._id);
-    }
-    if (notification.type === 'chat_message' && notification.data?.senderId) {
-      notifyChatNotificationTap(String(notification.data.senderId));
     }
     onClose();
   };
@@ -323,7 +315,6 @@ const NotificationModal = ({ visible, onClose }) => {
                       'work_done',
                       'payment_received',
                       'payment_sent',
-                      'chat_message',
                       'profile_verified',
                     ];
                     return allowedTypes.includes(notification.type);

@@ -45,8 +45,6 @@ import SettingsScreen from './Settings';
 import ReferralScreen from './Referral';
 import SupportScreen from './Support';
 import SupportChatScreen from './SupportChat';
-import ChatModal from '../../components/modals/ChatModal';
-import { setChatNotificationTapHandler } from '../../utils/chatNotificationBridge';
 
 function createFreelancerDashboardStyles(colors) {
   return StyleSheet.create({
@@ -409,8 +407,6 @@ const FreelancerDashboard = () => {
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [verification, setVerification] = useState(null);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  /** Opens when user taps a chat push / in-app notification. */
-  const [pushChatRecipient, setPushChatRecipient] = useState(null);
 
   const formatRatingCount = (rawCount) => {
     const count = Number(rawCount || 0);
@@ -484,19 +480,6 @@ const FreelancerDashboard = () => {
       refreshUserProfile();
     }, [checkPermission, refreshUserProfile])
   );
-
-  useEffect(() => {
-    const handler = async (senderId) => {
-      try {
-        const res = await userAPI.getUserProfile(senderId);
-        if (res?.success && res?.user) setPushChatRecipient(res.user);
-      } catch (e) {
-        console.warn('FreelancerDashboard: open chat from notification failed', e?.message);
-      }
-    };
-    setChatNotificationTapHandler(handler);
-    return () => setChatNotificationTapHandler(null);
-  }, []);
 
   const tabs = [
     { key: 'AvailableJobs', labelKey: 'available', icon: 'work', component: AvailableJobsScreen },
@@ -881,12 +864,6 @@ const FreelancerDashboard = () => {
       <NotificationModal
         visible={notificationModalVisible}
         onClose={() => setNotificationModalVisible(false)}
-      />
-
-      <ChatModal
-        visible={!!pushChatRecipient}
-        recipient={pushChatRecipient}
-        onClose={() => setPushChatRecipient(null)}
       />
     </SafeAreaView>
   );

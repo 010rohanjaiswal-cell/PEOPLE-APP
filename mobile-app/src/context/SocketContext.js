@@ -1,5 +1,5 @@
 /**
- * Single Socket.io connection for the app (shared by chat + notifications).
+ * Single Socket.io connection for the app (notifications + realtime updates).
  * Avoids duplicate clients and stale React state from useRef-only socket handles.
  */
 

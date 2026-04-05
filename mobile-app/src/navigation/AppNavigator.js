@@ -10,7 +10,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { addNotificationResponseListener } from '../utils/pushNotifications';
-import { notifyChatNotificationTap } from '../utils/chatNotificationBridge';
 import * as Notifications from 'expo-notifications';
 
 // Auth Screens
@@ -108,12 +107,9 @@ const AppNavigator = () => {
     }
   }, [isAuthenticated, user, loading]);
 
-  // Push tap: open chat when type is chat_message (senderId in payload), then ensure dashboard is focused
+  // Push tap: focus dashboard (in-app chat between client and freelancer is disabled)
   useEffect(() => {
-    const handleNotificationData = (data) => {
-      if (data?.type === 'chat_message' && data?.senderId) {
-        notifyChatNotificationTap(String(data.senderId));
-      }
+    const handleNotificationData = () => {
       if (!navigationRef.current?.isReady() || !user) return;
       const route =
         user?.role === 'client'
@@ -129,7 +125,7 @@ const AppNavigator = () => {
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response || !user) return;
       const data = response.notification.request.content.data || {};
-      handleNotificationData(data);
+      handleNotificationData();
     });
 
     return () => sub.remove();

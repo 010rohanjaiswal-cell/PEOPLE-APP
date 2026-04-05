@@ -19,9 +19,6 @@ import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import { useLocation } from '../../context/LocationContext';
 import { clientJobsAPI } from '../../api/clientJobs';
-import { userAPI } from '../../api';
-import ChatModal from '../../components/modals/ChatModal';
-import { setChatNotificationTapHandler } from '../../utils/chatNotificationBridge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -315,8 +312,6 @@ const ClientDashboard = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  /** Opens when user taps a chat push / in-app notification (sender profile loaded by id). */
-  const [pushChatRecipient, setPushChatRecipient] = useState(null);
 
   const activeDrawerScreen = drawerScreenStack.length > 0 ? drawerScreenStack[drawerScreenStack.length - 1] : null;
 
@@ -373,19 +368,6 @@ const ClientDashboard = () => {
   useEffect(() => {
     switchToMyJobsIfActiveJobs();
   }, [switchToMyJobsIfActiveJobs]);
-
-  useEffect(() => {
-    const handler = async (senderId) => {
-      try {
-        const res = await userAPI.getUserProfile(senderId);
-        if (res?.success && res?.user) setPushChatRecipient(res.user);
-      } catch (e) {
-        console.warn('ClientDashboard: open chat from notification failed', e?.message);
-      }
-    };
-    setChatNotificationTapHandler(handler);
-    return () => setChatNotificationTapHandler(null);
-  }, []);
 
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
@@ -728,12 +710,6 @@ const ClientDashboard = () => {
       <NotificationModal
         visible={notificationModalVisible}
         onClose={() => setNotificationModalVisible(false)}
-      />
-
-      <ChatModal
-        visible={!!pushChatRecipient}
-        recipient={pushChatRecipient}
-        onClose={() => setPushChatRecipient(null)}
       />
     </SafeAreaView>
   );

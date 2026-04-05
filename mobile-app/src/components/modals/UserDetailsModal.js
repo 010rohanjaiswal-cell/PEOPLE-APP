@@ -21,14 +21,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 import { Button } from '../common';
-import ChatModal from './ChatModal';
 import { calculateAgeFromDob } from '../../utils/dob';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
   const { t } = useLanguage();
-  const [chatModalVisible, setChatModalVisible] = useState(false);
   const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
 
   useEffect(() => {
@@ -39,7 +37,7 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
 
   // Show full details when viewing freelancer (client viewing freelancer)
   const isFreelancerView = roleLabel === 'Freelancer';
-  // Show Call/Chat buttons when viewing freelancer OR when viewing client (freelancer viewing client)
+  // Call only (no in-app chat between client and freelancer)
   const showContactButtons = roleLabel === 'Freelancer' || roleLabel === 'Client';
 
   const name = user.verification?.fullName || user.fullName || 'N/A';
@@ -62,11 +60,6 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
       console.error('Error opening phone dialer:', err);
       Alert.alert(t('common.error'), t('common.unableToOpenDialer'));
     });
-  };
-
-  const handleChat = () => {
-    // Open chat modal instead of external apps
-    setChatModalVisible(true);
   };
 
   return (
@@ -142,22 +135,13 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
             <View style={styles.actionButtons}>
               {/* Show Call/Chat buttons when viewing freelancer OR when viewing client */}
               {showContactButtons && phone && phone !== 'N/A' && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.callButton]}
-                    onPress={handleCall}
-                  >
-                    <MaterialIcons name="phone" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Call</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.chatButton]}
-                    onPress={handleChat}
-                  >
-                    <MaterialIcons name="chat" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Chat</Text>
-                  </TouchableOpacity>
-                </>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.callButton]}
+                  onPress={handleCall}
+                >
+                  <MaterialIcons name="phone" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Call</Text>
+                </TouchableOpacity>
               )}
               <Button variant="outline" onPress={onClose} style={styles.closeButtonFooter}>
                 Close
@@ -167,12 +151,6 @@ const UserDetailsModal = ({ visible, user, roleLabel, title, onClose }) => {
         </View>
       </View>
 
-      {/* Chat Modal */}
-      <ChatModal
-        visible={chatModalVisible}
-        recipient={user}
-        onClose={() => setChatModalVisible(false)}
-      />
     </Modal>
 
     {/* Sibling modal avoids nested-Modal issues on some devices */}
@@ -321,9 +299,6 @@ const styles = StyleSheet.create({
   },
   callButton: {
     backgroundColor: colors.success.main,
-  },
-  chatButton: {
-    backgroundColor: colors.primary.main,
   },
   actionButtonText: {
     ...typography.body,
