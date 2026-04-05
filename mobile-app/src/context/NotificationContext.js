@@ -73,6 +73,9 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [isAuthenticated, userId]);
 
+  const loadNotificationsRef = useRef(loadNotifications);
+  loadNotificationsRef.current = loadNotifications;
+
   // Load unread count only
   const loadUnreadCount = useCallback(async () => {
     if (!isAuthenticated || !userId) return;
@@ -218,6 +221,25 @@ export const NotificationProvider = ({ children }) => {
       }
     };
   }, [socket]);
+
+  // When socket connects, refresh from API (covers missed new_notification during race / reconnect)
+  useEffect(() => {
+    if (!socket || !isAuthenticated || !userId) return;
+
+    const onConnect = () => {
+      lastLoadAtRef.current = 0;
+      loadNotificationsRef.current(false);
+    };
+
+    socket.on('connect', onConnect);
+    if (socket.connected) {
+      queueMicrotask(onConnect);
+    }
+
+    return () => {
+      socket.off('connect', onConnect);
+    };
+  }, [socket, isAuthenticated, userId]);
 
   // Periodically refresh unread count (every 30 seconds)
   useEffect(() => {

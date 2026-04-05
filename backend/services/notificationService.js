@@ -49,9 +49,8 @@ async function sendExpoPush(userId, title, body, data = {}) {
 
     const tokens = await PushToken.find({ user: uid }).select('expoPushToken').lean();
     if (!tokens.length) {
-      if (VERBOSE_NOTIF_LOGS) {
-        console.log(`📲 No push tokens for user ${uid} – skip Expo push`);
-      }
+      // Always log — most common reason pushes “don’t work” in production
+      console.warn(`📲 No Expo push tokens registered for user ${uid} – skipping push (recipient must open app once after login to register)`);
       return;
     }
 
@@ -79,13 +78,20 @@ async function sendExpoPush(userId, title, body, data = {}) {
 
     if (result?.data) {
       result.data.forEach((receipt, i) => {
+        if (receipt?.status === 'ok') {
+          if (VERBOSE_NOTIF_LOGS) {
+            console.log(`📲 Expo push ok for user ${uid} ticket ${receipt.id || i}`);
+          }
+        }
         if (receipt?.status === 'error') {
-          console.warn(`📲 Expo push error for token ${i}:`, receipt?.details?.error || receipt?.message);
+          console.warn(`📲 Expo push error for user ${uid} token ${i}:`, receipt?.details?.error || receipt?.message);
           if (receipt?.details?.error === 'DeviceNotRegistered') {
             PushToken.deleteOne({ expoPushToken: messages[i].to }).catch(() => {});
           }
         }
       });
+    } else {
+      console.warn(`📲 Expo push unexpected response shape for user ${uid}`);
     }
   } catch (err) {
     console.error('Expo push send error:', err.message);
