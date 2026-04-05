@@ -8,7 +8,8 @@
 const axios = require('axios');
 const Notification = require('../models/Notification');
 const PushToken = require('../models/PushToken');
-const { getIO } = require('../config/socketio');
+// Do not require socketio at module load — it would cycle with routes that load this module first.
+// getIO is lazy-required inside createNotification when emitting.
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
@@ -141,6 +142,7 @@ async function createNotification({ userId, type, title, message, data = {} }) {
     });
 
     try {
+      const { getIO } = require('../config/socketio');
       const io = getIO();
       if (VERBOSE_NOTIF_LOGS) {
         console.log(`📤 Emitting notification to user ${userIdStr} via Socket.io`);
@@ -345,28 +347,6 @@ async function notifyApplicationRejected(freelancerId, clientName, jobTitle, rea
 }
 
 /**
- * Create notification for chat message (push data must include senderId for opening ChatModal).
- */
-async function notifyChatMessage(recipientId, senderName, messagePreview, senderId) {
-  const rid = toUserIdString(recipientId);
-  if (!rid) {
-    return null;
-  }
-  const sid = senderId != null ? String(senderId) : null;
-  return createNotification({
-    userId: rid,
-    type: 'chat_message',
-    title: 'New Message',
-    message: `${senderName}: ${messagePreview.length > 50 ? messagePreview.substring(0, 50) + '...' : messagePreview}`,
-    data: {
-      senderName,
-      messagePreview,
-      ...(sid ? { senderId: sid } : {}),
-    },
-  });
-}
-
-/**
  * Client: freelancer was auto-selected (Auto pick)
  */
 async function notifyAutoPickClient(clientId, freelancerName, jobTitle, ratingLabel, jobId) {
@@ -395,7 +375,6 @@ module.exports = {
   notifyPaymentSent,
   notifyWorkDone,
   notifyJobPickedUp,
-  notifyChatMessage,
   notifyApplicationReceived,
   notifyApplicationRejected,
   notifyAutoPickClient,

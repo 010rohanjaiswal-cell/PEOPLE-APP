@@ -8,8 +8,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
-// Do not require notificationService at top level — it requires this module (getIO), which
-// leaves notifyChatMessage undefined under circular load. Lazy-require inside send_message.
+const { notifyChatMessage } = require('../services/chatMessageNotifications');
 const VERBOSE_SOCKET_LOGS = process.env.VERBOSE_SOCKET_LOGS === 'true';
 
 let io = null;
@@ -116,7 +115,6 @@ const setupSocketIO = (server) => {
 
         // Create notification for recipient (includes push + in-app; senderId opens chat on tap)
         try {
-          const { notifyChatMessage } = require('../services/notificationService');
           const senderName = newMessage.sender?.fullName || 'Someone';
           const messageText = newMessage.message || '';
           const senderOid =

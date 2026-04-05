@@ -10,7 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const { getIO } = require('../config/socketio');
-const { notifyChatMessage } = require('../services/notificationService');
+const { notifyChatMessage } = require('../services/chatMessageNotifications');
 
 /**
  * Get messages between current user and recipient
