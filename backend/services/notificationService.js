@@ -16,6 +16,9 @@ const VERBOSE_NOTIF_LOGS = process.env.VERBOSE_NOTIF_LOGS === 'true';
 /** Must match bundled sound basename in mobile app (expo-notifications `sounds` in app.json). */
 const EXPO_PUSH_SOUND = 'notification_sound.wav';
 
+/** Must match `NOTIFICATION_CHANNEL_ID` + app.json `expo-notifications` → `android.defaultChannel`. */
+const EXPO_PUSH_CHANNEL_ID = 'people-alerts';
+
 /**
  * Send push notification via Expo Push API (non-blocking)
  */
@@ -34,8 +37,11 @@ async function sendExpoPush(userId, title, body, data = {}) {
       title,
       body,
       data: { ...data },
+      // iOS: custom sound filename in app bundle (Expo Push API).
       sound: EXPO_PUSH_SOUND,
-      channelId: 'default',
+      // Android: sound + vibration come from the client channel with this id; high priority improves delivery.
+      channelId: EXPO_PUSH_CHANNEL_ID,
+      priority: 'high',
     }));
 
     if (VERBOSE_NOTIF_LOGS) {

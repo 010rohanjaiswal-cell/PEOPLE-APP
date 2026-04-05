@@ -17,7 +17,11 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initializePhonePe } from './src/config/phonepe';
 import { warmupBackend } from './src/api/client';
-import { registerPushTokenAsync, ensureNotificationChannelAsync } from './src/utils/pushNotifications';
+import {
+  registerPushTokenAsync,
+  ensureNotificationChannelAsync,
+  subscribeForegroundNotificationVibration,
+} from './src/utils/pushNotifications';
 
 function ThemedStatusBar() {
   const { isDark } = useTheme();
@@ -32,6 +36,8 @@ const AppContent = () => {
 
   useEffect(() => {
     ensureNotificationChannelAsync();
+    const sub = subscribeForegroundNotificationVibration();
+    return () => sub.remove();
   }, []);
 
   // Wake backend from cold start when user is logged in (Render free tier spins down after ~15 min)

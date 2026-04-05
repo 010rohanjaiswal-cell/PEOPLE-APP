@@ -3,7 +3,7 @@
  * Display open jobs that freelancers can see
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -219,6 +219,11 @@ function createAvailableJobsStyles(colors) {
     borderColor: colors.primary.main,
   },
   makeOfferButton: {
+    backgroundColor: colors.success.main,
+    borderColor: colors.success.main,
+  },
+  /** Keep solid fill while Apply request is in flight (avoid actionButtonDisabled transparent flash). */
+  applyButtonBusy: {
     backgroundColor: colors.primary.main,
     borderColor: colors.primary.main,
   },
@@ -254,27 +259,19 @@ function createAvailableJobsStyles(colors) {
     borderWidth: 1,
     borderColor: colors.border,
   },
-  applySuccessModalContent: {
-    alignItems: 'stretch',
-    paddingVertical: spacing.xl,
-  },
-  applySuccessText: {
-    ...typography.body,
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.text.primary,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  applySuccessOkButton: {
-    alignSelf: 'stretch',
-    width: '100%',
-    minHeight: 52,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
+  applySuccessBanner: {
+    backgroundColor: colors.success.main,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
     borderRadius: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginHorizontal: spacing.md,
+  },
+  applySuccessBannerText: {
+    ...typography.small,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   modalTitle: {
     ...typography.h2,
@@ -544,7 +541,8 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
   const [pickingUp, setPickingUp] = useState(false);
   const [pickupSuccessModalVisible, setPickupSuccessModalVisible] = useState(false);
   const [applyingJobId, setApplyingJobId] = useState(null);
-  const [applySuccessModalVisible, setApplySuccessModalVisible] = useState(false);
+  const [applySuccessBannerVisible, setApplySuccessBannerVisible] = useState(false);
+  const applySuccessBannerTimerRef = useRef(null);
   const [offerSuccessModalVisible, setOfferSuccessModalVisible] = useState(false);
   const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
   const [offerErrorMessage, setOfferErrorMessage] = useState('');
@@ -694,6 +692,27 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     if (gpsDenied) setJobs([]);
   }, [gpsDenied]);
 
+  useEffect(
+    () => () => {
+      if (applySuccessBannerTimerRef.current) {
+        clearTimeout(applySuccessBannerTimerRef.current);
+        applySuccessBannerTimerRef.current = null;
+      }
+    },
+    []
+  );
+
+  const showApplySuccessBanner = useCallback(() => {
+    if (applySuccessBannerTimerRef.current) {
+      clearTimeout(applySuccessBannerTimerRef.current);
+    }
+    setApplySuccessBannerVisible(true);
+    applySuccessBannerTimerRef.current = setTimeout(() => {
+      setApplySuccessBannerVisible(false);
+      applySuccessBannerTimerRef.current = null;
+    }, 3000);
+  }, []);
+
   // When locale is Hindi, translate job title/description/address/pincode for display
   useEffect(() => {
     if (locale !== 'hi' || !jobs.length) {
@@ -757,7 +776,7 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
       const response = await freelancerJobsAPI.applyJob(jid);
       if (response.success) {
         loadJobs();
-        setApplySuccessModalVisible(true);
+        showApplySuccessBanner();
       } else {
         Alert.alert(
           t('common.error'),
@@ -1148,7 +1167,8 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
           style={[
             styles.actionButton,
             styles.applyButton,
-            (!canApply || isPickedUp || applyingThis) && styles.actionButtonDisabled,
+            applyingThis && styles.applyButtonBusy,
+            (!canApply || isPickedUp) && !applyingThis && styles.actionButtonDisabled,
           ]}
           onPress={() => handleApplyJob(item)}
           disabled={!canApply || isPickedUp || applyingThis}
@@ -1156,33 +1176,35 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
           {applyingThis ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <MaterialIcons
-              name="assignment"
-              size={18}
-              color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
-            />
+            <>
+              <MaterialIcons
+                name="assignment"
+                size={18}
+                color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
+              />
+              <Text
+                style={[
+                  styles.actionButtonText,
+                  styles.applyButtonText,
+                  { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
+                ]}
+              >
+                {!canWork
+                  ? t('jobs.payDues')
+                  : workCooldownActive
+                  ? t('jobs.workCooldownShort')
+                  : isPickedUp
+                  ? t('jobs.alreadyTaken')
+                  : hasActiveJob
+                  ? t('jobs.alreadyTaken')
+                  : isWaitingApp
+                  ? t('jobs.waitingForClient')
+                  : appStatus === 'accepted'
+                  ? t('jobs.applicationAcceptedShort')
+                  : t('jobs.apply')}
+              </Text>
+            </>
           )}
-          <Text
-            style={[
-              styles.actionButtonText,
-              styles.applyButtonText,
-              { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
-            ]}
-          >
-            {!canWork
-              ? t('jobs.payDues')
-              : workCooldownActive
-              ? t('jobs.workCooldownShort')
-              : isPickedUp
-              ? t('jobs.alreadyTaken')
-              : hasActiveJob
-              ? t('jobs.alreadyTaken')
-              : isWaitingApp
-              ? t('jobs.waitingForClient')
-              : appStatus === 'accepted'
-              ? t('jobs.applicationAcceptedShort')
-              : t('jobs.apply')}
-          </Text>
         </TouchableOpacity>
         )}
 
@@ -1266,7 +1288,13 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      
+
+      {applySuccessBannerVisible ? (
+        <View style={styles.applySuccessBanner} accessibilityLiveRegion="polite">
+          <Text style={styles.applySuccessBannerText}>{t('jobs.appliedSuccessfully')}</Text>
+        </View>
+      ) : null}
+
       {/* Filter Bar */}
       <View style={styles.filterBar}>
         <View style={styles.filterOptions}>
@@ -1596,27 +1624,6 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
                 <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Apply success (non-delivery) */}
-      <Modal
-        visible={applySuccessModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setApplySuccessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.applySuccessModalContent]}>
-            <Text style={styles.applySuccessText}>{t('jobs.appliedSuccessfully')}</Text>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSubmitButton, styles.applySuccessOkButton]}
-              onPress={() => setApplySuccessModalVisible(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>

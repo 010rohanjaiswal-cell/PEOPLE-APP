@@ -4,7 +4,7 @@
  */
 
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 import Constants from 'expo-constants';
 import { userAPI } from '../api/user';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,7 +12,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /** Basename only — must match a file listed under `expo-notifications` → `sounds` in app.json */
 export const NOTIFICATION_SOUND = 'notification_sound.wav';
 
-// Show notification when app is in foreground (optional: banner + sound)
+/**
+ * Must match `expo-notifications` plugin `android.defaultChannel` in app.json and `channelId` in Expo push payloads.
+ * Using a stable id avoids stale channels from older builds that pointed at the wrong sound.
+ */
+export const NOTIFICATION_CHANNEL_ID = 'people-alerts';
+
+/** Pattern: wait, vibrate, pause, vibrate (ms) — used for Android channel + foreground feedback */
+export const NOTIFICATION_VIBRATION_PATTERN = [0, 380, 160, 380];
+
+// Show notification when app is in foreground (banner + sound + system can vibrate via channel when background)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -22,17 +31,41 @@ Notifications.setNotificationHandler({
 });
 
 /**
- * Android 8+: custom sound plays only if the channel is configured with the same filename.
- * Call once at app startup (before pushes are received).
+ * Android 8+: custom sound is controlled by the channel; remote pushes must use the same `channelId`.
+ * Audio attributes help route the sound through the notification stream (not silent / wrong volume).
  */
 export async function ensureNotificationChannelAsync() {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync('default', {
-    name: 'Default',
+  await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {
+    name: 'People alerts',
     importance: Notifications.AndroidImportance.MAX,
     sound: NOTIFICATION_SOUND,
-    vibrationPattern: [0, 250, 250, 250],
+    vibrationPattern: NOTIFICATION_VIBRATION_PATTERN,
     enableVibrate: true,
+    enableLights: true,
+    showBadge: true,
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.NOTIFICATION,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+      flags: {
+        enforceAudibility: true,
+        requestHardwareAudioVideoSynchronization: false,
+      },
+    },
+  });
+}
+
+/**
+ * Vibrate when any notification is delivered while the app is in the foreground (OS may not vibrate otherwise).
+ * Background/killed delivery still uses the channel vibration on Android.
+ */
+export function subscribeForegroundNotificationVibration() {
+  return Notifications.addNotificationReceivedListener(() => {
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(NOTIFICATION_VIBRATION_PATTERN);
+    } else {
+      Vibration.vibrate(400);
+    }
   });
 }
 
