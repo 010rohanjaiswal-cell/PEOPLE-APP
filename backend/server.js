@@ -108,12 +108,11 @@ async function startServer() {
     // Connect to database
     await connectDB();
 
-    // Fail fast if chat notification export is broken (avoids TypeError on every send_message)
-    const cm = require('./services/chatMessageNotifications');
-    if (typeof cm.notifyChatMessage !== 'function') {
-      throw new Error('BOOT: chatMessageNotifications.notifyChatMessage is not a function — check deploy / circular requires');
+    const ns = require('./services/notificationService');
+    if (typeof ns.createChatMessageNotification !== 'function') {
+      throw new Error('BOOT: notificationService.createChatMessageNotification missing');
     }
-    console.log('✅ chatMessageNotifications export OK');
+    console.log('✅ notificationService.createChatMessageNotification OK');
 
     // Start HTTP server
     const server = app.listen(PORT, () => {

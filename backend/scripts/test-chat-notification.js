@@ -17,11 +17,11 @@
 require('dotenv').config();
 
 async function testModuleExport() {
-  const cm = require('../services/chatMessageNotifications');
-  const t = typeof cm.notifyChatMessage;
-  console.log('[module] notifyChatMessage typeof:', t);
+  const ns = require('../services/notificationService');
+  const t = typeof ns.createChatMessageNotification;
+  console.log('[module] createChatMessageNotification typeof:', t);
   if (t !== 'function') {
-    throw new Error('notifyChatMessage is not a function — check circular requires / deploy');
+    throw new Error('createChatMessageNotification is not a function');
   }
 }
 
@@ -36,8 +36,8 @@ async function testDbCreate() {
   await connectDB();
   // Notification.populate('user') needs User model registered (normally loaded via server routes)
   require('../models/User');
-  const { notifyChatMessage } = require('../services/chatMessageNotifications');
-  const doc = await notifyChatMessage(recipient, 'CLI test', 'Hello from notification script', sender);
+  const { createChatMessageNotification } = require('../services/notificationService');
+  const doc = await createChatMessageNotification(recipient, 'CLI test', 'Hello from notification script', sender);
   console.log('[db] notification created:', doc?._id ? String(doc._id) : doc);
 }
 

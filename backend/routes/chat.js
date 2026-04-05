@@ -10,7 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const { getIO } = require('../config/socketio');
-const { notifyChatMessage } = require('../services/chatMessageNotifications');
+const { createChatMessageNotification } = require('../services/notificationService');
 
 /**
  * Get messages between current user and recipient
@@ -126,7 +126,7 @@ router.post('/send', authenticate, async (req, res) => {
       const messageText = newMessage.message || '';
       const senderOid =
         newMessage.sender?._id || newMessage.sender?.id || userId;
-      await notifyChatMessage(recipientId, senderName, messageText, senderOid);
+      await createChatMessageNotification(recipientId, senderName, messageText, senderOid);
     } catch (notifError) {
       console.error('Error creating chat message notification:', notifError);
     }

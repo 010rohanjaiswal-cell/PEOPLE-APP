@@ -370,8 +370,29 @@ async function notifyAutoPickClient(clientId, freelancerName, jobTitle, ratingLa
   });
 }
 
+/** Chat between users (REST + socket) — single export for message notifications */
+async function createChatMessageNotification(recipientId, senderName, messagePreview, senderId) {
+  const rid = toUserIdString(recipientId);
+  if (!rid) return null;
+  const sid = senderId != null ? String(senderId) : null;
+  const text = messagePreview || '';
+  const preview = text.length > 50 ? `${text.substring(0, 50)}...` : text;
+  return createNotification({
+    userId: rid,
+    type: 'chat_message',
+    title: 'New Message',
+    message: `${senderName}: ${preview}`,
+    data: {
+      senderName,
+      messagePreview: text,
+      ...(sid ? { senderId: sid } : {}),
+    },
+  });
+}
+
 module.exports = {
   createNotification,
+  createChatMessageNotification,
   notifyOfferReceived,
   notifyOfferAccepted,
   notifyOfferRejected,

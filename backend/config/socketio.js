@@ -8,9 +8,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
-// Call createNotification directly — avoids chatMessageNotifications / partial exports on some hosts.
-// notificationService does not require socketio at load time (getIO is lazy inside createNotification).
-const { createNotification } = require('../services/notificationService');
+// Runtime require in send_message only — see createChatMessageNotification in notificationService
 const VERBOSE_SOCKET_LOGS = process.env.VERBOSE_SOCKET_LOGS === 'true';
 
 let io = null;
@@ -115,26 +113,19 @@ const setupSocketIO = (server) => {
         // Emit to recipient (new message)
         io.to(`user_${recipientRoomId}`).emit('new_message', messageData);
 
-        // Create notification for recipient (includes push + in-app; senderId opens chat on tap)
+        // Create notification for recipient (push + in-app list)
         try {
           const senderName = newMessage.sender?.fullName || 'Someone';
           const messageText = newMessage.message || '';
           const senderOid =
             newMessage.sender?._id || newMessage.sender?.id || socket.userId;
-          const sid = senderOid != null ? String(senderOid) : null;
-          const preview =
-            messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText;
-          await createNotification({
-            userId: recipientRoomId,
-            type: 'chat_message',
-            title: 'New Message',
-            message: `${senderName}: ${preview}`,
-            data: {
-              senderName,
-              messagePreview: messageText,
-              ...(sid ? { senderId: sid } : {}),
-            },
-          });
+          const { createChatMessageNotification } = require('../services/notificationService');
+          await createChatMessageNotification(
+            recipientRoomId,
+            senderName,
+            messageText,
+            senderOid
+          );
         } catch (notifError) {
           console.error('Error creating chat message notification:', notifError);
           // Don't fail message sending if notification fails
