@@ -34,6 +34,8 @@ async function testDbCreate() {
     return;
   }
   await connectDB();
+  // Notification.populate('user') needs User model registered (normally loaded via server routes)
+  require('../models/User');
   const { notifyChatMessage } = require('../services/chatMessageNotifications');
   const doc = await notifyChatMessage(recipient, 'CLI test', 'Hello from notification script', sender);
   console.log('[db] notification created:', doc?._id ? String(doc._id) : doc);
