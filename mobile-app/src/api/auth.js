@@ -43,6 +43,22 @@ export const authAPI = {
     return response.data;
   },
 
+  /**
+   * Verify MSG91 OTP widget access-token and exchange for app JWT.
+   */
+  verifyMsg91AccessToken: async (accessToken, role, deviceId = null, forceLogin = false) => {
+    const body = {
+      accessToken,
+      role,
+      forceLogin: forceLogin || undefined,
+    };
+    if (deviceId != null && String(deviceId).trim() !== '') {
+      body.deviceId = String(deviceId).trim();
+    }
+    const response = await apiClient.post('/api/auth/verify-msg91-access-token', body);
+    return response.data;
+  },
+
   verifyOTP: async (phoneNumber, otp, deviceId = null, forceLogin = false) => {
     const body = {
       phoneNumber,

@@ -47,11 +47,11 @@ export const formatPhone = (phone) => {
 
 /**
  * Validate OTP
- * @param {string} otp - 6-digit OTP
+ * @param {string} otp - 4-digit OTP
  * @returns {boolean}
  */
 export const validateOTP = (otp) => {
-  return /^\d{6}$/.test(otp);
+  return /^\d{4}$/.test(otp);
 };
 
 /**

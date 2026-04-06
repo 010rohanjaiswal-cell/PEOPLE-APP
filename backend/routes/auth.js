@@ -587,5 +587,103 @@ router.post('/admin-login', async (req, res) => {
   }
 });
 
+/**
+ * Exchange MSG91 OTP Widget access-token for app JWT.
+ * Client verifies OTP with MSG91 SDK, then sends access-token here.
+ * POST /api/auth/verify-msg91-access-token
+ */
+router.post('/verify-msg91-access-token', async (req, res) => {
+  try {
+    const { accessToken, role, deviceId, forceLogin } = req.body;
+
+    if (!accessToken || typeof accessToken !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'MSG91 access token is required',
+      });
+    }
+
+    if (!role || !['client', 'freelancer'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid role is required (client or freelancer)',
+      });
+    }
+
+    const authkey =
+      process.env.MSG91_AUTHKEY ||
+      process.env.MSG91_AUTH_KEY ||
+      process.env.MSG91_AUTH_KEY_OTP ||
+      '';
+
+    if (!authkey) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server is not configured for MSG91',
+      });
+    }
+
+    const verifyResp = await axios.post(
+      'https://control.msg91.com/api/v5/widget/verifyAccessToken',
+      {
+        authkey,
+        'access-token': accessToken,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+
+    const identifier =
+      verifyResp.data?.identifier ||
+      verifyResp.data?.data?.identifier ||
+      verifyResp.data?.mobile ||
+      verifyResp.data?.data?.mobile ||
+      verifyResp.data?.phone ||
+      verifyResp.data?.data?.phone ||
+      null;
+
+    if (!identifier) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired OTP session. Please try again.',
+      });
+    }
+
+    // MSG91 identifier is countrycode+number without "+". Normalize to E.164.
+    const formattedPhone = String(identifier).startsWith('+')
+      ? String(identifier)
+      : `+${String(identifier)}`;
+
+    const loginResult = await performPhoneLogin(formattedPhone, role, deviceId, forceLogin);
+    if (!loginResult.success) {
+      if (loginResult.code === 'ALREADY_LOGGED_IN_ELSEWHERE') {
+        return res.json({
+          success: false,
+          code: loginResult.code,
+          error: loginResult.error,
+          message: loginResult.message,
+        });
+      }
+      return res.status(500).json({ success: false, error: loginResult.error || 'Login failed' });
+    }
+
+    res.json({
+      success: true,
+      token: loginResult.token,
+      user: {
+        ...loginResult.user,
+        isNewUser: loginResult.isNewUser,
+      },
+    });
+  } catch (error) {
+    console.error('verify-msg91-access-token error:', error.response?.data || error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify MSG91 access token',
+    });
+  }
+});
+
 module.exports = router;
 

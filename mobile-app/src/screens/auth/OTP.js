@@ -20,17 +20,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { validateOTP } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PhoneAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
-import FirebaseRecaptchaVerifierModal from '../../components/phoneAuth/FirebasePhoneRecaptchaModal';
+import { OTPWidget } from '@msg91comm/sendotp-react-native';
 import { authAPI } from '../../api';
-import { auth, firebaseConfig } from '../../config/firebase';
-import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getDeviceId } from '../../utils/deviceId';
+import { msg91AuthToken, msg91WidgetId } from '../../config/msg91';
 
 const OTP = ({ navigation, route }) => {
-  const { phoneNumber, selectedRole, verificationId: routeVerificationId } = route?.params || {};
+  const { phoneNumber, selectedRole, reqId: routeReqId } = route?.params || {};
   const { loginWithToken } = useAuth();
   const { t } = useLanguage();
 
@@ -38,11 +36,10 @@ const OTP = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [forceLoginModalVisible, setForceLoginModalVisible] = useState(false);
-  const [verificationId, setVerificationId] = useState(routeVerificationId);
+  const [reqId, setReqId] = useState(routeReqId);
   // Start at 60s: OTP was just sent from Login; resend only after cooldown.
   const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
-  const recaptchaVerifier = useRef(null);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -54,10 +51,10 @@ const OTP = ({ navigation, route }) => {
   }, [resendCooldown]);
 
   useEffect(() => {
-    if (!routeVerificationId) {
+    if (!routeReqId) {
       setError('Missing verification session. Go back and request a new code.');
     }
-  }, [routeVerificationId]);
+  }, [routeReqId]);
 
   // Warm device id + role so verify isn’t blocked on AsyncStorage on submit.
   useEffect(() => {
@@ -68,14 +65,14 @@ const OTP = ({ navigation, route }) => {
   }, [selectedRole]);
 
   const handleOTPChange = (text) => {
-    const digits = text.replace(/\D/g, '').slice(0, 6);
+    const digits = text.replace(/\D/g, '').slice(0, 4);
     setOtp(digits);
     setError('');
   };
 
   const handleVerifyOTP = async (forceLogin = false) => {
     if (!validateOTP(otp)) {
-      setError('Please enter a valid 6-digit OTP');
+      setError('Please enter a valid 4-digit OTP');
       return;
     }
 
@@ -86,11 +83,10 @@ const OTP = ({ navigation, route }) => {
       if (!phoneNumber) {
         throw new Error('Phone number not found. Please go back and try again.');
       }
-      if (!verificationId) {
+      if (!reqId) {
         throw new Error('Missing verification session. Go back and request a new code.');
       }
 
-      const formattedPhone = phoneNumber.replace(/\s/g, '');
       const shouldForceLogin = forceLogin === true;
 
       const fallbackDevice = () =>
@@ -111,14 +107,29 @@ const OTP = ({ navigation, route }) => {
         throw new Error('Account type missing. Go back and select Client or Freelancer.');
       }
 
-      const cred = PhoneAuthProvider.credential(verificationId, otp);
-      const userCred = await signInWithCredential(auth, cred);
-      const idToken = await userCred.user.getIdToken();
-      // Don’t block the server round-trip on Firebase sign-out (token is already issued).
-      const result = await Promise.all([
-        signOut(auth).catch(() => {}),
-        authAPI.verifyFirebaseIdToken(idToken, role, deviceId, shouldForceLogin),
-      ]).then(([, r]) => r);
+      if (!msg91WidgetId || !msg91AuthToken) {
+        throw new Error('MSG91 is not configured in this build. Check EXPO_PUBLIC_MSG91_* env.');
+      }
+
+      // Ensure widget initialized (safe to call multiple times).
+      try {
+        OTPWidget.initializeWidget(String(msg91WidgetId), String(msg91AuthToken));
+      } catch {}
+
+      const verifyResp = await OTPWidget.verifyOTP({ reqId, otp });
+      const accessToken =
+        verifyResp?.accessToken ||
+        verifyResp?.access_token ||
+        verifyResp?.message || // docs: success => message contains access-token
+        verifyResp?.data?.accessToken ||
+        verifyResp?.data?.access_token ||
+        verifyResp?.data?.message;
+
+      if (!accessToken) {
+        throw new Error('OTP verification failed. Please try again.');
+      }
+
+      const result = await authAPI.verifyMsg91AccessToken(accessToken, role, deviceId, shouldForceLogin);
 
       if (result.success) {
         await loginWithToken(result.token, result.user);
@@ -166,21 +177,20 @@ const OTP = ({ navigation, route }) => {
         return;
       }
 
-      const formattedPhone = phoneNumber.replace(/\s/g, '');
-      const storedRole = selectedRole || (await AsyncStorage.getItem('selectedRole'));
-
-      if (!storedRole) {
-        setError('Role not found. Please go back and try again.');
+      if (!msg91WidgetId || !msg91AuthToken) {
+        setError('MSG91 is not configured in this build.');
         return;
       }
 
-      if (!firebaseConfig?.apiKey) {
-        setError('Firebase is not configured in this build.');
-        return;
-      }
+      try {
+        OTPWidget.initializeWidget(String(msg91WidgetId), String(msg91AuthToken));
+      } catch {}
 
-      const newVid = await sendPhoneVerificationCode(formattedPhone, recaptchaVerifier);
-      setVerificationId(newVid);
+      // Retry on SMS (11) by default.
+      const retryResp = await OTPWidget.retryOTP({ reqId, retryChannel: 11 });
+      const newReqId =
+        retryResp?.reqId || retryResp?.requestId || retryResp?.data?.reqId || retryResp?.data?.requestId;
+      if (newReqId) setReqId(newReqId);
       setResendCooldown(60);
       setError('');
     } catch (err) {
@@ -230,16 +240,16 @@ const OTP = ({ navigation, route }) => {
                 <View style={styles.cardStripeBlue} />
                 <View style={styles.cardStripeGreen} />
               </View>
-              <Text style={styles.fieldLabel}>6-digit code</Text>
+              <Text style={styles.fieldLabel}>4-digit code</Text>
               <TextInput
                 ref={otpInputRef}
                 style={styles.otpInput}
                 value={otp}
                 onChangeText={handleOTPChange}
-                placeholder="• • • • • •"
+                placeholder="• • • •"
                 placeholderTextColor={colors.text.muted}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={4}
                 autoFocus
                 selectTextOnFocus
               />
@@ -322,11 +332,6 @@ const OTP = ({ navigation, route }) => {
         </View>
       </Modal>
 
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification
-      />
     </SafeAreaView>
   );
 };

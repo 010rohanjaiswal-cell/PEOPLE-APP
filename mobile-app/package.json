@@ -12,6 +12,7 @@
   "dependencies": {
     "@cashfreepayments/react-native-digilocker": "^0.1.4",
     "@expo/vector-icons": "^15.0.3",
+    "@msg91comm/sendotp-react-native": "^2.1.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "^7.8.12",

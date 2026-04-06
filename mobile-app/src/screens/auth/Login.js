@@ -2,7 +2,7 @@
  * Login Screen - People App
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,16 +19,23 @@ import { colors, spacing, typography } from '../../theme';
 import { Input } from '../../components/common';
 import { validatePhone, formatPhone } from '../../utils/validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import FirebaseRecaptchaVerifierModal from '../../components/phoneAuth/FirebasePhoneRecaptchaModal';
-import { firebaseConfig } from '../../config/firebase';
-import { sendPhoneVerificationCode } from '../../auth/phoneVerification';
+import { OTPWidget } from '@msg91comm/sendotp-react-native';
+import { msg91AuthToken, msg91WidgetId } from '../../config/msg91';
 
 const Login = ({ navigation }) => {
   const [phone, setPhone] = useState('+91 ');
   const [selectedRole, setSelectedRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const recaptchaVerifier = useRef(null);
+
+  useEffect(() => {
+    try {
+      if (!msg91WidgetId || !msg91AuthToken) return;
+      OTPWidget.initializeWidget(String(msg91WidgetId), String(msg91AuthToken));
+    } catch (e) {
+      // handled on send
+    }
+  }, []);
 
   const handlePhoneChange = (text) => {
     const formatted = formatPhone(text);
@@ -56,12 +63,39 @@ const Login = ({ navigation }) => {
     setError('');
 
     try {
-      const formattedPhone = phone.replace(/\s/g, '');
-      if (!firebaseConfig?.apiKey) {
-        throw new Error('Firebase is not configured in this build. Check EXPO_PUBLIC_FIREBASE_* env.');
+      if (!msg91WidgetId || !msg91AuthToken) {
+        throw new Error('MSG91 is not configured in this build. Check EXPO_PUBLIC_MSG91_* env.');
       }
 
-      const verificationId = await sendPhoneVerificationCode(formattedPhone, recaptchaVerifier);
+      // MSG91 expects country code without "+".
+      const identifier = phone.replace(/\s/g, '').replace(/^\+/, '');
+      const response = await OTPWidget.sendOTP({ identifier });
+      console.log('MSG91 sendOTP response:', response);
+
+      const reqId =
+        response?.reqId ||
+        response?.req_id ||
+        response?.requestId ||
+        response?.request_id ||
+        // MSG91 commonly returns reqId in `message` on success for sendOTP.
+        (response?.type === 'success' ? response?.message : null) ||
+        response?.data?.reqId ||
+        response?.data?.req_id ||
+        response?.data?.requestId ||
+        response?.data?.request_id;
+      if (!reqId) {
+        const msg =
+          response?.message ||
+          response?.error ||
+          response?.data?.message ||
+          response?.data?.error ||
+          null;
+        throw new Error(
+          msg
+            ? `Could not start OTP session: ${String(msg)}`
+            : 'Could not start OTP session. Please try again.'
+        );
+      }
 
       await AsyncStorage.setItem('selectedRole', selectedRole);
       await AsyncStorage.setItem('phoneNumber', phone);
@@ -69,7 +103,7 @@ const Login = ({ navigation }) => {
       navigation.navigate('OTP', {
         phoneNumber: phone,
         selectedRole,
-        verificationId,
+        reqId,
       });
 
       setLoading(false);
@@ -83,12 +117,11 @@ const Login = ({ navigation }) => {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      if (err.code === 'auth/invalid-phone-number') {
-        errorMessage = 'Invalid phone number. Please check and try again.';
-      } else if (err.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many attempts. Please try again later.';
-      } else if (err.code === 'auth/quota-exceeded') {
-        errorMessage = 'SMS quota exceeded. Please try again later.';
+      if (String(err?.message || '').toLowerCase().includes('initialize')) {
+        errorMessage = 'MSG91 OTP is not initialized. Check widgetId/authToken and Mobile Integration.';
+      }
+      if (String(err?.message || '').toLowerCase().includes('auth') || String(err?.message || '').toLowerCase().includes('token')) {
+        errorMessage = err.message;
       }
 
       setError(errorMessage);
@@ -206,11 +239,6 @@ const Login = ({ navigation }) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={firebaseConfig}
-        attemptInvisibleVerification
-      />
     </SafeAreaView>
   );
 };
