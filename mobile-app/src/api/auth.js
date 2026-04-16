@@ -46,10 +46,17 @@ export const authAPI = {
   /**
    * Verify MSG91 OTP widget access-token and exchange for app JWT.
    */
-  verifyMsg91AccessToken: async (accessToken, role, deviceId = null, forceLogin = false) => {
+  verifyMsg91AccessToken: async (
+    accessToken,
+    role,
+    phoneNumber,
+    deviceId = null,
+    forceLogin = false
+  ) => {
     const body = {
       accessToken,
       role,
+      phoneNumber,
       forceLogin: forceLogin || undefined,
     };
     if (deviceId != null && String(deviceId).trim() !== '') {

@@ -2,8 +2,9 @@
  * OTP Verification Screen - People App
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   StyleSheet,
@@ -40,6 +41,33 @@ const OTP = ({ navigation, route }) => {
   // Start at 60s: OTP was just sent from Login; resend only after cooldown.
   const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  const showToast = (msg) => {
+    if (!msg) return;
+    setToastMsg(String(msg));
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    Animated.timing(toastAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => setToastMsg(''));
+    }, 5000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -65,14 +93,15 @@ const OTP = ({ navigation, route }) => {
   }, [selectedRole]);
 
   const handleOTPChange = (text) => {
-    const digits = text.replace(/\D/g, '').slice(0, 4);
+    const digits = text.replace(/\D/g, '').slice(0, 6);
     setOtp(digits);
     setError('');
   };
 
   const handleVerifyOTP = async (forceLogin = false) => {
     if (!validateOTP(otp)) {
-      setError('Please enter a valid 4-digit OTP');
+      setError('Please enter a valid 6-digit OTP');
+      showToast('Please enter a valid 6-digit OTP');
       return;
     }
 
@@ -117,19 +146,30 @@ const OTP = ({ navigation, route }) => {
       } catch {}
 
       const verifyResp = await OTPWidget.verifyOTP({ reqId, otp });
+      console.log('MSG91 verifyOTP response:', verifyResp);
       const accessToken =
         verifyResp?.accessToken ||
         verifyResp?.access_token ||
-        verifyResp?.message || // docs: success => message contains access-token
+        verifyResp?.message || // docs: success => message contains access-token (widget)
         verifyResp?.data?.accessToken ||
         verifyResp?.data?.access_token ||
-        verifyResp?.data?.message;
+        verifyResp?.data?.message ||
+        verifyResp?.result?.message ||
+        verifyResp?.result?.accessToken ||
+        verifyResp?.result?.access_token;
 
       if (!accessToken) {
         throw new Error('OTP verification failed. Please try again.');
       }
 
-      const result = await authAPI.verifyMsg91AccessToken(accessToken, role, deviceId, shouldForceLogin);
+      const phoneE164 = String(phoneNumber).replace(/\s/g, '');
+      const result = await authAPI.verifyMsg91AccessToken(
+        accessToken,
+        role,
+        phoneE164,
+        deviceId,
+        shouldForceLogin
+      );
 
       if (result.success) {
         await loginWithToken(result.token, result.user);
@@ -164,6 +204,7 @@ const OTP = ({ navigation, route }) => {
       }
 
       setError(errorMessage);
+      showToast(errorMessage);
       setLoading(false);
     }
   };
@@ -209,6 +250,27 @@ const OTP = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.screenRoot} edges={['top', 'left', 'right']}>
+      {toastMsg ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.toast,
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.toastText}>{toastMsg}</Text>
+        </Animated.View>
+      ) : null}
       <View style={styles.colorWash} pointerEvents="none">
         <View style={styles.blobBlue} />
         <View style={styles.blobGreen} />
@@ -240,16 +302,16 @@ const OTP = ({ navigation, route }) => {
                 <View style={styles.cardStripeBlue} />
                 <View style={styles.cardStripeGreen} />
               </View>
-              <Text style={styles.fieldLabel}>4-digit code</Text>
+              <Text style={styles.fieldLabel}>6-digit code</Text>
               <TextInput
                 ref={otpInputRef}
                 style={styles.otpInput}
                 value={otp}
                 onChangeText={handleOTPChange}
-                placeholder="• • • •"
+                placeholder="• • • • • •"
                 placeholderTextColor={colors.text.muted}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={6}
                 autoFocus
                 selectTextOnFocus
               />
@@ -341,6 +403,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#EEF3FA',
     overflow: 'hidden',
+  },
+  toast: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 20,
+    backgroundColor: 'rgba(17, 24, 39, 0.92)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   colorWash: {
     ...StyleSheet.absoluteFillObject,

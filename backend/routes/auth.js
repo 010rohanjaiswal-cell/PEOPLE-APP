@@ -594,7 +594,7 @@ router.post('/admin-login', async (req, res) => {
  */
 router.post('/verify-msg91-access-token', async (req, res) => {
   try {
-    const { accessToken, role, deviceId, forceLogin } = req.body;
+    const { accessToken, role, phoneNumber, deviceId, forceLogin } = req.body;
 
     if (!accessToken || typeof accessToken !== 'string') {
       return res.status(400).json({
@@ -634,16 +634,35 @@ router.post('/verify-msg91-access-token', async (req, res) => {
       }
     );
 
-    const identifier =
+    const identifierRaw =
       verifyResp.data?.identifier ||
       verifyResp.data?.data?.identifier ||
+      verifyResp.data?.result?.identifier ||
+      verifyResp.data?.data?.result?.identifier ||
       verifyResp.data?.mobile ||
       verifyResp.data?.data?.mobile ||
+      verifyResp.data?.result?.mobile ||
+      verifyResp.data?.data?.result?.mobile ||
       verifyResp.data?.phone ||
       verifyResp.data?.data?.phone ||
+      verifyResp.data?.result?.phone ||
+      verifyResp.data?.data?.result?.phone ||
+      // Some responses put identifier in `message`
+      (typeof verifyResp.data?.message === 'string' ? verifyResp.data.message : null) ||
+      verifyResp.data?.message?.identifier ||
+      verifyResp.data?.message?.mobile ||
+      verifyResp.data?.message?.phone ||
       null;
 
-    if (!identifier) {
+    let identifier = identifierRaw;
+    // If identifier is a message string like "access-token already verified", fall back to phoneNumber.
+    const looksLikePhone = (v) => typeof v === 'string' && /(\+?\d{10,15})/.test(v);
+    if (!looksLikePhone(identifier) && phoneNumber && looksLikePhone(String(phoneNumber))) {
+      identifier = String(phoneNumber);
+    }
+
+    if (!looksLikePhone(identifier)) {
+      console.error('MSG91 verifyAccessToken response missing identifier:', verifyResp.data);
       return res.status(401).json({
         success: false,
         error: 'Invalid or expired OTP session. Please try again.',
@@ -651,9 +670,8 @@ router.post('/verify-msg91-access-token', async (req, res) => {
     }
 
     // MSG91 identifier is countrycode+number without "+". Normalize to E.164.
-    const formattedPhone = String(identifier).startsWith('+')
-      ? String(identifier)
-      : `+${String(identifier)}`;
+    const digits = String(identifier).replace(/[^\d+]/g, '');
+    const formattedPhone = digits.startsWith('+') ? digits : `+${digits.replace(/^\+/, '')}`;
 
     const loginResult = await performPhoneLogin(formattedPhone, role, deviceId, forceLogin);
     if (!loginResult.success) {
