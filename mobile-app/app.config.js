@@ -12,17 +12,19 @@
  */
 module.exports = ({ config }) => {
   const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-  const openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
-  const msg91WidgetId = process.env.EXPO_PUBLIC_MSG91_WIDGET_ID || '';
-  const msg91AuthToken = process.env.EXPO_PUBLIC_MSG91_AUTH_TOKEN || '';
+  const openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || config.extra?.openaiApiKey || '';
+  const msg91WidgetId =
+    process.env.EXPO_PUBLIC_MSG91_WIDGET_ID || config.extra?.msg91WidgetId || '';
+  const msg91AuthToken =
+    process.env.EXPO_PUBLIC_MSG91_AUTH_TOKEN || config.extra?.msg91AuthToken || '';
 
   return {
     ...config,
     extra: {
       ...(config.extra || {}),
       openaiApiKey,
-      msg91WidgetId,
-      msg91AuthToken,
+      ...(msg91WidgetId ? { msg91WidgetId } : {}),
+      ...(msg91AuthToken ? { msg91AuthToken } : {}),
     },
     android: {
       ...config.android,

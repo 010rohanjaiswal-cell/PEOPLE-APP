@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { validateOTP } from '../../utils/validation';
@@ -29,6 +29,7 @@ import { getDeviceId } from '../../utils/deviceId';
 import { msg91AuthToken, msg91WidgetId } from '../../config/msg91';
 
 const OTP = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const { phoneNumber, selectedRole, reqId: routeReqId } = route?.params || {};
   const { loginWithToken } = useAuth();
   const { t } = useLanguage();
@@ -147,10 +148,16 @@ const OTP = ({ navigation, route }) => {
 
       const verifyResp = await OTPWidget.verifyOTP({ reqId, otp });
       console.log('MSG91 verifyOTP response:', verifyResp);
+      if (verifyResp?.type && String(verifyResp.type).toLowerCase() !== 'success') {
+        const msg = verifyResp?.message || 'Invalid OTP. Please try again.';
+        throw new Error(String(msg));
+      }
+
       const accessToken =
         verifyResp?.accessToken ||
         verifyResp?.access_token ||
-        verifyResp?.message || // docs: success => message contains access-token (widget)
+        // MSG91 widget returns access-token in `message` on success.
+        verifyResp?.message ||
         verifyResp?.data?.accessToken ||
         verifyResp?.data?.access_token ||
         verifyResp?.data?.message ||
@@ -158,7 +165,11 @@ const OTP = ({ navigation, route }) => {
         verifyResp?.result?.accessToken ||
         verifyResp?.result?.access_token;
 
-      if (!accessToken) {
+      const looksLikeJwt =
+        typeof accessToken === 'string' &&
+        /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(accessToken);
+
+      if (!looksLikeJwt) {
         throw new Error('OTP verification failed. Please try again.');
       }
 
@@ -255,6 +266,7 @@ const OTP = ({ navigation, route }) => {
           pointerEvents="none"
           style={[
             styles.toast,
+            { top: (insets?.top || 0) + 12 },
             {
               opacity: toastAnim,
               transform: [
@@ -271,9 +283,17 @@ const OTP = ({ navigation, route }) => {
           <Text style={styles.toastText}>{toastMsg}</Text>
         </Animated.View>
       ) : null}
-      <View style={styles.colorWash} pointerEvents="none">
-        <View style={styles.blobBlue} />
-        <View style={styles.blobGreen} />
+      <View style={styles.headerWash} pointerEvents="none">
+        <View style={styles.headerBlobBlue} />
+        <View style={styles.headerBlobGreen} />
+        <View style={styles.headerBlobBlueBottom} />
+        <View style={styles.headerBlobGreenBottom} />
+      </View>
+      <View style={styles.headerTextLeft} pointerEvents="none">
+        <Text style={styles.heroTitle}>Enter verification code</Text>
+        <Text style={styles.heroSubtitle}>
+          Code sent to <Text style={styles.heroSubtitleEmphasis}>{displayPhone}</Text>
+        </Text>
       </View>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -285,23 +305,10 @@ const OTP = ({ navigation, route }) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.page}>
-            <View style={styles.brandBlock}>
-              <Text style={styles.screenTitle}>Enter verification code</Text>
-              <View style={styles.brandAccent}>
-                <View style={styles.brandAccentBlue} />
-                <View style={styles.brandAccentGreen} />
-              </View>
-              <Text style={styles.subtitle}>
-                Code sent to{' '}
-                <Text style={styles.subtitleEmphasis}>{displayPhone}</Text>
-              </Text>
+            <View style={styles.hero}>
             </View>
 
             <View style={styles.card}>
-              <View style={styles.cardStripeRow}>
-                <View style={styles.cardStripeBlue} />
-                <View style={styles.cardStripeGreen} />
-              </View>
               <Text style={styles.fieldLabel}>6-digit code</Text>
               <TextInput
                 ref={otpInputRef}
@@ -316,7 +323,7 @@ const OTP = ({ navigation, route }) => {
                 selectTextOnFocus
               />
 
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+              {/* Errors are shown via the animated toast only. */}
 
               <TouchableOpacity
                 onPress={() => handleVerifyOTP(false)}
@@ -401,12 +408,12 @@ const OTP = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   screenRoot: {
     flex: 1,
-    backgroundColor: '#EEF3FA',
+    backgroundColor: '#F4F7FB',
     overflow: 'hidden',
   },
   toast: {
     position: 'absolute',
-    top: 12,
+    top: 0,
     left: 12,
     right: 12,
     zIndex: 20,
@@ -423,27 +430,63 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
   },
-  colorWash: {
+  headerWash: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
   },
-  blobBlue: {
+  headerBlobBlue: {
     position: 'absolute',
-    top: -64,
-    right: -40,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+    top: -170,
+    left: -170,
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    backgroundColor: '#2F6FED',
   },
-  blobGreen: {
+  headerBlobGreen: {
     position: 'absolute',
-    bottom: '18%',
-    left: -48,
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    top: -120,
+    right: -160,
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    backgroundColor: '#19C37D',
+    opacity: 0.92,
+  },
+  headerBlobBlueBottom: {
+    position: 'absolute',
+    bottom: -180,
+    right: -160,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: 'rgba(47, 111, 237, 0.14)',
+  },
+  headerBlobGreenBottom: {
+    position: 'absolute',
+    bottom: -220,
+    left: -200,
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: 'rgba(25, 195, 125, 0.12)',
+  },
+  headerText: {
+    position: 'absolute',
+    top: 78,
+    right: 24,
+    left: 24,
+    zIndex: 2,
+    alignItems: 'flex-end',
+  },
+  headerTextLeft: {
+    position: 'absolute',
+    top: 78,
+    left: 24,
+    right: 24,
+    zIndex: 2,
+    alignItems: 'flex-start',
+    maxWidth: 260,
   },
   flex: {
     flex: 1,
@@ -452,7 +495,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: 58,
     paddingBottom: spacing.xl,
   },
   page: {
@@ -460,89 +503,63 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  brandBlock: {
-    marginBottom: spacing.xl,
+  hero: {
+    paddingHorizontal: 4,
+    marginBottom: 18,
+    // Add vertical space so the card starts below the header text overlay.
+    paddingTop: 74,
   },
-  screenTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text.primary,
-    letterSpacing: -0.3,
+  heroTitle: {
+    marginTop: 18,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
   },
-  brandAccent: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-    gap: 6,
+  heroSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
   },
-  brandAccentBlue: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary.main,
-  },
-  brandAccentGreen: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.success.main,
-  },
-  subtitle: {
-    marginTop: spacing.md,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.text.secondary,
-  },
-  subtitleEmphasis: {
-    fontWeight: '600',
-    color: colors.primary.main,
+  heroSubtitleEmphasis: {
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.14)',
-    padding: spacing.lg,
+    borderRadius: 26,
+    borderWidth: 0,
+    padding: 18,
     overflow: 'hidden',
-    shadowColor: colors.success.main,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  cardStripeRow: {
-    flexDirection: 'row',
-    marginHorizontal: -spacing.lg,
-    marginTop: -spacing.lg,
-    marginBottom: spacing.md,
-    height: 4,
-  },
-  cardStripeBlue: {
-    flex: 1,
-    backgroundColor: colors.primary.main,
-  },
-  cardStripeGreen: {
-    flex: 1,
-    backgroundColor: colors.success.main,
+    shadowColor: '#0B1220',
+    shadowOpacity: 0.1,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 6,
   },
   fieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
   },
   otpInput: {
     width: '100%',
-    height: 52,
+    height: 54,
     fontSize: 22,
-    fontWeight: '600',
+    fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 6,
     borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.35)',
-    borderRadius: 8,
-    backgroundColor: colors.primary.light,
-    color: colors.text.primary,
+    borderColor: 'rgba(47, 111, 237, 0.25)',
+    borderRadius: 16,
+    backgroundColor: '#F6F8FF',
+    color: '#111827',
     paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
     marginBottom: spacing.md,
   },
   errorText: {
@@ -552,20 +569,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   primaryButton: {
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: colors.primary.main,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: '#2F6FED',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#2F6FED',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
   },
   primaryButtonDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.55,
+    backgroundColor: 'rgba(47, 111, 237, 0.55)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   resendRow: {
     flexDirection: 'row',

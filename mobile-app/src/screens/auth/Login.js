@@ -131,9 +131,11 @@ const Login = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.screenRoot} edges={['top', 'left', 'right']}>
-      <View style={styles.colorWash} pointerEvents="none">
-        <View style={styles.blobBlue} />
-        <View style={styles.blobGreen} />
+      <View style={styles.headerWash} pointerEvents="none">
+        <View style={styles.headerBlobBlue} />
+        <View style={styles.headerBlobGreen} />
+        <View style={styles.headerBlobBlueBottom} />
+        <View style={styles.headerBlobGreenBottom} />
       </View>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -145,17 +147,14 @@ const Login = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.page}>
-            <View style={styles.brandBlock}>
+            <View style={styles.hero}>
               <Text style={styles.brandName}>People</Text>
-              <View style={styles.brandAccent}>
-                <View style={styles.brandAccentBlue} />
-                <View style={styles.brandAccentGreen} />
-              </View>
-              <Text style={styles.tagline}>Sign in with your mobile number</Text>
+              <Text style={styles.heroTitle}>Welcome Back</Text>
+              <Text style={styles.heroSubtitle}>Enter your details below</Text>
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.label}>Mobile number</Text>
+              <Text style={styles.label}>Mobile Number</Text>
               <Input
                 label={null}
                 placeholder="+91 98765 43210"
@@ -171,7 +170,7 @@ const Login = ({ navigation }) => {
                 style={styles.inputWrap}
               />
 
-              <Text style={[styles.label, styles.labelSpacing]}>Account type</Text>
+              <Text style={[styles.label, styles.labelSpacing]}>Login as</Text>
               <View style={styles.roleRow}>
                 <TouchableOpacity
                   style={[
@@ -230,10 +229,7 @@ const Login = ({ navigation }) => {
                 )}
               </TouchableOpacity>
 
-              <Text style={styles.footerHint}>
-                We’ll send a one-time code via{' '}
-                <Text style={styles.footerHintAccent}>SMS</Text>
-              </Text>
+              <Text style={styles.footerHint}>We’ll send a one-time code via SMS</Text>
             </View>
           </View>
         </ScrollView>
@@ -246,30 +242,49 @@ const Login = ({ navigation }) => {
 const styles = StyleSheet.create({
   screenRoot: {
     flex: 1,
-    backgroundColor: '#EEF3FA',
+    backgroundColor: '#F4F7FB',
     overflow: 'hidden',
   },
-  colorWash: {
+  headerWash: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 0,
   },
-  blobBlue: {
+  headerBlobBlue: {
     position: 'absolute',
-    top: -72,
-    right: -48,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+    top: -170,
+    left: -170,
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    backgroundColor: '#2F6FED',
   },
-  blobGreen: {
+  headerBlobGreen: {
     position: 'absolute',
-    bottom: '12%',
-    left: -56,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+    top: -120,
+    right: -160,
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    backgroundColor: '#19C37D',
+    opacity: 0.92,
+  },
+  headerBlobBlueBottom: {
+    position: 'absolute',
+    bottom: -180,
+    right: -160,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: 'rgba(47, 111, 237, 0.14)',
+  },
+  headerBlobGreenBottom: {
+    position: 'absolute',
+    bottom: -220,
+    left: -200,
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: 'rgba(25, 195, 125, 0.12)',
   },
   flex: {
     flex: 1,
@@ -278,7 +293,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: 58,
     paddingBottom: spacing.xl,
   },
   page: {
@@ -286,74 +301,48 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  brandBlock: {
-    marginBottom: spacing.xl,
+  hero: {
+    paddingHorizontal: 4,
+    marginBottom: 18,
+    // Keep title/subtitle inside the blue header circle
+    maxWidth: 240,
   },
   brandName: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: colors.text.primary,
-    letterSpacing: -0.5,
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.6,
   },
-  brandAccent: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-    gap: 6,
+  heroTitle: {
+    marginTop: 0,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
   },
-  brandAccentBlue: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.primary.main,
-  },
-  brandAccentGreen: {
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.success.main,
-  },
-  tagline: {
-    marginTop: spacing.md,
-    fontSize: 16,
-    lineHeight: 22,
-    color: colors.text.secondary,
-  },
-  taglineAccent: {
-    color: colors.primary.main,
-    fontWeight: '600',
+  heroSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.12)',
-    padding: spacing.lg,
+    borderRadius: 26,
+    borderWidth: 0,
+    padding: 18,
     overflow: 'hidden',
-    shadowColor: colors.primary.main,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  cardStripeRow: {
-    flexDirection: 'row',
-    marginHorizontal: -spacing.lg,
-    marginTop: -spacing.lg,
-    marginBottom: spacing.md,
-    height: 4,
-  },
-  cardStripeBlue: {
-    flex: 1,
-    backgroundColor: colors.primary.main,
-  },
-  cardStripeGreen: {
-    flex: 1,
-    backgroundColor: colors.success.main,
+    shadowColor: '#0B1220',
+    shadowOpacity: 0.1,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 6,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
     marginBottom: spacing.xs,
   },
   labelSpacing: {
@@ -364,42 +353,40 @@ const styles = StyleSheet.create({
   },
   roleRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: 12,
   },
   rolePill: {
     flex: 1,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: '#FAFAFA',
+    borderColor: 'rgba(15, 23, 42, 0.08)',
+    backgroundColor: '#FFFFFF',
   },
   rolePillClientActive: {
-    borderColor: colors.primary.main,
-    borderWidth: 2,
-    backgroundColor: colors.primary.light,
+    borderColor: 'rgba(47, 111, 237, 0.38)',
+    backgroundColor: 'rgba(47, 111, 237, 0.06)',
   },
   rolePillFreelancerActive: {
-    borderColor: colors.success.main,
-    borderWidth: 2,
-    backgroundColor: colors.success.light,
+    borderColor: 'rgba(25, 195, 125, 0.4)',
+    backgroundColor: 'rgba(25, 195, 125, 0.07)',
   },
   roleTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: colors.text.primary,
+    fontWeight: '800',
+    color: '#0F172A',
     marginBottom: 4,
   },
   roleTitleActive: {
-    color: colors.primary.main,
+    color: '#2F6FED',
   },
   roleTitleFreelancerActive: {
-    color: colors.success.dark,
+    color: '#19C37D',
   },
   roleSub: {
     fontSize: 12,
-    color: colors.text.muted,
+    color: '#64748B',
     lineHeight: 16,
   },
   errorText: {
@@ -410,31 +397,34 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: spacing.lg,
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: colors.primary.main,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: '#2F6FED',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#2F6FED',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
   },
   primaryButtonDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.55,
+    backgroundColor: 'rgba(47, 111, 237, 0.55)',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   footerHint: {
     marginTop: spacing.md,
     textAlign: 'center',
-    fontSize: 13,
-    color: colors.text.muted,
+    fontSize: 12,
+    color: '#64748B',
     lineHeight: 18,
-  },
-  footerHintAccent: {
-    color: colors.success.dark,
-    fontWeight: '600',
   },
 });
 

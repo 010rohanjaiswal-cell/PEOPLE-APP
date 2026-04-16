@@ -16,13 +16,20 @@
       },
       "credentialsSource": "remote",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com"
+        "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",
+        "EXPO_PUBLIC_MSG91_AUTH_TOKEN": "506327T32vCL43Zn69d37dfdP1"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",
+        "EXPO_PUBLIC_MSG91_AUTH_TOKEN": "506327T32vCL43Zn69d37dfdP1"
       }
     },
     "production": {
@@ -31,6 +38,12 @@
         "buildType": "apk"
       },
       "credentialsSource": "local"
+      ,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",
+        "EXPO_PUBLIC_MSG91_AUTH_TOKEN": "506327T32vCL43Zn69d37dfdP1"
+      }
     }
   },
   "submit": {
