@@ -37,6 +37,7 @@ app.use(cors({
     'Accept',
     'x-webhook-signature',
     'x-webhook-timestamp',
+    'x-admin-api-key',
   ],
 }));
 
