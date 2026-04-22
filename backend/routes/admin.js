@@ -6,8 +6,13 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
+const { allowAdminJwtOrApiKey } = require('../middleware/adminApiKey');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
+const JobPayment = require('../models/JobPayment');
+const CommissionTransaction = require('../models/CommissionTransaction');
+
+const adminAuth = allowAdminJwtOrApiKey(authenticate, requireRole);
 
 // Helper function to format verification for admin panel
 const formatVerificationForAdmin = (verification) => {
@@ -381,6 +386,62 @@ router.get('/search-users', authenticate, requireRole('admin'), async (req, res)
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to search users',
+    });
+  }
+});
+
+// GET /api/admin/metrics/summary
+// Admin panel can call this using either:
+// - Bearer JWT for an admin user
+// - X-Admin-API-Key for server-to-server usage
+router.get('/metrics/summary', adminAuth, async (req, res) => {
+  try {
+    const [
+      jobValueAgg,
+      commissionAgg,
+      commissionPendingAgg,
+      onlinePaidAgg,
+    ] = await Promise.all([
+      // Source of truth for "jobs that generated commission" (covers cash + online flows)
+      CommissionTransaction.aggregate([
+        { $group: { _id: null, total: { $sum: '$jobAmount' } } },
+      ]),
+      CommissionTransaction.aggregate([
+        { $group: { _id: null, total: { $sum: '$platformCommission' } } },
+      ]),
+      CommissionTransaction.aggregate([
+        { $match: { duesPaid: false } },
+        { $group: { _id: null, total: { $sum: '$platformCommission' } } },
+      ]),
+      // Optional breakdown: only payments processed through JobPayment and marked PAID
+      JobPayment.aggregate([
+        { $match: { status: 'PAID' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ]);
+
+    // IMPORTANT:
+    // totalAmountReceived is aligned with CommissionTransaction so revenue math is consistent.
+    // This reflects total job value that generated commission (cash + online).
+    const totalAmountReceived = Number(jobValueAgg?.[0]?.total || 0);
+    const totalRevenue = Number(commissionAgg?.[0]?.total || 0); // platform commission (lifetime)
+    const totalDuesPending = Number(commissionPendingAgg?.[0]?.total || 0); // unpaid commission
+    const totalAmountReceivedOnline = Number(onlinePaidAgg?.[0]?.total || 0);
+
+    res.json({
+      success: true,
+      currency: 'INR',
+      totalAmountReceived,
+      totalAmountReceivedOnline,
+      totalRevenue,
+      totalDuesPending,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error computing admin metrics summary:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to compute metrics',
     });
   }
 });
