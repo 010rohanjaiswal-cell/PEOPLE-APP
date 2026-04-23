@@ -11,6 +11,7 @@ const FreelancerVerification = require('../models/FreelancerVerification');
 const User = require('../models/User');
 const JobPayment = require('../models/JobPayment');
 const CommissionTransaction = require('../models/CommissionTransaction');
+const Job = require('../models/Job');
 
 const adminAuth = allowAdminJwtOrApiKey(authenticate, requireRole);
 
@@ -442,6 +443,85 @@ router.get('/metrics/summary', adminAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to compute metrics',
+    });
+  }
+});
+
+// GET /api/admin/metrics/red-ratings
+// Returns per-freelancer counts of 1-star ratings and breakdown by client-selected reason.
+router.get('/metrics/red-ratings', adminAuth, async (req, res) => {
+  try {
+    const rows = await Job.aggregate([
+      {
+        $match: {
+          clientRating: 1,
+          assignedFreelancer: { $ne: null },
+        },
+      },
+      {
+        $project: {
+          freelancer: '$assignedFreelancer',
+          reason: {
+            $ifNull: ['$clientRatingReason', 'Unknown'],
+          },
+          ratedAt: '$clientRatedAt',
+        },
+      },
+      {
+        $group: {
+          _id: { freelancer: '$freelancer', reason: '$reason' },
+          count: { $sum: 1 },
+          lastRatedAt: { $max: '$ratedAt' },
+        },
+      },
+      {
+        $group: {
+          _id: '$_id.freelancer',
+          totalRedRatings: { $sum: '$count' },
+          lastRatedAt: { $max: '$lastRatedAt' },
+          reasons: {
+            $push: {
+              reason: '$_id.reason',
+              count: '$count',
+              lastRatedAt: '$lastRatedAt',
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'freelancer',
+        },
+      },
+      { $unwind: { path: '$freelancer', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          freelancerId: '$_id',
+          fullName: { $ifNull: ['$freelancer.fullName', 'N/A'] },
+          phone: { $ifNull: ['$freelancer.phone', 'N/A'] },
+          totalRedRatings: 1,
+          lastRatedAt: 1,
+          reasons: 1,
+        },
+      },
+      { $sort: { totalRedRatings: -1, lastRatedAt: -1 } },
+    ]);
+
+    res.json({
+      success: true,
+      data: rows || [],
+      count: Array.isArray(rows) ? rows.length : 0,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error computing red ratings metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to compute red ratings metrics',
     });
   }
 });

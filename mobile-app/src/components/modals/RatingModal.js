@@ -16,12 +16,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 
-const MOOD = [
-  { value: 1, face: 'sentiment-very-dissatisfied', star: '#F97316' }, // orange-red
-  { value: 2, face: 'sentiment-dissatisfied', star: '#F59E0B' }, // amber
-  { value: 3, face: 'sentiment-neutral', star: '#EAB308' }, // yellow
-  { value: 4, face: 'sentiment-satisfied', star: '#FACC15' }, // warm yellow
-  { value: 5, face: 'favorite', star: '#FDE047' }, // yellow + heart vibe
+// Visual style:
+// - 1-star: neon red
+// - 2–5: neon yellow (filled). We'll dim non-selected stars after selection.
+const STARS = [
+  { value: 1, color: '#FF1744', label: 'Worse' }, // neon red
+  // 2..5: gradient yellow -> green
+  { value: 2, color: '#FDE047', label: 'Normal' }, // neon-ish yellow
+  { value: 3, color: '#BEF264', label: 'Good' }, // yellow-green
+  { value: 4, color: '#4ADE80', label: 'Happy' }, // green
+  { value: 5, color: '#22C55E', label: 'Excellent' }, // deeper green
 ];
 
 const ONE_STAR_REASONS = [
@@ -70,31 +74,31 @@ const RatingModal = ({
           <Text style={styles.subtitle}>{subtitle}</Text>
 
           <View style={styles.starsRow}>
-            {MOOD.map((m) => {
+            {STARS.map((m) => {
               const active = rating === m.value;
-              const dim = rating != null && rating !== undefined && rating !== m.value;
+              const selected = rating != null && rating !== undefined;
+              const dim = selected && rating !== m.value;
               return (
                 <TouchableOpacity
                   key={m.value}
                   onPress={() => {
                     onSetRating(m.value);
                     if (m.value !== 1 && typeof onSetReason === 'function') onSetReason(null);
+                    // Yellow stars (2..5): submit immediately (no button).
+                    if (m.value !== 1 && typeof onSubmit === 'function' && !submitting) {
+                      onSubmit(m.value, null);
+                    }
                   }}
                   activeOpacity={0.8}
                   disabled={submitting}
-                  style={[styles.starTouch, dim && { opacity: 0.35 }]}
+                  style={[styles.starCol, dim && { opacity: 0.25 }]}
                 >
-                  <View style={styles.starWrap}>
-                    <MaterialIcons name="star" size={54} color={m.star} />
-                    <View style={styles.faceCenter}>
-                      <MaterialIcons
-                        name={m.face}
-                        size={22}
-                        color={m.value === 5 ? '#EF4444' : '#111827'}
-                      />
-                    </View>
-                    {active ? <View style={styles.starRing} /> : null}
-                  </View>
+                  <MaterialIcons
+                    name={m.value === 1 ? (active ? 'star' : 'star-border') : 'star'}
+                    size={34}
+                    color={m.color}
+                  />
+                  <Text style={styles.starLabel}>{m.label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -123,20 +127,20 @@ const RatingModal = ({
             </View>
           ) : null}
 
-          <TouchableOpacity
-            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-            onPress={onSubmit}
-            disabled={!canSubmit}
-            activeOpacity={0.85}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.submitText}>
-                {needsReason ? (t('common.ok') || 'OK') : t('rating.submit')}
-              </Text>
-            )}
-          </TouchableOpacity>
+          {needsReason ? (
+            <TouchableOpacity
+              style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+              onPress={() => typeof onSubmit === 'function' && onSubmit(1, reason)}
+              disabled={!canSubmit}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.submitText}>{t('common.ok') || 'OK'}</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -174,32 +178,25 @@ const styles = StyleSheet.create({
   },
   starsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
+    flexWrap: 'nowrap',
     gap: 10,
     marginBottom: spacing.xl,
   },
-  starTouch: {
-    padding: 2,
-  },
-  starWrap: {
-    width: 56,
-    height: 56,
+  starCol: {
+    width: 62,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 6,
   },
-  faceCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starRing: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: 'rgba(17, 24, 39, 0.12)',
+  starLabel: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginTop: 6,
+    fontSize: 11,
+    lineHeight: 12,
+    fontWeight: '600',
   },
   submitButton: {
     backgroundColor: colors.primary.main,

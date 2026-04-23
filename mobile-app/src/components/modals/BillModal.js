@@ -120,13 +120,15 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
     setRatingModalVisible(true);
   };
 
-  const submitRating = async () => {
+  const submitRating = async (nextRating, nextReason) => {
     const jobId = job?._id || job?.id;
     if (!jobId) return;
-    if (ratingValue == null) return;
+    const finalRating = nextRating != null ? nextRating : ratingValue;
+    const finalReason = nextReason !== undefined ? nextReason : ratingReason;
+    if (finalRating == null) return;
     try {
       setSubmittingRating(true);
-      const resp = await clientJobsAPI.rateFreelancer(jobId, ratingValue, ratingReason);
+      const resp = await clientJobsAPI.rateFreelancer(jobId, finalRating, finalReason);
       if (!resp?.success) {
         throw new Error(resp?.error || 'Failed to submit rating');
       }
