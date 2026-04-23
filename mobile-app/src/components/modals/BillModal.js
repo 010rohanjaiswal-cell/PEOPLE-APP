@@ -32,6 +32,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const [merchantOrderId, setMerchantOrderId] = useState(null);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [ratingValue, setRatingValue] = useState(null);
+  const [ratingReason, setRatingReason] = useState(null);
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const freelancer = job?.assignedFreelancer || {};
@@ -125,11 +126,12 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
     if (ratingValue == null) return;
     try {
       setSubmittingRating(true);
-      const resp = await clientJobsAPI.rateFreelancer(jobId, ratingValue);
+      const resp = await clientJobsAPI.rateFreelancer(jobId, ratingValue, ratingReason);
       if (!resp?.success) {
         throw new Error(resp?.error || 'Failed to submit rating');
       }
       setRatingModalVisible(false);
+      setRatingReason(null);
       setSubmittingRating(false);
       if (onPaymentSuccess) onPaymentSuccess();
       onClose();
@@ -245,6 +247,8 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
       userName={freelancerName}
       rating={ratingValue}
       onSetRating={setRatingValue}
+      reason={ratingReason}
+      onSetReason={setRatingReason}
       onSubmit={submitRating}
       submitting={submittingRating}
     />

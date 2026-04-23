@@ -26,15 +26,18 @@ import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
+import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
+import { useAuth } from '../../context/AuthContext';
+import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /** Poll assigned jobs while this tab is focused so status changes sync without manual refresh */
 const MY_JOBS_POLL_MS = 5000;
 
-function createFreelancerMyJobsStyles(colors) {
+function createFreelancerMyJobsStyles(colors, isDark) {
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -80,9 +83,9 @@ function createFreelancerMyJobsStyles(colors) {
     marginBottom: spacing.xs,
   },
   jobHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 8,
   },
   jobTitle: {
     ...typography.body,
@@ -91,10 +94,61 @@ function createFreelancerMyJobsStyles(colors) {
     color: colors.text.primary,
     flex: 1,
   },
+  jobCategory: {
+    ...typography.small,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+  },
   jobBudget: {
     ...typography.body,
     color: colors.primary.main,
     fontWeight: '600',
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryPill: {
+    maxWidth: 170,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(37, 99, 235, 0.95)' : 'rgba(37, 99, 235, 0.35)',
+    backgroundColor: isDark ? colors.primary.main : '#FFFFFF',
+    justifyContent: 'center',
+    marginBottom: 2,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  categoryPillText: {
+    ...typography.small,
+    color: isDark ? '#FFFFFF' : colors.primary.main,
+    fontWeight: '700',
+    fontSize: 10,
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
+  jobMetaPinsInline: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
+  },
+  jobMetaLeftRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobHeaderRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   statusBadge: {
     paddingHorizontal: spacing.sm,
@@ -318,9 +372,10 @@ function createFreelancerMyJobsStyles(colors) {
 }
 
 const MyJobs = () => {
-  const { t } = useLanguage();
-  const { colors } = useTheme();
-  const styles = useMemo(() => createFreelancerMyJobsStyles(colors), [colors]);
+  const { t, locale } = useLanguage();
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createFreelancerMyJobsStyles(colors, isDark), [colors, isDark]);
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -338,6 +393,7 @@ const MyJobs = () => {
   const [jobToComplete, setJobToComplete] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
+  const [translatedJobs, setTranslatedJobs] = useState({});
 
   const fetchInFlightRef = useRef(false);
 
@@ -353,8 +409,10 @@ const MyJobs = () => {
         const response = await freelancerJobsAPI.getAssignedJobs();
         if (response?.success && Array.isArray(response.jobs)) {
           setJobs(response.jobs);
+          void writeJobListCache({ user, scope: 'freelancer:my_jobs', data: response.jobs });
         } else if (Array.isArray(response)) {
           setJobs(response);
+          void writeJobListCache({ user, scope: 'freelancer:my_jobs', data: response });
         } else {
           setJobs([]);
         }
@@ -378,9 +436,55 @@ const MyJobs = () => {
     loadJobs({ pullRefresh: true });
   };
 
+  // Fast paint from cache (stale-while-revalidate)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await readJobListCache({ user, scope: 'freelancer:my_jobs', maxAgeMs: 10 * 60 * 1000 });
+      if (cancelled) return;
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setJobs(cached);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?._id]);
+
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
+
+  // Translate job fields for Hindi locale (title/description/address/pincode + delivery fields).
+  useEffect(() => {
+    if (locale !== 'hi' || !jobs.length) {
+      if (locale !== 'hi') setTranslatedJobs({});
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      for (const job of jobs) {
+        if (cancelled) return;
+        const id = job?._id || job?.id;
+        if (!id) continue;
+        try {
+          const translated = await translateJobToHindi(job);
+          if (cancelled) return;
+          setTranslatedJobs((prev) => {
+            if (prev && prev[id]) return prev;
+            return { ...(prev || {}), [id]: translated };
+          });
+        } catch {
+          // ignore
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, jobs]);
 
   useFocusEffect(
     useCallback(() => {
@@ -482,29 +586,36 @@ const MyJobs = () => {
     const jobId = item._id || item.id;
     const statusInfo = getStatusBadgeStyle(item.status);
     const delivery = isDeliveryJob(item);
+    const tr = locale === 'hi' && translatedJobs[jobId];
+    const title = tr ? tr.title : item.title;
+    const description = tr ? tr.description : (item.description || '');
 
     return (
       <View style={styles.jobCard}>
         <View style={styles.jobHeader}>
-          <Text style={styles.jobTitle}>{item.title}</Text>
+          <Text style={styles.jobTitle}>{title}</Text>
           <View style={styles.jobHeaderRight}>
-            <Text style={styles.jobBudget}>₹{item.budget}</Text>
-            <View
-              style={[styles.statusBadge, { backgroundColor: statusInfo.backgroundColor }]}
-            >
-              <Text style={[styles.statusText, { color: statusInfo.color }]}>
-                {t('status.' + (item.status || 'assigned').replace(/-/g, '_'))}
-              </Text>
+            <View style={styles.jobHeaderRightRow}>
+              <View style={styles.budgetRow}>
+                <Text style={styles.jobBudget}>₹{item.budget}</Text>
+              </View>
+              <View
+                style={[styles.statusBadge, { backgroundColor: statusInfo.backgroundColor }]}
+              >
+                <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                  {t('status.' + (item.status || 'assigned').replace(/-/g, '_'))}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {!delivery && item.description ? (
+        {!delivery && description ? (
           <View style={styles.descriptionBlock}>
             <Text style={styles.jobDescription} numberOfLines={expandedDescriptionIds[jobId] ? undefined : 2}>
-              {item.description}
+              {description}
             </Text>
-            {item.description.length > 60 ? (
+            {description.length > 60 ? (
               <TouchableOpacity
                 onPress={() => setExpandedDescriptionIds((prev) => ({ ...prev, [jobId]: !prev[jobId] }))}
                 style={[
@@ -520,9 +631,18 @@ const MyJobs = () => {
             ) : null}
           </View>
         ) : null}
-        <JobLocationBlock job={item} t={t} />
+        <JobLocationBlock job={item} translated={tr} t={t} />
         <View style={styles.jobMetaRow}>
-          <JobMetaGenderOrDeliveryPins job={item} t={t} />
+          <View style={styles.jobMetaLeftRow}>
+            <JobMetaGenderOrDeliveryPins job={item} translated={tr} t={t} style={styles.jobMetaPinsInline} />
+            {item?.category ? (
+              <View style={styles.categoryPill}>
+                <Text style={styles.categoryPillText} numberOfLines={1}>
+                  {String(item.category || '')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           {(item.status === 'assigned' ||
             item.status === 'work_done' ||
             item.status === 'completed') && (

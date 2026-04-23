@@ -1566,7 +1566,7 @@ router.post('/jobs/:id/pay-cash', authenticate, async (req, res) => {
 /**
  * Rate the assigned freelancer for a completed job (required after payment)
  * POST /api/client/jobs/:id/rate-freelancer
- * Body: { rating: number } where rating is 0..5
+ * Body: { rating: number, reason?: string } where rating is 0..5
  */
 router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
   try {
@@ -1584,6 +1584,15 @@ router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Rating must be a number between 0 and 5',
+      });
+    }
+
+    const reasonRaw = req.body?.reason;
+    const reason = reasonRaw != null ? String(reasonRaw).trim() : null;
+    if (rating === 1 && (!reason || reason.length < 3)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please select a reason for a 1-star rating',
       });
     }
 
@@ -1670,12 +1679,14 @@ router.post('/jobs/:id/rate-freelancer', authenticate, async (req, res) => {
 
     job.clientRating = rating;
     job.clientRatedAt = new Date();
+    job.clientRatingReason = rating === 1 ? reason : null;
     await job.save();
 
     res.json({
       success: true,
       message: 'Rating submitted successfully',
       rating: job.clientRating,
+      reason: job.clientRatingReason,
       freelancer: {
         _id: freelancerId,
         averageRating: newAvg,

@@ -16,7 +16,32 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import { useLanguage } from '../../context/LanguageContext';
 
-const RatingModal = ({ visible, userName, rating, onSetRating, onSubmit, submitting }) => {
+const MOOD = [
+  { value: 1, face: 'sentiment-very-dissatisfied', star: '#F97316' }, // orange-red
+  { value: 2, face: 'sentiment-dissatisfied', star: '#F59E0B' }, // amber
+  { value: 3, face: 'sentiment-neutral', star: '#EAB308' }, // yellow
+  { value: 4, face: 'sentiment-satisfied', star: '#FACC15' }, // warm yellow
+  { value: 5, face: 'favorite', star: '#FDE047' }, // yellow + heart vibe
+];
+
+const ONE_STAR_REASONS = [
+  'Freelancer seems fraud and suspicious',
+  'Freelancer is not responding',
+  'Freelancer asked extra money than job amount',
+  'Freelancer behaviour was not good/ worse',
+  'Freelancer took more time than normal to work done',
+];
+
+const RatingModal = ({
+  visible,
+  userName,
+  rating,
+  onSetRating,
+  reason,
+  onSetReason,
+  onSubmit,
+  submitting,
+}) => {
   const { t } = useLanguage();
 
   const title = useMemo(() => t('rating.title'), [t]);
@@ -26,7 +51,9 @@ const RatingModal = ({ visible, userName, rating, onSetRating, onSubmit, submitt
     return `${base} ${userName}`;
   }, [t, userName]);
 
-  const canSubmit = rating !== null && rating !== undefined && !submitting;
+  const needsReason = rating === 1;
+  const hasReason = !needsReason || (reason != null && String(reason).trim().length > 0);
+  const canSubmit = rating !== null && rating !== undefined && hasReason && !submitting;
 
   return (
     <Modal
@@ -43,46 +70,58 @@ const RatingModal = ({ visible, userName, rating, onSetRating, onSubmit, submitt
           <Text style={styles.subtitle}>{subtitle}</Text>
 
           <View style={styles.starsRow}>
-            <TouchableOpacity
-              style={[styles.zeroPill, rating === 0 && styles.zeroPillActive]}
-              onPress={() => onSetRating(0)}
-              activeOpacity={0.8}
-              disabled={submitting}
-            >
-              <View style={styles.zeroIconRow}>
-                <MaterialIcons
-                  name="remove"
-                  size={18}
-                  color={rating === 0 ? colors.error.main : colors.error.dark}
-                />
-                <MaterialIcons
-                  name="star-border"
-                  size={20}
-                  color={rating === 0 ? colors.error.main : colors.error.dark}
-                />
-              </View>
-            </TouchableOpacity>
-
-            {Array.from({ length: 5 }).map((_, idx) => {
-              const starValue = idx + 1;
-              const filled = rating != null && rating >= starValue;
+            {MOOD.map((m) => {
+              const active = rating === m.value;
+              const dim = rating != null && rating !== undefined && rating !== m.value;
               return (
                 <TouchableOpacity
-                  key={starValue}
-                  onPress={() => onSetRating(starValue)}
+                  key={m.value}
+                  onPress={() => {
+                    onSetRating(m.value);
+                    if (m.value !== 1 && typeof onSetReason === 'function') onSetReason(null);
+                  }}
                   activeOpacity={0.8}
                   disabled={submitting}
-                  style={styles.starTouch}
+                  style={[styles.starTouch, dim && { opacity: 0.35 }]}
                 >
-                  <MaterialIcons
-                    name={filled ? 'star' : 'star-border'}
-                    size={34}
-                    color={filled ? colors.warning.main : colors.text.muted}
-                  />
+                  <View style={styles.starWrap}>
+                    <MaterialIcons name="star" size={54} color={m.star} />
+                    <View style={styles.faceCenter}>
+                      <MaterialIcons
+                        name={m.face}
+                        size={22}
+                        color={m.value === 5 ? '#EF4444' : '#111827'}
+                      />
+                    </View>
+                    {active ? <View style={styles.starRing} /> : null}
+                  </View>
                 </TouchableOpacity>
               );
             })}
           </View>
+
+          {needsReason ? (
+            <View style={styles.reasonBlock}>
+              <Text style={styles.reasonTitle}>{t('rating.oneStarTitle') || 'Tell us what went wrong'}</Text>
+              {ONE_STAR_REASONS.map((r) => {
+                const active = String(reason || '') === r;
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    activeOpacity={0.85}
+                    disabled={submitting}
+                    onPress={() => typeof onSetReason === 'function' && onSetReason(r)}
+                    style={[styles.reasonRow, active && styles.reasonRowActive]}
+                  >
+                    <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
+                      {active ? <View style={styles.radioInner} /> : null}
+                    </View>
+                    <Text style={[styles.reasonText, active && styles.reasonTextActive]}>{r}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
@@ -93,7 +132,9 @@ const RatingModal = ({ visible, userName, rating, onSetRating, onSubmit, submitt
             {submitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.submitText}>{t('rating.submit')}</Text>
+              <Text style={styles.submitText}>
+                {needsReason ? (t('common.ok') || 'OK') : t('rating.submit')}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -135,29 +176,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: 10,
     marginBottom: spacing.xl,
   },
   starTouch: {
     padding: 2,
   },
-  zeroPill: {
-    borderWidth: 1,
-    borderColor: colors.error.main,
-    backgroundColor: colors.background,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
-  },
-  zeroPillActive: {
-    borderColor: colors.error.main,
-    backgroundColor: colors.error.light,
-  },
-  zeroIconRow: {
-    flexDirection: 'row',
+  starWrap: {
+    width: 56,
+    height: 56,
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+  },
+  faceCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starRing: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: 'rgba(17, 24, 39, 0.12)',
   },
   submitButton: {
     backgroundColor: colors.primary.main,
@@ -174,6 +216,59 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  reasonBlock: {
+    marginTop: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  reasonTitle: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+    textAlign: 'left',
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  reasonRowActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: colors.text.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterActive: {
+    borderColor: colors.primary.main,
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary.main,
+  },
+  reasonText: {
+    ...typography.body,
+    color: colors.text.primary,
+    flex: 1,
+  },
+  reasonTextActive: {
+    fontWeight: '600',
   },
 });
 

@@ -18,7 +18,11 @@ import {
   ScrollView,
   RefreshControl,
   Linking,
+  Animated,
+  Dimensions,
+  BackHandler,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
@@ -29,10 +33,170 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useLocation } from '../../context/LocationContext';
 import { translateJobToHindi } from '../../utils/translate';
+import { translateToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
 import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
+import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+
+function normalizeOtherOption(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.]/g, '')
+    .replace(/[()]/g, '')
+    .replace(/[/]/g, ' ')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Same list as client "Other" picker; "Others" first.
+const OTHER_WORK_OPTIONS_RAW = [
+  'Others',
+  'Interior decorator',
+  'Carpenter / furniture maker',
+  'Floor tiler (tiles, marble, granite)',
+  'Painter (wall, texture, spray)',
+  'Plumber',
+  'Electrician',
+  'POP (Plaster of Paris) worker',
+  'False ceiling installer',
+  'Welder',
+  'Mason (brick/block work)',
+  'Glass & window installer (aluminum/uPVC)',
+  'Cabinet maker',
+  'Wood polisher / finisher',
+  'Sofa maker / upholsterer',
+  'Modular kitchen installer',
+  'Door & window fabricator',
+  'Bamboo craftsman',
+  'Gardener / landscaper',
+  'Nursery plant caretaker',
+  'Irrigation system installer',
+  'Lawn maintenance worker',
+  'Tree trimmer / cutter',
+  'Potter (clay items)',
+  'Sculptor',
+  'Handicraft maker',
+  'Textile weaver',
+  'Embroidery worker',
+  'Leather goods maker',
+  'Candle / soap maker',
+  'Pest control technician',
+  'Housekeeping staff',
+  'Waste management worker',
+  'Mobile repair technician',
+  'HVAC (AC) technician',
+  'Refrigeration mechanic',
+  'AC & refrigerator mechanic',
+  'TV / appliance repair technician',
+  'Bike mechanic',
+  'Car mechanic',
+  'Generator technician',
+  'Generator repair technician',
+  'CCTV installation technician',
+  'Warehouse handler',
+  'Packing & moving labor',
+  'Heavy equipment operator (JCB, crane, etc.)',
+  'Makeup artist',
+  'Mehndi artist',
+  'Fitness trainer (skill-based)',
+  'Solar panel installer',
+  'Solar maintenance technician',
+  'Wind turbine technician',
+  'Transformer repair technician',
+  'Electrical panel board fabricator',
+  'Cable tray installer',
+  'Lightning protection system installer',
+  'Duct fabrication specialist',
+  'Ventilation system installer',
+  'Boiler operator',
+  'Chiller plant technician',
+  'Cooling tower technician',
+  'Gas pipeline installer',
+  'Compressed air system technician',
+  'Elevator (lift) technician',
+  'MIG/TIG welder',
+  'CNC machine operator',
+  'Lathe machine operator',
+  'Sheet metal fabricator',
+  'Aluminum fabricator',
+  'Steel structure fabricator',
+  'Pipe fitter',
+  'Industrial rigging specialist',
+  'Blacksmith',
+  'Tool and die maker',
+  'Industrial plumber',
+  'Pipeline welder',
+  'Drainage system specialist',
+  'Fire sprinkler system installer',
+  'Water treatment plant technician',
+  'Borewell drilling technician',
+  'Sewage treatment plant operator',
+  'Irrigation system technician',
+  'Scaffolding specialist',
+  'Formwork (shuttering) carpenter',
+  'Steel fixer (rebar worker)',
+  'Concrete pump operator',
+  'Tower crane operator',
+  'Excavator / JCB operator',
+  'Road roller operator',
+  'Asphalt paving specialist',
+  'Waterproofing technician',
+  'Basement sealing expert',
+  'High-voltage line technician',
+  'Industrial electrician',
+  'Electrical panel board fabricator',
+  'Cable tray installer',
+  'Lightning protection system installer',
+  'HVAC (AC) technician',
+  'Refrigeration mechanic',
+  'Duct fabrication specialist',
+  'Ventilation system installer',
+  'Boiler operator',
+  'Chiller plant technician',
+  'Cooling tower technician',
+  'Gas pipeline installer',
+  'Compressed air system technician',
+  'Elevator (lift) technician',
+  'Fire alarm system technician',
+  'Fire extinguisher technician',
+  'Access control system installer',
+  'Security system integrator',
+  'Smoke detector installer',
+  'False ceiling specialist',
+  'Glass façade installer',
+  'uPVC window fabricator',
+  'Stone (granite/marble) polisher',
+  'Epoxy flooring specialist',
+  'Wooden flooring installer',
+  'Acoustic panel installer',
+  'Rainwater harvesting technician',
+  'Waste recycling plant operator',
+  'Biogas plant technician',
+  'EV (electric vehicle) charging station installer',
+  'Smart home automation technician',
+  'Drone surveying operator',
+  'Fiber optic cable technician',
+  'Data cabling technician',
+];
+
+const OTHER_WORK_OPTIONS = (() => {
+  const seen = new Set();
+  const out = [];
+  for (const opt of OTHER_WORK_OPTIONS_RAW) {
+    const key = normalizeOtherOption(opt);
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(opt.trim());
+  }
+  return out;
+})();
 
 /** Backend returns code + blockedUntil when support unassign cooldown is active */
 function messageForFreelancerPickupBlocked(t, payload) {
@@ -43,7 +207,7 @@ function messageForFreelancerPickupBlocked(t, payload) {
   return t('jobs.pickupApplyBlockedDetail', { time: timeStr });
 }
 
-function createAvailableJobsStyles(colors) {
+function createAvailableJobsStyles(colors, isDark) {
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -93,6 +257,12 @@ function createAvailableJobsStyles(colors) {
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
+  jobHeaderRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    flexShrink: 0,
+    gap: 8,
+  },
   jobTitle: {
     ...typography.body,
     fontSize: 16,
@@ -107,6 +277,35 @@ function createAvailableJobsStyles(colors) {
     color: colors.primary.main,
     fontWeight: '600',
     flexShrink: 0,
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  categoryPill: {
+    maxWidth: 170,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(37, 99, 235, 0.95)' : 'rgba(37, 99, 235, 0.35)',
+    backgroundColor: isDark ? colors.primary.main : '#FFFFFF',
+    justifyContent: 'center',
+    marginBottom: 2,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+    elevation: 1,
+  },
+  categoryPillText: {
+    ...typography.small,
+    color: isDark ? '#FFFFFF' : colors.primary.main,
+    fontWeight: '700',
+    fontSize: 10,
+    lineHeight: 12,
+    includeFontPadding: false,
   },
   jobCategory: {
     ...typography.body,
@@ -132,6 +331,19 @@ function createAvailableJobsStyles(colors) {
     marginTop: spacing.xs,
     marginBottom: spacing.xs,
     gap: spacing.sm,
+  },
+  jobMetaLeftRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  jobMetaPinsInline: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
   },
   jobMetaMainInner: {
     flex: 1,
@@ -431,6 +643,9 @@ function createAvailableJobsStyles(colors) {
     zIndex: 1,
     backgroundColor: colors.cardBackground,
     borderRadius: spacing.md,
+    // Give the modal an actual height so flex children (body) can render.
+    // Using a percent keeps it within the viewport across devices.
+    height: '72%',
     maxHeight: '72%',
     borderWidth: 1,
     borderColor: colors.border,
@@ -453,19 +668,105 @@ function createAvailableJobsStyles(colors) {
   },
   /** 3 columns × 4 rows (12 categories). */
   categoryModalGrid: {
-    paddingHorizontal: spacing.md,
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
+  categoryModalBody: {
+    flex: 1,
+  },
+  categoryModalShiftRow: {
+    flexDirection: 'row',
+    flex: 1,
+    width: '200%',
+  },
+  categoryModalPage: {
+    width: '50%',
+    flex: 1,
+  },
+  categoryModalPageInner: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  otherSearchInput: {
+    borderWidth: 0,
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.primary.main + '80',
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+    color: colors.text.primary,
+    marginBottom: spacing.md,
+  },
+  otherWorkItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginBottom: spacing.sm,
+  },
+  otherWorkItemActive: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  otherWorkItemText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
+  },
+  selectedChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  selectedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  selectedChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  categoryModalFooter: {
+    // removed (no footer buttons)
+  },
+  categoryModalHintText: {
+    ...typography.small,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  categoryModalFooterBtn: {},
+  categoryModalFooterBtnPrimary: {},
+  categoryModalFooterText: {},
+  categoryModalFooterTextPrimary: {},
   categoryModalRowWrap: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   categoryModalCell: {
     flex: 1,
-    minHeight: 56,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 4,
+    minHeight: 68,
+    paddingVertical: spacing.md,
+    paddingHorizontal: 6,
     borderRadius: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
@@ -473,9 +774,12 @@ function createAvailableJobsStyles(colors) {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  categoryModalCellIcon: {
+    marginBottom: 6,
+  },
   categoryModalCellActive: {
     borderColor: colors.primary.main,
-    backgroundColor: colors.primary.light,
+    backgroundColor: colors.primary.main,
   },
   categoryModalCellText: {
     ...typography.small,
@@ -486,7 +790,7 @@ function createAvailableJobsStyles(colors) {
     textAlign: 'center',
   },
   categoryModalCellTextActive: {
-    color: colors.primary.main,
+    color: '#FFFFFF',
   },
   categoryEmptyWrap: {
     paddingVertical: spacing.xl,
@@ -518,15 +822,21 @@ function createAvailableJobsStyles(colors) {
 });
 }
 
-const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
+const AvailableJobs = ({
+  onJobPickedUp,
+  workCooldownRemainMs = 0,
+  hasActiveAssignedJob = false,
+  onActiveJobStatusChange,
+}) => {
   const { user } = useAuth();
   const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords, requestPermission } = useLocation();
-  const { colors } = useTheme();
-  const styles = useMemo(() => createAvailableJobsStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => createAvailableJobsStyles(colors, isDark), [colors, isDark]);
 
 
   const freelancerId = user?.id || user?._id || null;
+  const cacheUser = user;
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -547,27 +857,51 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
   const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
   const [offerErrorMessage, setOfferErrorMessage] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('none');
-  /** When set, only jobs with this category (exact match, case-insensitive). */
-  const [categoryFilter, setCategoryFilter] = useState(null);
+  /** Multi-select categories; when empty, show all. */
+  const [categoryFilters, setCategoryFilters] = useState([]);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const categoryModalShift = useRef(new Animated.Value(0)).current; // 0 = main categories, 1 = Other list
+  const [categoryModalPage, setCategoryModalPage] = useState('grid'); // 'grid' | 'other'
+  const [otherQuery, setOtherQuery] = useState('');
+  const [otherTranslated, setOtherTranslated] = useState({});
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [hasActiveJob, setHasActiveJob] = useState(false);
+  const effectiveHasActiveJob = hasActiveAssignedJob || hasActiveJob;
   const [refreshing, setRefreshing] = useState(false);
   // When locale is Hindi, cache translated title/description/address/pincode per job
   const [translatedJobs, setTranslatedJobs] = useState({});
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
 
-  const loadJobs = async () => {
+  const fetchInFlightRef = useRef(false);
+  const activeJobCheckInFlightRef = useRef(false);
+  // NOTE: Do not auto-redirect tabs from here. Tab switching should be user-controlled.
+  // The dashboard already prefers "My Jobs" once on initial mount when an active job exists.
+
+  const withTimeout = useCallback((promise, ms, label) => {
+    let timeoutId = null;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`${label || 'request'} timeout`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    });
+  }, []);
+
+  const loadJobs = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
     // Never fetch or show jobs when GPS is not granted
     if (!gpsEnabled) {
       setJobs([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       setRefreshing(false);
-      setError('');
+      if (!silent) setError('');
       return;
     }
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
-      if (!refreshing) setLoading(true);
-      setError('');
+      if (!silent && !refreshing) setLoading(true);
+      if (!silent) setError('');
 
       let lat = null;
       let lng = null;
@@ -583,20 +917,41 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
       const response = await freelancerJobsAPI.getAvailableJobs(lat, lng, sortParam);
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
+        void writeJobListCache({ user: cacheUser, scope: 'freelancer:available', data: response.jobs });
       } else if (Array.isArray(response)) {
         setJobs(response);
+        void writeJobListCache({ user: cacheUser, scope: 'freelancer:available', data: response });
       } else {
         setJobs([]);
       }
     } catch (err) {
       console.error('Error loading available jobs for freelancer:', err);
-      setError(err.response?.data?.error || err.message || t('jobs.failedLoadJobs'));
-      setJobs([]);
+      if (!silent) {
+        setError(err.response?.data?.error || err.message || t('jobs.failedLoadJobs'));
+        setJobs([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       setRefreshing(false);
+      fetchInFlightRef.current = false;
     }
-  };
+  }, [gpsEnabled, getCurrentCoords, refreshing, selectedFilter, t]);
+
+  // Fast paint from cache (stale-while-revalidate)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await readJobListCache({ user: cacheUser, scope: 'freelancer:available', maxAgeMs: 10 * 60 * 1000 });
+      if (cancelled) return;
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setJobs(cached);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheUser?.id, cacheUser?._id]);
 
   const onRefresh = () => {
     if (!gpsEnabled) {
@@ -644,48 +999,81 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     }
   };
 
-  const checkActiveJob = async () => {
+  const checkActiveJob = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
+    if (activeJobCheckInFlightRef.current) return;
+    activeJobCheckInFlightRef.current = true;
     try {
-      const response = await freelancerJobsAPI.getAssignedJobs();
+      // Guard: this endpoint can be slow during assignment; do not block UI.
+      const response = await withTimeout(
+        freelancerJobsAPI.getAssignedJobs(),
+        15000,
+        'getAssignedJobs'
+      );
       if (response?.success && Array.isArray(response.jobs)) {
         // Check if there's any active job (not fully completed)
         const activeJobs = response.jobs.filter(
           job => job.freelancerCompleted !== true && 
           job.status !== 'cancelled'
         );
-        setHasActiveJob(activeJobs.length > 0);
+        const active = activeJobs.length > 0;
+        setHasActiveJob(active);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
       } else if (Array.isArray(response)) {
         const activeJobs = response.filter(
           job => job.freelancerCompleted !== true && 
           job.status !== 'cancelled'
         );
-        setHasActiveJob(activeJobs.length > 0);
+        const active = activeJobs.length > 0;
+        setHasActiveJob(active);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
       } else {
         setHasActiveJob(false);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(false);
       }
     } catch (err) {
       console.error('Error checking active jobs:', err);
-      setHasActiveJob(false);
+      if (!silent) setHasActiveJob(false);
+    } finally {
+      activeJobCheckInFlightRef.current = false;
     }
-  };
+  }, [withTimeout, onActiveJobStatusChange]);
 
   useEffect(() => {
-    if (gpsEnabled) {
-      Promise.all([
-        loadJobs(),
-        loadWalletStatus(),
-        checkActiveJob(),
-      ]).catch((err) => {
+    let mounted = true;
+    (async () => {
+      try {
+        // Always allow UI to become interactive even if assigned-job check is slow.
+        if (gpsEnabled) {
+          await Promise.all([loadJobs(), loadWalletStatus()]);
+        } else {
+          await loadWalletStatus();
+          if (mounted) setLoading(false);
+        }
+      } catch (err) {
         console.error('Error loading initial data:', err);
-        setLoading(false);
-      });
-    } else {
-      Promise.all([loadWalletStatus(), checkActiveJob()]).catch((err) => {
-        console.error('Error loading wallet/active job:', err);
-      });
-      setLoading(false);
-    }
+        if (mounted) setLoading(false);
+      } finally {
+        // Run active job check in background; do not block initial render.
+        void checkActiveJob({ silent: true });
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [gpsEnabled]);
+
+  // Silent refresh every 5s while this tab is focused.
+  useFocusEffect(
+    useCallback(() => {
+      if (!gpsEnabled) return;
+      const id = setInterval(() => {
+        void loadJobs({ silent: true });
+        void checkActiveJob({ silent: true });
+      }, 5000);
+      return () => clearInterval(id);
+    }, [gpsEnabled, loadJobs, checkActiveJob])
+  );
 
   // When GPS becomes denied, clear jobs so we never show list with stale data
   useEffect(() => {
@@ -844,19 +1232,18 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     }
   };
 
-  const jobMatchesCategory = (job, cat) => {
-    if (cat == null || cat === '') return true;
+  const jobMatchesCategory = (job, cats) => {
+    if (cats == null) return true;
+    const list = Array.isArray(cats) ? cats : [cats];
+    if (list.length === 0) return true;
     const a = String(job?.category || '')
       .trim()
       .toLowerCase();
-    const b = String(cat)
-      .trim()
-      .toLowerCase();
-    return a === b;
+    return list.some((cat) => a === String(cat).trim().toLowerCase());
   };
 
   const applyFilter = (jobList) => {
-    let list = categoryFilter ? jobList.filter((j) => jobMatchesCategory(j, categoryFilter)) : [...jobList];
+    let list = categoryFilters.length ? jobList.filter((j) => jobMatchesCategory(j, categoryFilters)) : [...jobList];
 
     if (selectedFilter === 'none') return list;
 
@@ -896,8 +1283,108 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     }
   };
 
-  const categoryLabel = (cat) =>
-    t('postJob.category' + (JOB_CATEGORY_I18N_KEYS[cat] || cat.replace(/\s/g, '')));
+  const categoryLabel = (cat) => {
+    const s = String(cat || '').trim();
+    if (!s) return '';
+    const keySuffix = JOB_CATEGORY_I18N_KEYS?.[s];
+    if (keySuffix) return t('postJob.category' + keySuffix);
+    // Custom categories (e.g. "Interior decorator") should show as-is
+    return s;
+  };
+
+  const categoryIconName = (cat) => {
+    const s = String(cat || '').trim();
+    if (!s) return 'work-outline';
+    if (s === 'Other') return 'more-horiz';
+    // App categories (JOB_CATEGORIES)
+    if (s === 'Delivery') return 'local-shipping';
+    if (s === 'Cooking') return 'restaurant';
+    if (s === 'Cleaning') return 'cleaning-services';
+    if (s === 'Plumbing') return 'plumbing';
+    if (s === 'Electrical') return 'electrical-services';
+    if (s === 'Mechanic') return 'build';
+    if (s === 'Driver') return 'drive-eta';
+    if (s === 'Care taker') return 'volunteer-activism';
+    if (s === 'Tailor') return 'checkroom';
+    if (s === 'Salon') return 'content-cut';
+    if (s === 'Laundry') return 'local-laundry-service';
+    // Back-compat / unknown
+    if (s === 'Barber') return 'content-cut';
+    return 'work-outline';
+  };
+
+  const filteredOtherOptions = useMemo(() => {
+    const q = String(otherQuery || '').trim().toLowerCase();
+    if (!q) return OTHER_WORK_OPTIONS;
+    return OTHER_WORK_OPTIONS.filter((opt) => {
+      const en = opt.toLowerCase();
+      const hi = String(otherTranslated[opt] || '').toLowerCase();
+      return en.includes(q) || (hi && hi.includes(q));
+    });
+  }, [otherQuery, otherTranslated]);
+
+  // Grid page: keep tighter so we don't show large empty space below 12 tiles.
+  // Other page: taller to show more subcategories.
+  const modalHeightPct = categoryModalPage === 'other' ? '84%' : '46%';
+
+  const unselectCategory = (cat) => {
+    setCategoryFilters((prev) => prev.filter((x) => x !== cat));
+  };
+
+  const labelForSelectedChip = (cat) => {
+    const s = String(cat || '').trim();
+    if (!s) return '';
+    if (locale === 'hi') {
+      // Show cached Hindi translation for "Other" options when available.
+      if (otherTranslated[s]) return otherTranslated[s];
+    }
+    return categoryLabel(s);
+  };
+
+  useEffect(() => {
+    if (!categoryModalVisible) return;
+    if (locale !== 'hi') return;
+    let cancelled = false;
+    const toTranslate = filteredOtherOptions.filter((opt) => otherTranslated[opt] == null).slice(0, 20);
+    if (toTranslate.length === 0) return;
+    (async () => {
+      const results = await Promise.all(toTranslate.map((s) => translateToHindi(s)));
+      if (cancelled) return;
+      setOtherTranslated((prev) => {
+        const next = { ...prev };
+        toTranslate.forEach((k, idx) => {
+          next[k] = results[idx] || k;
+        });
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryModalVisible, locale, filteredOtherOptions, otherTranslated]);
+
+  useEffect(() => {
+    if (!categoryModalVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (categoryModalPage === 'other') {
+        setCategoryModalPage('grid');
+        Animated.timing(categoryModalShift, {
+          toValue: 0,
+          duration: 260,
+          useNativeDriver: true,
+        }).start();
+        return true;
+      }
+      // On grid page: close modal
+      setCategoryModalVisible(false);
+      categoryModalShift.setValue(0);
+      setOtherQuery('');
+      setMultiSelectMode(false);
+      setCategoryModalPage('grid');
+      return true;
+    });
+    return () => sub.remove();
+  }, [categoryModalVisible, categoryModalPage, categoryModalShift]);
 
   const openOfferModal = (job) => {
     if (workCooldownRemainMs > 0) {
@@ -1032,7 +1519,7 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     const isPickedUp = item.assignedFreelancer || item.status !== 'open';
     // Can only pickup if: canWork is true, job is not picked up, and freelancer doesn't have active job
     const workCooldownActive = workCooldownRemainMs > 0;
-    const canPickup = canWork && !isPickedUp && !hasActiveJob && !workCooldownActive;
+    const canPickup = canWork && !isPickedUp && !effectiveHasActiveJob && !workCooldownActive;
 
     const jobId = item._id || item.id;
     const tr = locale === 'hi' && translatedJobs[jobId];
@@ -1048,7 +1535,7 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
     const canApply =
       canWork &&
       !isPickedUp &&
-      !hasActiveJob &&
+      !effectiveHasActiveJob &&
       !workCooldownActive &&
       !isWaitingApp &&
       applicationAllowsNewApply;
@@ -1057,7 +1544,7 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
       canWork &&
       cooldownMinutes === 0 &&
       !isPickedUp &&
-      !hasActiveJob &&
+      !effectiveHasActiveJob &&
       !workCooldownActive &&
       (delivery || appStatus !== 'accepted');
     const applyingThis = applyingJobId === jobId;
@@ -1068,7 +1555,11 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
         <Text style={styles.jobTitle} numberOfLines={2} ellipsizeMode="tail">
           {title}
         </Text>
-        <Text style={styles.jobBudget}>₹{item.budget}</Text>
+        <View style={styles.jobHeaderRightCol}>
+          <View style={styles.budgetRow}>
+            <Text style={styles.jobBudget}>₹{item.budget}</Text>
+          </View>
+        </View>
       </View>
       {!delivery && description ? (
         <View style={styles.descriptionBlock}>
@@ -1099,12 +1590,21 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
         hideLeadingIcon={!delivery}
       />
       <View style={styles.jobMetaRow}>
-        <JobMetaGenderOrDeliveryPins
-          job={item}
-          translated={tr}
-          t={t}
-          style={styles.jobMetaMainInner}
-        />
+        <View style={styles.jobMetaLeftRow}>
+          <JobMetaGenderOrDeliveryPins
+            job={item}
+            translated={tr}
+            t={t}
+              style={styles.jobMetaPinsInline}
+          />
+          {item?.category ? (
+            <View style={styles.categoryPill}>
+              <Text style={styles.categoryPillText} numberOfLines={1}>
+                {categoryLabel(item.category)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         {!delivery || item.distanceKm != null ? (
           <View style={styles.jobMetaDistance}>
             {!delivery ? (
@@ -1153,7 +1653,9 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
               { color: canPickup ? '#FFFFFF' : colors.text.muted },
             ]}
           >
-            {!canWork
+            {effectiveHasActiveJob
+              ? t('jobs.alreadyTaken')
+              : !canWork
               ? t('jobs.payDues')
               : workCooldownActive
               ? t('jobs.workCooldownShort')
@@ -1189,13 +1691,13 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
                   { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
                 ]}
               >
-                {!canWork
+                {effectiveHasActiveJob
+                  ? t('jobs.alreadyTaken')
+                  : !canWork
                   ? t('jobs.payDues')
                   : workCooldownActive
                   ? t('jobs.workCooldownShort')
                   : isPickedUp
-                  ? t('jobs.alreadyTaken')
-                  : hasActiveJob
                   ? t('jobs.alreadyTaken')
                   : isWaitingApp
                   ? t('jobs.waitingForClient')
@@ -1229,7 +1731,9 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
               { color: canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted },
             ]}
           >
-            {!canWork
+            {effectiveHasActiveJob
+              ? t('jobs.alreadyTaken')
+              : !canWork
               ? t('jobs.payDues')
               : workCooldownActive
               ? t('jobs.workCooldownShort')
@@ -1302,17 +1806,17 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
             <TouchableOpacity
               style={[
                 styles.filterOption,
-                selectedFilter === 'none' && !categoryFilter && styles.filterOptionActive,
+                selectedFilter === 'none' && categoryFilters.length === 0 && styles.filterOptionActive,
               ]}
               onPress={() => {
                 setSelectedFilter('none');
-                setCategoryFilter(null);
+                setCategoryFilters([]);
               }}
             >
               <Text
                 style={[
                   styles.filterOptionText,
-                  selectedFilter === 'none' && !categoryFilter && styles.filterOptionTextActive,
+                  selectedFilter === 'none' && categoryFilters.length === 0 && styles.filterOptionTextActive,
                 ]}
                 numberOfLines={1}
               >
@@ -1322,19 +1826,19 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
             <TouchableOpacity
               style={[
                 styles.filterOption,
-                categoryFilter != null && styles.filterOptionActive,
+                categoryFilters.length > 0 && styles.filterOptionActive,
               ]}
               onPress={() => setCategoryModalVisible(true)}
             >
               <Text
                 style={[
                   styles.filterOptionText,
-                  categoryFilter != null && styles.filterOptionTextActive,
+                  categoryFilters.length > 0 && styles.filterOptionTextActive,
                 ]}
                 numberOfLines={1}
               >
-                {categoryFilter
-                  ? `${t('jobs.filterCategory')}: ${categoryLabel(categoryFilter)}`
+                {categoryFilters.length > 0
+                  ? `${t('jobs.filterCategory')}: ${categoryFilters.length}`
                   : t('jobs.filterCategory')}
               </Text>
             </TouchableOpacity>
@@ -1439,7 +1943,24 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
         visible={categoryModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setCategoryModalVisible(false)}
+        onRequestClose={() => {
+          // Android hardware back triggers onRequestClose.
+          // If we're on the Other/Subcategories page, go back to grid instead of closing.
+          if (categoryModalPage === 'other') {
+            setCategoryModalPage('grid');
+            Animated.timing(categoryModalShift, {
+              toValue: 0,
+              duration: 260,
+              useNativeDriver: true,
+            }).start();
+            return;
+          }
+          setCategoryModalVisible(false);
+          categoryModalShift.setValue(0);
+          setOtherQuery('');
+          setMultiSelectMode(false);
+          setCategoryModalPage('grid');
+        }}
       >
         <View style={styles.categoryModalWrap}>
           <Pressable
@@ -1447,7 +1968,7 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
             onPress={() => setCategoryModalVisible(false)}
             accessibilityLabel={t('common.cancel')}
           />
-          <View style={styles.categoryModalContent}>
+          <View style={[styles.categoryModalContent, { height: modalHeightPct, maxHeight: modalHeightPct }]}>
             <View style={styles.categoryModalHeader}>
               <Text style={styles.categoryModalTitle}>{t('jobs.chooseCategoryTitle')}</Text>
               <TouchableOpacity
@@ -1458,36 +1979,182 @@ const AvailableJobs = ({ onJobPickedUp, workCooldownRemainMs = 0 }) => {
                 <MaterialIcons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
-            <View style={styles.categoryModalGrid}>
-              {Array.from({ length: Math.ceil(JOB_CATEGORIES.length / 3) }, (_, rowIndex) => (
-                <View key={rowIndex} style={styles.categoryModalRowWrap}>
-                  {JOB_CATEGORIES.slice(rowIndex * 3, rowIndex * 3 + 3).map((cat) => {
-                    const active = categoryFilter === cat;
-                    return (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[styles.categoryModalCell, active && styles.categoryModalCellActive]}
-                        onPress={() => {
-                          setCategoryFilter(cat);
-                          setCategoryModalVisible(false);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.categoryModalCellText,
-                            active && styles.categoryModalCellTextActive,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {categoryLabel(cat)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            <View style={styles.categoryModalBody}>
+              <Animated.View
+                style={[
+                  styles.categoryModalShiftRow,
+                  {
+                    transform: [
+                      {
+                        translateX: categoryModalShift.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, -(SCREEN_W - spacing.lg * 2)],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {/* Page 0: main categories (multi-select) */}
+                <View style={styles.categoryModalPage}>
+                  <View style={styles.categoryModalGrid}>
+                    {Array.from({ length: Math.ceil(JOB_CATEGORIES.length / 3) }, (_, rowIndex) => (
+                      <View key={rowIndex} style={styles.categoryModalRowWrap}>
+                        {JOB_CATEGORIES.slice(rowIndex * 3, rowIndex * 3 + 3).map((cat) => {
+                          const active = categoryFilters.includes(cat);
+                          return (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[styles.categoryModalCell, active && styles.categoryModalCellActive]}
+                              onPress={() => {
+                                if (cat === 'Other') {
+                                  setCategoryModalPage('other');
+                                  Animated.timing(categoryModalShift, {
+                                    toValue: 1,
+                                    duration: 260,
+                                    useNativeDriver: true,
+                                  }).start();
+                                  return;
+                                }
+                                if (!multiSelectMode) {
+                                  setCategoryFilters([cat]);
+                                  setCategoryModalVisible(false);
+                                  categoryModalShift.setValue(0);
+                                  setOtherQuery('');
+                                  setCategoryModalPage('grid');
+                                  return;
+                                }
+                                setCategoryFilters((prev) =>
+                                  prev.includes(cat) ? prev.filter((x) => x !== cat) : [...prev, cat]
+                                );
+                              }}
+                              onLongPress={() => {
+                                if (cat === 'Other') return;
+                                if (!multiSelectMode) setMultiSelectMode(true);
+                                setCategoryFilters((prev) =>
+                                  prev.includes(cat) ? prev.filter((x) => x !== cat) : [...prev, cat]
+                                );
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <MaterialIcons
+                                name={categoryIconName(cat)}
+                                size={22}
+                                color={active ? '#FFFFFF' : colors.primary.main}
+                                style={styles.categoryModalCellIcon}
+                              />
+                              <Text
+                                style={[
+                                  styles.categoryModalCellText,
+                                  active && styles.categoryModalCellTextActive,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {categoryLabel(cat)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              ))}
+
+                {/* Page 1: Other/subcategories (multi-select) */}
+                <View style={styles.categoryModalPage}>
+                  <View style={styles.categoryModalPageInner}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setCategoryModalPage('grid');
+                        Animated.timing(categoryModalShift, {
+                          toValue: 0,
+                          duration: 260,
+                          useNativeDriver: true,
+                        }).start();
+                      }}
+                      style={{ paddingVertical: 6 }}
+                    >
+                      <Text style={{ color: colors.primary.main, fontWeight: '800' }}>
+                        {t('common.back') || 'Back'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TextInput
+                      value={otherQuery}
+                      onChangeText={setOtherQuery}
+                      placeholder={t('postJob.searchOther')}
+                      placeholderTextColor={colors.text.muted}
+                      style={styles.otherSearchInput}
+                    />
+
+                    <ScrollView
+                      style={{ flex: 1 }}
+                      contentContainerStyle={{ paddingBottom: spacing.lg }}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {multiSelectMode && categoryFilters.length > 0 ? (
+                        <View style={styles.selectedChipsWrap}>
+                          {categoryFilters.map((cat) => (
+                            <TouchableOpacity
+                              key={cat}
+                              onPress={() => unselectCategory(cat)}
+                              activeOpacity={0.85}
+                              style={styles.selectedChip}
+                            >
+                              <Text style={styles.selectedChipText} numberOfLines={1}>
+                                {labelForSelectedChip(cat)}
+                              </Text>
+                              <MaterialIcons name="close" size={16} color={colors.text.secondary} />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {filteredOtherOptions.map((opt) => {
+                        const active = categoryFilters.includes(opt) || (opt === 'Others' && categoryFilters.includes('Other'));
+                        const displayText = locale === 'hi' ? otherTranslated[opt] || opt : opt;
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            activeOpacity={0.75}
+                            style={[styles.otherWorkItem, active && styles.otherWorkItemActive]}
+                            onPress={() => {
+                              // "Others" means generic Other category.
+                              const value = opt === 'Others' ? 'Other' : opt;
+                              if (!multiSelectMode) {
+                                setCategoryFilters([value]);
+                                setCategoryModalVisible(false);
+                                categoryModalShift.setValue(0);
+                                setOtherQuery('');
+                                setCategoryModalPage('grid');
+                                return;
+                              }
+                              setCategoryFilters((prev) =>
+                                prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                              );
+                            }}
+                            onLongPress={() => {
+                              const value = opt === 'Others' ? 'Other' : opt;
+                              if (!multiSelectMode) setMultiSelectMode(true);
+                              setCategoryFilters((prev) =>
+                                prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                              );
+                            }}
+                          >
+                            <Text style={styles.otherWorkItemText}>{displayText}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                </View>
+              </Animated.View>
             </View>
+
+            <Text style={styles.categoryModalHintText}>
+              Hold and tap to select multiple categories
+            </Text>
           </View>
         </View>
       </Modal>

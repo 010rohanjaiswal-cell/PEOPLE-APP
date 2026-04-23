@@ -20,6 +20,7 @@ import GpsBanner from '../../components/common/GpsBanner';
 import NotificationPermissionBanner from '../../components/common/NotificationPermissionBanner';
 import { useLocation } from '../../context/LocationContext';
 import { userAPI, verificationAPI, freelancerJobsAPI } from '../../api';
+import { hasSeenIntro } from '../../utils/introSeen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -361,16 +362,31 @@ const FreelancerDashboard = () => {
   const { requestPermission, checkPermission } = useLocation();
   const route = useRoute();
   const navigation = useNavigation();
+  const introCheckedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('AvailableJobs');
+  const [hasActiveAssignedJobState, setHasActiveAssignedJobState] = useState(false);
+
+  const refreshHasActiveAssignedJob = useCallback(async () => {
+    try {
+      const response = await freelancerJobsAPI.getAssignedJobs();
+      const list = parseAssignedJobsResponse(response);
+      setHasActiveAssignedJobState(hasActiveAssignedJob(list));
+    } catch (e) {
+      setHasActiveAssignedJobState(false);
+    }
+  }, []);
 
   /** When returning to main tabs: My Jobs if an active assigned job exists, else Available Jobs (matches client dashboard). */
   const goToMainTabPreferringMyJobs = useCallback(async () => {
     try {
       const response = await freelancerJobsAPI.getAssignedJobs();
       const list = parseAssignedJobsResponse(response);
-      setActiveTab(hasActiveAssignedJob(list) ? 'MyJobs' : 'AvailableJobs');
+      const has = hasActiveAssignedJob(list);
+      setHasActiveAssignedJobState(has);
+      setActiveTab(has ? 'MyJobs' : 'AvailableJobs');
     } catch (e) {
       console.warn('FreelancerDashboard: assigned jobs check failed', e?.message);
+      setHasActiveAssignedJobState(false);
       setActiveTab('AvailableJobs');
     }
   }, []);
@@ -380,9 +396,12 @@ const FreelancerDashboard = () => {
     try {
       const response = await freelancerJobsAPI.getAssignedJobs();
       const list = parseAssignedJobsResponse(response);
-      if (hasActiveAssignedJob(list)) setActiveTab('MyJobs');
+      const has = hasActiveAssignedJob(list);
+      setHasActiveAssignedJobState(has);
+      if (has) setActiveTab('MyJobs');
     } catch (e) {
       console.warn('FreelancerDashboard: assigned jobs check failed', e?.message);
+      setHasActiveAssignedJobState(false);
     }
   }, []);
 
@@ -390,6 +409,30 @@ const FreelancerDashboard = () => {
   useEffect(() => {
     switchToMyJobsIfAssignedJob();
   }, [switchToMyJobsIfAssignedJob]);
+
+  // Keep the "has active assigned job" flag fresh so admin-side unassign reflects quickly.
+  // This does NOT switch tabs; it only updates button gating in AvailableJobs.
+  useFocusEffect(
+    useCallback(() => {
+      refreshHasActiveAssignedJob();
+      const id = setInterval(() => {
+        refreshHasActiveAssignedJob();
+      }, 5000);
+      return () => clearInterval(id);
+    }, [refreshHasActiveAssignedJob])
+  );
+
+  // First visit: show freelancer intro once per user.
+  useEffect(() => {
+    if (introCheckedRef.current) return;
+    introCheckedRef.current = true;
+    (async () => {
+      const seen = await hasSeenIntro(user, 'freelancer');
+      if (!seen) {
+        navigation.reset({ index: 0, routes: [{ name: 'FreelancerIntro' }] });
+      }
+    })();
+  }, [navigation, user]);
 
   // Ask for GPS when user lands on freelancer dashboard (ensures dialog shows at right time)
   useEffect(() => {
@@ -701,6 +744,8 @@ const FreelancerDashboard = () => {
           <AvailableJobsScreen
             onJobPickedUp={() => setActiveTab('MyJobs')}
             workCooldownRemainMs={workCooldownRemainMs}
+            hasActiveAssignedJob={hasActiveAssignedJobState}
+            onActiveJobStatusChange={(active) => setHasActiveAssignedJobState(Boolean(active))}
           />
         ) : (
           <ActiveScreen />

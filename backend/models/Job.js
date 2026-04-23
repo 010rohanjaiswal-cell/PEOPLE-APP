@@ -147,6 +147,12 @@ const jobSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    /** Optional detailed feedback when client leaves a 1-star rating. */
+    clientRatingReason: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     // Marks that freelancer has fully completed this job from their side
     freelancerCompleted: {
       type: Boolean,

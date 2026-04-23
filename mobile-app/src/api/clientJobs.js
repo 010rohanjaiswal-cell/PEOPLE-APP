@@ -174,9 +174,10 @@ export const clientJobsAPI = {
    * @param {number} rating - 0..5
    * @returns {Promise}
    */
-  rateFreelancer: async (jobId, rating) => {
+  rateFreelancer: async (jobId, rating, reason) => {
     const response = await apiClient.post(`/api/client/jobs/${jobId}/rate-freelancer`, {
       rating,
+      ...(reason ? { reason } : {}),
     });
     return response.data;
   },
