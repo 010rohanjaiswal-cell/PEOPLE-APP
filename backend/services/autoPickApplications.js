@@ -3,6 +3,7 @@
  * Triggers: (1) ≥10 pending → immediate; (2) ≥5 pending and 30+ minutes since 5th application.
  */
 
+const mongoose = require('mongoose');
 const Job = require('../models/Job');
 const User = require('../models/User');
 const {
@@ -62,6 +63,8 @@ function rankPendingApplications(pending) {
  * @param {boolean} [opts.isAutoPick]
  */
 async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAutoPick = false }) {
+  let lockedFreelancerOid = null;
+  let lockAcquired = false;
   const job = await Job.findOne({
     _id: jobId,
     client: clientUserId,
@@ -90,6 +93,36 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
     const err = new Error('Application has already been processed');
     err.statusCode = 400;
     throw err;
+  }
+
+  const freelancerIdForCheckRaw =
+    application.freelancer?._id?.toString() ||
+    application.freelancer?.toString?.() ||
+    application.freelancer;
+
+  const freelancerObjectIdForCheck = mongoose.Types.ObjectId.isValid(String(freelancerIdForCheckRaw))
+    ? new mongoose.Types.ObjectId(String(freelancerIdForCheckRaw))
+    : null;
+
+  if (freelancerObjectIdForCheck) {
+    lockedFreelancerOid = freelancerObjectIdForCheck;
+    // Strong guarantee: acquire freelancer "bucket lock" (atomic).
+    // If they already have an activeAssignedJob, no one can assign them again.
+    const lock = await User.findOneAndUpdate(
+      { _id: freelancerObjectIdForCheck, role: 'freelancer', activeAssignedJob: null },
+      { $set: { activeAssignedJob: job._id, activeAssignedAt: new Date() } },
+      { new: true }
+    )
+      .select('_id activeAssignedJob')
+      .lean();
+
+    if (!lock) {
+      const err = new Error('Freelancer already picked another job');
+      err.statusCode = 409;
+      err.code = 'FREELANCER_ALREADY_ASSIGNED';
+      throw err;
+    }
+    lockAcquired = true;
   }
 
   application.status = 'accepted';
@@ -132,7 +165,48 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
 
   clearAutoPickTimer(job._id);
 
-  await job.save();
+  try {
+    await job.save();
+  } catch (e) {
+    // If we already acquired lock but job save fails, release lock to avoid stuck freelancers.
+    if (lockAcquired && lockedFreelancerOid) {
+      try {
+        await User.updateOne(
+          { _id: lockedFreelancerOid, activeAssignedJob: job._id },
+          { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+        );
+      } catch (unlockErr) {
+        console.error('Failed to release activeAssignedJob after job save failure:', unlockErr);
+      }
+    }
+    throw e;
+  }
+
+  // If this freelancer applied to other open jobs, mark those pending applications as rejected
+  // so other clients won't see them in the Applications list anymore.
+  const freelancerObjectId =
+    mongoose.Types.ObjectId.isValid(String(freelancerId)) ? new mongoose.Types.ObjectId(String(freelancerId)) : null;
+
+  if (freelancerObjectId) {
+    try {
+      await Job.updateMany(
+        {
+          _id: { $ne: job._id },
+          status: 'open',
+          assignedFreelancer: null,
+          'applications.freelancer': freelancerObjectId,
+        },
+        {
+          $set: { 'applications.$[a].status': 'rejected' },
+        },
+        {
+          arrayFilters: [{ 'a.freelancer': freelancerObjectId, 'a.status': 'pending' }],
+        }
+      );
+    } catch (e) {
+      console.error('Failed to reject other pending applications:', e);
+    }
+  }
 
   try {
     await notifyJobAssigned(freelancerId, clientName, job.title, job._id);

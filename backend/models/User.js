@@ -91,6 +91,20 @@ const userSchema = new mongoose.Schema({
     default: null,
     index: true,
   },
+  /**
+   * Freelancer-only: "bucket/lock" so one freelancer can only have one active assigned job at a time.
+   * Set when a client accepts an application/offer; cleared when the job is completed/cancelled/unassigned.
+   */
+  activeAssignedJob: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job',
+    default: null,
+    index: true,
+  },
+  activeAssignedAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -238,6 +238,18 @@ async function creditWalletFromJobPayment({ jobPayment, job, clientUser }) {
     await job.save();
   }
 
+  // Release freelancer bucket lock (if it still points to this job)
+  try {
+    if (job?.assignedFreelancer) {
+      await User.updateOne(
+        { _id: job.assignedFreelancer, activeAssignedJob: job._id },
+        { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+      );
+    }
+  } catch (e) {
+    console.error('Failed to release activeAssignedJob (Cashfree completion):', e);
+  }
+
   return { alreadyProcessed: false, amountReceived, platformCommission };
 }
 

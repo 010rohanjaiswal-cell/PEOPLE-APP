@@ -927,6 +927,30 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
       });
     }
 
+    const freelancerIdRaw = offer.freelancer?._id?.toString() || offer.freelancer?.toString?.() || offer.freelancer;
+    const freelancerOid = mongoose.Types.ObjectId.isValid(String(freelancerIdRaw))
+      ? new mongoose.Types.ObjectId(String(freelancerIdRaw))
+      : null;
+
+    // Acquire freelancer bucket lock (atomic) before assigning.
+    if (freelancerOid) {
+      const lock = await User.findOneAndUpdate(
+        { _id: freelancerOid, role: 'freelancer', activeAssignedJob: null },
+        { $set: { activeAssignedJob: job._id, activeAssignedAt: new Date() } },
+        { new: true }
+      )
+        .select('_id activeAssignedJob')
+        .lean();
+
+      if (!lock) {
+        return res.status(409).json({
+          success: false,
+          code: 'FREELANCER_ALREADY_ASSIGNED',
+          error: 'Freelancer already picked another job',
+        });
+      }
+    }
+
     // Accept the offer
     offer.status = 'accepted';
     // Reject all other pending offers
@@ -1233,6 +1257,7 @@ router.post('/jobs/:id/accept-application', authenticate, async (req, res) => {
     const code = error.statusCode || 500;
     res.status(code >= 400 && code < 600 ? code : 500).json({
       success: false,
+      code: error.code || undefined,
       error: error.message || 'Failed to accept application',
     });
   }
@@ -1380,6 +1405,19 @@ router.post('/jobs/:id/pay', authenticate, async (req, res) => {
     });
 
     await job.save();
+
+    // Release freelancer bucket lock (if it still points to this job)
+    try {
+      const freelancerIdToUnlock = job.assignedFreelancer?._id?.toString() || job.assignedFreelancer?.toString?.();
+      if (freelancerIdToUnlock) {
+        await User.updateOne(
+          { _id: freelancerIdToUnlock, activeAssignedJob: job._id },
+          { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+        );
+      }
+    } catch (e) {
+      console.error('Failed to release activeAssignedJob on completion:', e);
+    }
 
     // Notify freelancer about payment received
     try {

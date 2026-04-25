@@ -65,13 +65,12 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [processingId, setProcessingId] = useState(null);
-  const [acceptConfirmVisible, setAcceptConfirmVisible] = useState(false);
-  const [rejectConfirmVisible, setRejectConfirmVisible] = useState(false);
   const [acceptSuccessVisible, setAcceptSuccessVisible] = useState(false);
   const [rejectSuccessVisible, setRejectSuccessVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedApplicationId, setSelectedApplicationId] = useState(null);
+  const [acceptInlineErrors, setAcceptInlineErrors] = useState({});
   const [autoPickEnabled, setAutoPickEnabled] = useState(true);
   const [autoPickSaving, setAutoPickSaving] = useState(false);
   const [photoPreviewUri, setPhotoPreviewUri] = useState(null);
@@ -120,6 +119,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       setLoading(false);
       setErrorMessage('');
       setAutoPickEnabled(true);
+      setAcceptInlineErrors({});
       setPhotoPreviewUri(null);
       setFreelancerProfileModalOpen(false);
       setFreelancerProfileUser(null);
@@ -144,6 +144,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
       if (response && response.success) {
         const list = response.applications || [];
         setApplications(list);
+        setAcceptInlineErrors({});
         if (typeof response.autoPickEnabled === 'boolean') {
           setAutoPickEnabled(response.autoPickEnabled);
         } else {
@@ -186,30 +187,46 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
     }
   };
 
-  const handleAccept = (applicationId) => {
-    setSelectedApplicationId(applicationId);
-    setAcceptConfirmVisible(true);
-  };
-
-  const confirmAccept = async () => {
+  const handleAccept = async (applicationId) => {
     const jobId = job?._id || job?.id;
-    if (!jobId || !selectedApplicationId) return;
-
-    setAcceptConfirmVisible(false);
+    if (!jobId || !applicationId) return;
     try {
-      setProcessingId(selectedApplicationId);
-      const response = await clientJobsAPI.acceptApplication(jobId, selectedApplicationId);
+      setSelectedApplicationId(applicationId);
+      setAcceptInlineErrors((prev) => {
+        if (!prev || !prev[applicationId]) return prev;
+        const next = { ...prev };
+        delete next[applicationId];
+        return next;
+      });
+      setProcessingId(applicationId);
+      const response = await clientJobsAPI.acceptApplication(jobId, applicationId);
       if (response.success) {
         setProcessingId(null);
         setAcceptSuccessVisible(true);
       } else {
         setProcessingId(null);
+        const code = response?.code;
+        if (code === 'FREELANCER_ALREADY_ASSIGNED') {
+          setAcceptInlineErrors((prev) => ({
+            ...(prev || {}),
+            [applicationId]: response?.error || 'Freelancer already picked another job',
+          }));
+          return;
+        }
         setErrorMessage(response.error || t('applications.failedAccept'));
         setErrorModalVisible(true);
       }
     } catch (err) {
       console.error('Error accepting application:', err);
       setProcessingId(null);
+      const code = err.response?.data?.code;
+      if (code === 'FREELANCER_ALREADY_ASSIGNED') {
+        setAcceptInlineErrors((prev) => ({
+          ...(prev || {}),
+          [applicationId]: err.response?.data?.error || 'Freelancer already picked another job',
+        }));
+        return;
+      }
       setErrorMessage(err.response?.data?.error || t('applications.failedAccept'));
       setErrorModalVisible(true);
     }
@@ -221,23 +238,17 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
     onClose();
   };
 
-  const handleReject = (applicationId) => {
-    setSelectedApplicationId(applicationId);
-    setRejectConfirmVisible(true);
-  };
-
-  const confirmReject = async () => {
+  const handleReject = async (applicationId) => {
     const jobId = job?._id || job?.id;
-    if (!jobId || !selectedApplicationId) return;
-
-    setRejectConfirmVisible(false);
+    if (!jobId || !applicationId) return;
     try {
-      setProcessingId(selectedApplicationId);
-      const response = await clientJobsAPI.rejectApplication(jobId, selectedApplicationId);
+      setSelectedApplicationId(applicationId);
+      setProcessingId(applicationId);
+      const response = await clientJobsAPI.rejectApplication(jobId, applicationId);
       if (response.success) {
         setProcessingId(null);
         setApplications((prev) =>
-          prev.filter((a) => (a._id?.toString() || '') !== (selectedApplicationId?.toString() || ''))
+          prev.filter((a) => (a._id?.toString() || '') !== (applicationId?.toString() || ''))
         );
         setRejectSuccessVisible(true);
       } else {
@@ -389,17 +400,24 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
                             >
                               <Text style={styles.rejectText}>{t('applications.reject')}</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => handleAccept(aid)}
-                              disabled={isProcessing}
-                              style={[styles.actionTouchable, styles.acceptTouchable]}
-                            >
-                              {isProcessing ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                              ) : (
-                                <Text style={styles.acceptText}>{t('applications.accept')}</Text>
+                            <View style={styles.acceptCol}>
+                              <TouchableOpacity
+                                onPress={() => handleAccept(aid)}
+                                disabled={isProcessing}
+                                style={[styles.actionTouchable, styles.acceptTouchable]}
+                              >
+                                {isProcessing ? (
+                                  <ActivityIndicator color="#FFFFFF" size="small" />
+                                ) : (
+                                  <Text style={styles.acceptText}>{t('applications.accept')}</Text>
+                                )}
+                              </TouchableOpacity>
+                              {!!acceptInlineErrors?.[aid] && (
+                                <Text style={styles.acceptInlineErrorText}>
+                                  {acceptInlineErrors[aid]}
+                                </Text>
                               )}
-                            </TouchableOpacity>
+                            </View>
                           </View>
                         )}
                       </View>
@@ -511,33 +529,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
         </View>
       </Modal>
 
-      <Modal
-        visible={acceptConfirmVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAcceptConfirmVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('applications.acceptTitle')}</Text>
-            <Text style={styles.modalSubtitle}>{t('applications.acceptConfirm')}</Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setAcceptConfirmVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton]}
-                onPress={confirmAccept}
-              >
-                <Text style={styles.modalSubmitText}>{t('applications.accept')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Accept confirmation removed (instant accept). */}
 
       <Modal
         visible={acceptSuccessVisible}
@@ -564,33 +556,7 @@ const ApplicationsModal = ({ visible, job, onClose, onApplicationAccepted }) => 
         </View>
       </Modal>
 
-      <Modal
-        visible={rejectConfirmVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejectConfirmVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('applications.rejectTitle')}</Text>
-            <Text style={styles.modalSubtitle}>{t('applications.rejectConfirm')}</Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setRejectConfirmVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.rejectModalButton]}
-                onPress={confirmReject}
-              >
-                <Text style={styles.modalSubmitText}>{t('applications.reject')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Reject confirmation removed (instant reject). */}
 
       <Modal
         visible={rejectSuccessVisible}
@@ -796,6 +762,16 @@ function createApplicationsStyles(colors) {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
+    alignItems: 'flex-start',
+  },
+  acceptCol: {
+    flex: 1,
+  },
+  acceptInlineErrorText: {
+    ...typography.small,
+    color: colors.error.main,
+    marginTop: spacing.xs,
+    paddingHorizontal: 2,
   },
   actionTouchable: {
     flex: 1,

@@ -29,8 +29,6 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [processingOfferId, setProcessingOfferId] = useState(null);
-  const [acceptConfirmVisible, setAcceptConfirmVisible] = useState(false);
-  const [rejectConfirmVisible, setRejectConfirmVisible] = useState(false);
   const [acceptSuccessVisible, setAcceptSuccessVisible] = useState(false);
   const [rejectSuccessVisible, setRejectSuccessVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -94,19 +92,13 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     loadOffers();
   };
 
-  const handleAcceptOffer = (offerId) => {
-    setSelectedOfferId(offerId);
-    setAcceptConfirmVisible(true);
-  };
-
-  const confirmAcceptOffer = async () => {
+  const handleAcceptOffer = async (offerId) => {
     const jobId = job?._id || job?.id;
-    if (!jobId || !selectedOfferId) return;
-    
-    setAcceptConfirmVisible(false);
+    if (!jobId || !offerId) return;
     try {
-      setProcessingOfferId(selectedOfferId);
-      const response = await clientJobsAPI.acceptOffer(jobId, selectedOfferId);
+      setSelectedOfferId(offerId);
+      setProcessingOfferId(offerId);
+      const response = await clientJobsAPI.acceptOffer(jobId, offerId);
       if (response.success) {
         setProcessingOfferId(null);
         setAcceptSuccessVisible(true);
@@ -129,26 +121,21 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
     onClose();
   };
 
-  const handleRejectOffer = (offerId) => {
-    setSelectedOfferId(offerId);
-    setRejectConfirmVisible(true);
-  };
-
-  const confirmRejectOffer = async () => {
+  const handleRejectOffer = async (offerId) => {
     const jobId = job?._id || job?.id;
-    if (!jobId || !selectedOfferId) return;
-    
-    setRejectConfirmVisible(false);
+    if (!jobId || !offerId) return;
     try {
-      setProcessingOfferId(selectedOfferId);
-      const response = await clientJobsAPI.rejectOffer(jobId, selectedOfferId);
+      const offerIdToReject = offerId;
+      setSelectedOfferId(offerId);
+      setProcessingOfferId(offerId);
+      const response = await clientJobsAPI.rejectOffer(jobId, offerId);
       if (response.success) {
         setProcessingOfferId(null);
         // Remove rejected offer from the list automatically
         setOffers(prevOffers => {
           const filtered = prevOffers.filter(offer => {
             const offerId = (offer._id?.toString() || offer.id?.toString() || '').trim();
-            const selectedId = (selectedOfferId?.toString() || '').trim();
+            const selectedId = (String(offerIdToReject) || '').trim();
             // Remove the offer that was just rejected
             if (offerId === selectedId) {
               return false;
@@ -287,36 +274,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
       </View>
     </Modal>
 
-    {/* Accept Offer Confirmation Modal */}
-    <Modal
-      visible={acceptConfirmVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setAcceptConfirmVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('offers.acceptOffer')}</Text>
-          <Text style={styles.modalSubtitle}>
-            {t('offers.acceptOfferConfirm')}
-          </Text>
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={() => setAcceptConfirmVisible(false)}
-            >
-              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSubmitButton]}
-              onPress={confirmAcceptOffer}
-            >
-              <Text style={styles.modalSubmitText}>{t('offers.accept')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
+    {/* Accept confirmation removed (instant accept). */}
 
     {/* Accept Offer Success Modal */}
     <Modal
@@ -346,36 +304,7 @@ const OffersModal = ({ visible, job, onClose, onOfferAccepted }) => {
       </View>
     </Modal>
 
-    {/* Reject Offer Confirmation Modal */}
-    <Modal
-      visible={rejectConfirmVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setRejectConfirmVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('offers.rejectOffer')}</Text>
-          <Text style={styles.modalSubtitle}>
-            {t('offers.rejectOfferConfirm')}
-          </Text>
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalCancelButton]}
-              onPress={() => setRejectConfirmVisible(false)}
-            >
-              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.modalSubmitButton, styles.rejectModalButton]}
-              onPress={confirmRejectOffer}
-            >
-              <Text style={styles.modalSubmitText}>{t('offers.reject')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
+    {/* Reject confirmation removed (instant reject). */}
 
     {/* Reject Offer Success Modal */}
     <Modal

@@ -252,11 +252,24 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
 
     let unassignedJobId = null;
     if (job) {
+      const prevFreelancerId = job.assignedFreelancer;
       job.assignedFreelancer = null;
       job.status = 'open';
       job.freelancerCompleted = false;
       await job.save();
       unassignedJobId = job._id;
+
+      // Release freelancer bucket lock (if it still points to this job)
+      try {
+        if (prevFreelancerId) {
+          await User.updateOne(
+            { _id: prevFreelancerId, activeAssignedJob: job._id },
+            { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+          );
+        }
+      } catch (e) {
+        console.error('Failed to release activeAssignedJob on cancel-order unassign:', e);
+      }
     }
 
     ticket.effects.unassignedJobId = unassignedJobId;
@@ -369,11 +382,22 @@ router.post('/tickets/:id/actions/client-unassign', authenticate, async (req, re
 
     let unassignedJobId = null;
     if (job && job.assignedFreelancer) {
+      const prevFreelancerId = job.assignedFreelancer;
       job.assignedFreelancer = null;
       job.status = 'open';
       job.freelancerCompleted = false;
       await job.save();
       unassignedJobId = job._id;
+
+      // Release freelancer bucket lock (if it still points to this job)
+      try {
+        await User.updateOne(
+          { _id: prevFreelancerId, activeAssignedJob: job._id },
+          { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+        );
+      } catch (e) {
+        console.error('Failed to release activeAssignedJob on client-unassign:', e);
+      }
     }
 
     ticket.effects.unassignedJobId = unassignedJobId;
@@ -555,10 +579,23 @@ router.post('/tickets/:id/actions/client-cancel-job', authenticate, async (req, 
       return res.json({ success: true, cancelled: false, ticket });
     }
 
+    const prevFreelancerId = job.assignedFreelancer;
     job.status = 'cancelled';
     job.assignedFreelancer = null;
     job.freelancerCompleted = false;
     await job.save();
+
+    // Release freelancer bucket lock (if it still points to this job)
+    try {
+      if (prevFreelancerId) {
+        await User.updateOne(
+          { _id: prevFreelancerId, activeAssignedJob: job._id },
+          { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+        );
+      }
+    } catch (e) {
+      console.error('Failed to release activeAssignedJob on cancel job:', e);
+    }
 
     ticket.messages.push({
       sender: 'system',
