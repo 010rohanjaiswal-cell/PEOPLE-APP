@@ -9,7 +9,7 @@ import {
   Text,
   StyleSheet,
   Modal,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
@@ -71,6 +71,7 @@ function createNotificationModalStyles(colors) {
     },
     contentContainer: {
       padding: spacing.md,
+      paddingBottom: spacing.xxl,
     },
     notificationItem: {
       backgroundColor: colors.cardBackground,
@@ -256,6 +257,25 @@ const NotificationModal = ({ visible, onClose }) => {
     onClose();
   };
 
+  const filteredNotifications = useMemo(() => {
+    const allowedTypes = [
+      'offer_received',
+      'application_received',
+      'auto_pick',
+      'offer_accepted',
+      'offer_rejected',
+      'application_rejected',
+      'job_picked_up',
+      'job_assigned',
+      'job_completed',
+      'work_done',
+      'payment_received',
+      'payment_sent',
+      'profile_verified',
+    ];
+    return (notifications || []).filter((n) => allowedTypes.includes(n.type));
+  }, [notifications]);
+
   return (
     <Modal
       visible={visible}
@@ -286,10 +306,13 @@ const NotificationModal = ({ visible, onClose }) => {
                 />
               </View>
             ) : (
-              <ScrollView
+              <FlatList
+                data={filteredNotifications}
+                keyExtractor={(item) => String(item?._id || item?.id)}
                 style={styles.content}
                 contentContainerStyle={styles.contentContainer}
-                showsVerticalScrollIndicator={true}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
@@ -298,85 +321,57 @@ const NotificationModal = ({ visible, onClose }) => {
                     tintColor={colors.primary.main}
                   />
                 }
-              >
-                {notifications
-                  .filter((notification) => {
-                    // Only show specific notification types
-                    const allowedTypes = [
-                      'offer_received',
-                      'application_received',
-                      'auto_pick',
-                      'offer_accepted',
-                      'offer_rejected',
-                      'application_rejected',
-                      'job_picked_up',
-                      'job_assigned',
-                      'job_completed',
-                      'work_done',
-                      'payment_received',
-                      'payment_sent',
-                      'profile_verified',
-                    ];
-                    return allowedTypes.includes(notification.type);
-                  })
-                  .map((notification) => {
-                    const tr = locale === 'hi' && translatedNotifications[notification._id];
-                    const displayTitle = tr ? tr.title : (notification.title || '');
-                    const displayMessage = tr ? tr.message : (notification.message || '');
-                    return (
-                  <TouchableOpacity
-                    key={notification._id}
-                    style={[
-                      styles.notificationItem,
-                      !notification.read && styles.unreadNotification,
-                    ]}
-                    onPress={() => handleNotificationPress(notification)}
-                  >
-                    <View style={styles.notificationContent}>
-                      <View
-                        style={[
-                          styles.iconContainer,
-                          { backgroundColor: getNotificationColor(notification.type) + '20' },
-                        ]}
-                      >
-                        <MaterialIcons
-                          name={getNotificationIcon(notification.type)}
-                          size={24}
-                          color={getNotificationColor(notification.type)}
-                        />
-                      </View>
-                      <View style={styles.notificationText}>
-                        <Text style={styles.notificationTitle}>
-                          {displayTitle}
-                        </Text>
-                        <Text
+                renderItem={({ item: notification }) => {
+                  const tr = locale === 'hi' && translatedNotifications[notification._id];
+                  const displayTitle = tr ? tr.title : (notification.title || '');
+                  const displayMessage = tr ? tr.message : (notification.message || '');
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.notificationItem,
+                        !notification.read && styles.unreadNotification,
+                      ]}
+                      onPress={() => handleNotificationPress(notification)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.notificationContent}>
+                        <View
                           style={[
-                            styles.notificationMessage,
-                            !notification.read && styles.unreadText,
+                            styles.iconContainer,
+                            { backgroundColor: getNotificationColor(notification.type) + '20' },
                           ]}
                         >
-                          {displayMessage}
-                        </Text>
-                        <Text style={styles.notificationTime}>
-                          {formatTime(notification.createdAt)}
-                        </Text>
+                          <MaterialIcons
+                            name={getNotificationIcon(notification.type)}
+                            size={24}
+                            color={getNotificationColor(notification.type)}
+                          />
+                        </View>
+                        <View style={styles.notificationText}>
+                          <Text style={styles.notificationTitle}>{displayTitle}</Text>
+                          <Text
+                            style={[
+                              styles.notificationMessage,
+                              !notification.read && styles.unreadText,
+                            ]}
+                          >
+                            {displayMessage}
+                          </Text>
+                          <Text style={styles.notificationTime}>{formatTime(notification.createdAt)}</Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => deleteNotification(notification._id)}
+                          style={styles.deleteButton}
+                          hitSlop={10}
+                        >
+                          <MaterialIcons name="delete-outline" size={20} color={colors.text.muted} />
+                        </TouchableOpacity>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => deleteNotification(notification._id)}
-                        style={styles.deleteButton}
-                      >
-                        <MaterialIcons
-                          name="delete-outline"
-                          size={20}
-                          color={colors.text.muted}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    {!notification.read && <View style={styles.unreadDot} />}
-                  </TouchableOpacity>
-                    );
-                  })}
-              </ScrollView>
+                      {!notification.read && <View style={styles.unreadDot} />}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
             )}
           </View>
         </View>

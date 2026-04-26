@@ -98,6 +98,7 @@ const Input = ({
   rightIcon,
   style,
   inputStyle,
+  inputContainerStyle,
   /** Soft 3D look: shadow, no hard border (auth screens). */
   elevated = false,
   /** Use fixed light palette (e.g. login) even when app dark mode is on. */
@@ -122,6 +123,7 @@ const Input = ({
           elevated && styles.inputContainerElevated,
           error && styles.inputError,
           disabled && styles.inputDisabled,
+          inputContainerStyle,
         ]}
       >
         {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}

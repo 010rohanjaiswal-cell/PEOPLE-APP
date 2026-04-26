@@ -184,7 +184,7 @@ const Settings = ({ onNavigate }) => {
       <Card style={styles.card}>
         <CardContent>
           <Text style={styles.sectionTitle}>{t('settings.appVersion')}</Text>
-          <Text style={styles.versionText}>1.0.0</Text>
+          <Text style={styles.versionText}>1.0.0 (9)</Text>
         </CardContent>
       </Card>
     </ScrollView>

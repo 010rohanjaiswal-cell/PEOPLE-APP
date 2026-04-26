@@ -13,7 +13,7 @@ export const JOB_CATEGORIES = [
   'Driver',
   'Care taker',
   'Tailor',
-  'Barber',
+  'Salon',
   'Laundry',
   'Other',
 ];

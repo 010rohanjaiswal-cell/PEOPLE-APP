@@ -24,7 +24,7 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
@@ -35,10 +35,23 @@
     "production": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       },
       "credentialsSource": "local"
       ,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",
+        "EXPO_PUBLIC_MSG91_AUTH_TOKEN": "506327T32vCL43Zn69d37dfdP1"
+      }
+    },
+    "production-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "credentialsSource": "local",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
         "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",

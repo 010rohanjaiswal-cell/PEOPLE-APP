@@ -21,8 +21,11 @@ import {
   Animated,
   Dimensions,
   BackHandler,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
@@ -41,6 +44,7 @@ import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCateg
 import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+const TOAST_DURATION_MS = 4500;
 
 function normalizeOtherOption(s) {
   return String(s || '')
@@ -207,7 +211,7 @@ function messageForFreelancerPickupBlocked(t, payload) {
   return t('jobs.pickupApplyBlockedDetail', { time: timeStr });
 }
 
-function createAvailableJobsStyles(colors, isDark) {
+function createAvailableJobsStyles(colors, isDark, toastTop) {
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -271,6 +275,14 @@ function createAvailableJobsStyles(colors, isDark) {
     flex: 1,
     minWidth: 0,
     marginRight: spacing.xs,
+  },
+  titleArrowInline: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.cardBackground,
+    paddingLeft: 6,
+    paddingTop: 2,
   },
   jobBudget: {
     ...typography.body,
@@ -374,6 +386,10 @@ function createAvailableJobsStyles(colors, isDark) {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  jobDirectionsIconButtonDisabled: {
+    borderColor: colors.text.muted,
+    backgroundColor: 'transparent',
+  },
   descriptionBlock: {
     position: 'relative',
     marginTop: spacing.xs,
@@ -422,6 +438,10 @@ function createAvailableJobsStyles(colors, isDark) {
     borderWidth: 1,
     flex: 1,
   },
+  activeJobBlockedButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
   pickupButton: {
     backgroundColor: colors.success.main,
     borderColor: colors.success.main,
@@ -447,6 +467,15 @@ function createAvailableJobsStyles(colors, isDark) {
     ...typography.small,
     fontWeight: '600',
   },
+  activeJobBlockedButtonText: {
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: 'center',
+    flex: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    includeFontPadding: false,
+  },
   /** On primary/success fills, always white (light theme used `background` = white; dark `background` is near-black). */
   pickupButtonText: {
     color: '#FFFFFF',
@@ -470,6 +499,30 @@ function createAvailableJobsStyles(colors, isDark) {
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  toast: {
+    position: 'absolute',
+    top: toastTop,
+    left: 12,
+    right: 12,
+    zIndex: 9999,
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  toastText: {
+    ...typography.small,
+    color: colors.text.primary,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   applySuccessBanner: {
     backgroundColor: colors.success.main,
@@ -832,7 +885,58 @@ const AvailableJobs = ({
   const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords, requestPermission } = useLocation();
   const { colors, isDark } = useTheme();
-  const styles = useMemo(() => createAvailableJobsStyles(colors, isDark), [colors, isDark]);
+  const insets = useSafeAreaInsets();
+  // More top gap so toast never hugs status bar / notch.
+  const toastTop = Math.max(24, (insets?.top ?? 0) + 24);
+  const styles = useMemo(() => createAvailableJobsStyles(colors, isDark, toastTop), [colors, isDark, toastTop]);
+
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef(null);
+  const [toastMsg, setToastMsg] = useState('');
+  const [keyboardPad, setKeyboardPad] = useState(0);
+
+  const showToast = useCallback(
+    (msg) => {
+      if (!msg) return;
+      setToastMsg(String(msg));
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      Animated.timing(toastAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      toastTimerRef.current = setTimeout(() => {
+        Animated.timing(toastAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(() => setToastMsg(''));
+      }, TOAST_DURATION_MS);
+    },
+    [toastAnim]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  // Lift the Offer modal when keyboard opens (keep Submit visible).
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardPad(e.endCoordinates?.height ?? 0)
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardPad(0)
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
 
   const freelancerId = user?.id || user?._id || null;
@@ -840,7 +944,8 @@ const AvailableJobs = ({
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [canWork, setCanWork] = useState(false); // Default to false until wallet status is loaded
+  // null = unknown (wallet not loaded yet). This prevents "Pay dues" flicker.
+  const [canWork, setCanWork] = useState(null);
   const [offerModalVisible, setOfferModalVisible] = useState(false);
   const [offerJob, setOfferJob] = useState(null);
   const [offerAmount, setOfferAmount] = useState('');
@@ -854,7 +959,6 @@ const AvailableJobs = ({
   const [applySuccessBannerVisible, setApplySuccessBannerVisible] = useState(false);
   const applySuccessBannerTimerRef = useRef(null);
   const [offerSuccessModalVisible, setOfferSuccessModalVisible] = useState(false);
-  const [offerErrorModalVisible, setOfferErrorModalVisible] = useState(false);
   const [offerErrorMessage, setOfferErrorMessage] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('none');
   /** Multi-select categories; when empty, show all. */
@@ -871,6 +975,8 @@ const AvailableJobs = ({
   // When locale is Hindi, cache translated title/description/address/pincode per job
   const [translatedJobs, setTranslatedJobs] = useState({});
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
+  const [expandedTitleIds, setExpandedTitleIds] = useState({});
+  const [truncatedTitleIds, setTruncatedTitleIds] = useState({});
 
   const fetchInFlightRef = useRef(false);
   const activeJobCheckInFlightRef = useRef(false);
@@ -1143,7 +1249,7 @@ const AvailableJobs = ({
       Alert.alert(t('jobs.cannotPickup'), t('jobs.workCooldownBlocked'));
       return;
     }
-    if (!canWork) {
+    if (canWork !== true) {
       Alert.alert(t('jobs.cannotPickup'), t('jobs.cannotPickupPayDues'));
       return;
     }
@@ -1188,7 +1294,7 @@ const AvailableJobs = ({
       Alert.alert(t('jobs.cannotApply'), t('jobs.workCooldownBlocked'));
       return;
     }
-    if (!canWork) {
+    if (canWork !== true) {
       Alert.alert(t('jobs.cannotApply'), t('jobs.cannotApplyPayDues'));
       return;
     }
@@ -1391,7 +1497,7 @@ const AvailableJobs = ({
       Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.workCooldownBlocked'));
       return;
     }
-    if (!canWork) {
+    if (canWork !== true) {
       Alert.alert(t('jobs.cannotMakeOffer'), t('jobs.cannotMakeOfferPayDues'));
       return;
     }
@@ -1416,8 +1522,11 @@ const AvailableJobs = ({
     if (!offerJob) return;
     const amountNumber = Number(offerAmount);
     if (!amountNumber || amountNumber <= 0) {
-      setOfferErrorMessage('Please enter a valid offer amount.');
-      setOfferErrorModalVisible(true);
+      showToast('Please enter a valid offer amount.');
+      return;
+    }
+    if (amountNumber < 10) {
+      showToast('Minimum offer amount is ₹10.');
       return;
     }
 
@@ -1435,19 +1544,22 @@ const AvailableJobs = ({
         loadJobs();
       } else {
         setSubmittingOffer(false);
-        setOfferErrorMessage(
-          messageForFreelancerPickupBlocked(t, response) || response.error || 'Failed to submit offer'
-        );
-        setOfferErrorModalVisible(true);
+        const msg =
+          messageForFreelancerPickupBlocked(t, response) || response.error || 'Failed to submit offer';
+        setOfferErrorMessage(msg);
+        showToast(msg);
       }
     } catch (err) {
       console.error('Error submitting offer:', err);
       setSubmittingOffer(false);
       const data = err.response?.data;
-      setOfferErrorMessage(
-        messageForFreelancerPickupBlocked(t, data) || data?.error || err.message || 'Failed to submit offer'
-      );
-      setOfferErrorModalVisible(true);
+      const msg =
+        messageForFreelancerPickupBlocked(t, data) ||
+        data?.error ||
+        err.message ||
+        'Failed to submit offer';
+      setOfferErrorMessage(msg);
+      showToast(msg);
     }
   };
 
@@ -1514,18 +1626,47 @@ const AvailableJobs = ({
   );
 
   const renderJobItem = ({ item }) => {
+    const canWorkKnown = canWork === true || canWork === false;
     const cooldownMinutes = getOfferCooldownMinutes(item);
     // Check if job is already picked up (by any freelancer)
     const isPickedUp = item.assignedFreelancer || item.status !== 'open';
+    const isAssignedToMe = Boolean(
+      freelancerId &&
+        (item?.assignedFreelancer === freelancerId ||
+          item?.assignedFreelancer?._id === freelancerId ||
+          item?.assignedFreelancer?.toString?.() === freelancerId)
+    );
     // Can only pickup if: canWork is true, job is not picked up, and freelancer doesn't have active job
     const workCooldownActive = workCooldownRemainMs > 0;
-    const canPickup = canWork && !isPickedUp && !effectiveHasActiveJob && !workCooldownActive;
+    const canPickup = canWork === true && !isPickedUp && !effectiveHasActiveJob && !workCooldownActive;
 
     const jobId = item._id || item.id;
     const tr = locale === 'hi' && translatedJobs[jobId];
     const title = tr ? tr.title : item.title;
     const delivery = isDeliveryJob(item);
     const description = tr ? tr.description : (item.description || '');
+
+    // Address privacy: hide Room/Flat No and House/Building Name until assigned to this freelancer.
+    const maskComposedAddress = (addr) => {
+      const s = String(addr || '').trim();
+      if (!s) return s;
+      const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+      // If address is composed as "flat, building, rest...", mask only flat/building.
+      if (parts.length <= 2) return s;
+      const rest = parts.slice(2).join(', ');
+      return ['###', '#####', rest].filter(Boolean).join(', ');
+    };
+    let translatedForLocation = tr || null;
+    if (!isAssignedToMe) {
+      if (delivery) {
+        const from = maskComposedAddress(tr?.deliveryFromAddress ?? item?.deliveryFromAddress);
+        const to = maskComposedAddress(tr?.deliveryToAddress ?? item?.deliveryToAddress);
+        translatedForLocation = { ...(tr || {}), deliveryFromAddress: from, deliveryToAddress: to };
+      } else {
+        const masked = maskComposedAddress(tr?.address ?? item?.address);
+        translatedForLocation = { ...(tr || {}), address: masked };
+      }
+    }
     const myApp = item.myApplication;
     const appStatus = myApp?.status;
     const isWaitingApp = !delivery && appStatus === 'pending';
@@ -1533,7 +1674,7 @@ const AvailableJobs = ({
     const applicationAllowsNewApply =
       myApp == null || appStatus === 'rejected';
     const canApply =
-      canWork &&
+      canWork === true &&
       !isPickedUp &&
       !effectiveHasActiveJob &&
       !workCooldownActive &&
@@ -1541,20 +1682,52 @@ const AvailableJobs = ({
       applicationAllowsNewApply;
     // Offers are independent of apply flow; backend only enforces offer cooldown. Block only when application was accepted (parallel path closed).
     const canMakeOffer =
-      canWork &&
+      canWork === true &&
       cooldownMinutes === 0 &&
       !isPickedUp &&
       !effectiveHasActiveJob &&
       !workCooldownActive &&
       (delivery || appStatus !== 'accepted');
     const applyingThis = applyingJobId === jobId;
+    const activeJobBlockedLabel = effectiveHasActiveJob === true;
+    const hideActionIconForLabel = activeJobBlockedLabel && locale === 'hi';
+    const tightBlockedBtn = activeJobBlockedLabel && locale === 'hi';
 
     return (
     <View style={styles.jobCard}>
       <View style={styles.jobHeader}>
-        <Text style={styles.jobTitle} numberOfLines={2} ellipsizeMode="tail">
-          {title}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          <Text
+            style={styles.jobTitle}
+            numberOfLines={expandedTitleIds[jobId] ? undefined : 2}
+            ellipsizeMode="tail"
+            onTextLayout={(e) => {
+              // Show arrow only when title is actually truncated on the card.
+              if (expandedTitleIds[jobId]) return;
+              const isTruncated = (e?.nativeEvent?.lines?.length || 0) > 2;
+              setTruncatedTitleIds((prev) => {
+                if (prev?.[jobId] === isTruncated) return prev;
+                return { ...(prev || {}), [jobId]: isTruncated };
+              });
+            }}
+          >
+            {title}
+          </Text>
+          {expandedTitleIds[jobId] || truncatedTitleIds[jobId] ? (
+            <TouchableOpacity
+              onPress={() => setExpandedTitleIds((prev) => ({ ...prev, [jobId]: !prev[jobId] }))}
+              hitSlop={8}
+              style={styles.titleArrowInline}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons
+                name={expandedTitleIds[jobId] ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={22}
+                color={colors.primary.main}
+              />
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <View style={styles.jobHeaderRightCol}>
           <View style={styles.budgetRow}>
             <Text style={styles.jobBudget}>₹{item.budget}</Text>
@@ -1575,16 +1748,18 @@ const AvailableJobs = ({
               ]}
               activeOpacity={0.7}
             >
-              <Text style={styles.viewMoreText}>
-                {expandedDescriptionIds[jobId] ? t('jobs.viewLess') : t('jobs.viewMore')}
-              </Text>
+              <MaterialIcons
+                name={expandedDescriptionIds[jobId] ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                size={22}
+                color={colors.primary.main}
+              />
             </TouchableOpacity>
           ) : null}
         </View>
       ) : null}
       <JobLocationBlock
         job={item}
-        translated={tr}
+        translated={translatedForLocation}
         t={t}
         compact
         hideLeadingIcon={!delivery}
@@ -1609,16 +1784,22 @@ const AvailableJobs = ({
           <View style={styles.jobMetaDistance}>
             {!delivery ? (
               <Pressable
-                onPress={() => openDirectionsFromJob(item)}
+                onPress={isAssignedToMe ? () => openDirectionsFromJob(item) : undefined}
                 hitSlop={8}
                 style={({ pressed }) => [
                   styles.jobDirectionsIconButton,
+                  !isAssignedToMe && styles.jobDirectionsIconButtonDisabled,
                   pressed && { opacity: 0.85 },
                 ]}
+                disabled={!isAssignedToMe}
                 accessibilityRole="button"
                 accessibilityLabel={t('jobs.openDirectionsA11y')}
               >
-                <MaterialIcons name="location-on" size={16} color={colors.primary.main} />
+                <MaterialIcons
+                  name="location-on"
+                  size={16}
+                  color={isAssignedToMe ? colors.primary.main : colors.text.muted}
+                />
               </Pressable>
             ) : null}
             {item.distanceKm != null ? (
@@ -1636,31 +1817,40 @@ const AvailableJobs = ({
           style={[
             styles.actionButton,
             styles.pickupButton,
+            tightBlockedBtn && styles.activeJobBlockedButton,
             (!canPickup || isPickedUp) && styles.actionButtonDisabled,
           ]}
           onPress={() => handlePickupJob(item)}
           disabled={!canPickup || isPickedUp}
         >
-          <MaterialIcons
-            name="check-circle"
-            size={18}
-            color={canPickup && !isPickedUp ? '#FFFFFF' : colors.text.muted}
-          />
+          {!hideActionIconForLabel ? (
+            <MaterialIcons
+              name="check-circle"
+              size={18}
+              color={canPickup && !isPickedUp ? '#FFFFFF' : colors.text.muted}
+            />
+          ) : null}
           <Text
             style={[
               styles.actionButtonText,
               styles.pickupButtonText,
+              activeJobBlockedLabel && styles.activeJobBlockedButtonText,
               { color: canPickup ? '#FFFFFF' : colors.text.muted },
             ]}
+            numberOfLines={activeJobBlockedLabel ? 2 : 1}
+            adjustsFontSizeToFit={tightBlockedBtn}
+            minimumFontScale={0.85}
           >
             {effectiveHasActiveJob
-              ? t('jobs.alreadyTaken')
+              ? t('jobs.completeAssigned')
+              : !canWorkKnown
+              ? (t('common.loading') || 'Loading...')
               : !canWork
               ? t('jobs.payDues')
               : workCooldownActive
               ? t('jobs.workCooldownShort')
               : isPickedUp
-              ? t('jobs.alreadyTaken')
+              ? t('jobs.completeAssigned')
               : t('jobs.pickupJob')}
           </Text>
         </TouchableOpacity>
@@ -1669,6 +1859,7 @@ const AvailableJobs = ({
           style={[
             styles.actionButton,
             styles.applyButton,
+            tightBlockedBtn && styles.activeJobBlockedButton,
             applyingThis && styles.applyButtonBusy,
             (!canApply || isPickedUp) && !applyingThis && styles.actionButtonDisabled,
           ]}
@@ -1679,26 +1870,34 @@ const AvailableJobs = ({
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <>
-              <MaterialIcons
-                name="assignment"
-                size={18}
-                color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
-              />
+              {!hideActionIconForLabel ? (
+                <MaterialIcons
+                  name="assignment"
+                  size={18}
+                  color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
+                />
+              ) : null}
               <Text
                 style={[
                   styles.actionButtonText,
                   styles.applyButtonText,
+                  activeJobBlockedLabel && styles.activeJobBlockedButtonText,
                   { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
                 ]}
+                numberOfLines={activeJobBlockedLabel ? 2 : 1}
+                adjustsFontSizeToFit={tightBlockedBtn}
+                minimumFontScale={0.85}
               >
                 {effectiveHasActiveJob
-                  ? t('jobs.alreadyTaken')
+                  ? t('jobs.completeAssigned')
+                  : !canWorkKnown
+                  ? (t('common.loading') || 'Loading...')
                   : !canWork
                   ? t('jobs.payDues')
                   : workCooldownActive
                   ? t('jobs.workCooldownShort')
                   : isPickedUp
-                  ? t('jobs.alreadyTaken')
+                  ? t('jobs.completeAssigned')
                   : isWaitingApp
                   ? t('jobs.waitingForClient')
                   : appStatus === 'accepted'
@@ -1714,31 +1913,40 @@ const AvailableJobs = ({
           style={[
             styles.actionButton,
             styles.makeOfferButton,
+            tightBlockedBtn && styles.activeJobBlockedButton,
             (!canMakeOffer || isPickedUp) && styles.actionButtonDisabled,
           ]}
           onPress={() => openOfferModal(item)}
           disabled={!canMakeOffer || isPickedUp}
         >
-          <MaterialIcons
-            name="local-offer"
-            size={18}
-            color={canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted}
-          />
+          {!hideActionIconForLabel ? (
+            <MaterialIcons
+              name="local-offer"
+              size={18}
+              color={canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted}
+            />
+          ) : null}
           <Text
             style={[
               styles.actionButtonText,
               styles.makeOfferButtonText,
+              activeJobBlockedLabel && styles.activeJobBlockedButtonText,
               { color: canMakeOffer && !isPickedUp ? '#FFFFFF' : colors.text.muted },
             ]}
+            numberOfLines={activeJobBlockedLabel ? 2 : 1}
+            adjustsFontSizeToFit={tightBlockedBtn}
+            minimumFontScale={0.85}
           >
             {effectiveHasActiveJob
-              ? t('jobs.alreadyTaken')
+              ? t('jobs.jobFirst')
+              : !canWorkKnown
+              ? (t('common.loading') || 'Loading...')
               : !canWork
               ? t('jobs.payDues')
               : workCooldownActive
               ? t('jobs.workCooldownShort')
               : isPickedUp
-              ? t('jobs.alreadyTaken')
+              ? t('jobs.jobFirst')
               : !delivery && appStatus === 'accepted'
               ? t('jobs.applicationAcceptedShort')
               : cooldownMinutes > 0
@@ -1787,6 +1995,27 @@ const AvailableJobs = ({
 
   return (
     <View style={styles.container}>
+      <Modal visible={Boolean(toastMsg)} transparent animationType="none">
+        <Animated.View
+          style={[
+            styles.toast,
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-12, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Text style={styles.toastText}>{toastMsg}</Text>
+        </Animated.View>
+      </Modal>
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -2206,7 +2435,12 @@ const AvailableJobs = ({
         animationType="slide"
         onRequestClose={() => setOfferModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalOverlay,
+            { paddingBottom: keyboardPad ? Math.min(260, Math.round(keyboardPad * 0.45)) : 0 },
+          ]}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('jobs.makeOfferTitle')}</Text>
             {offerJob && (
@@ -2328,33 +2562,7 @@ const AvailableJobs = ({
         </View>
       </Modal>
 
-      {/* Make Offer Error Modal */}
-      <Modal
-        visible={offerErrorModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOfferErrorModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.errorIconContainer}>
-              <MaterialIcons name="error" size={64} color={colors.error.main} />
-            </View>
-            <Text style={styles.modalTitle}>{t('common.error')}</Text>
-            <Text style={styles.modalSubtitle}>
-              {offerErrorMessage}
-            </Text>
-            <View style={[styles.modalActions, styles.modalActionsCentered]}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton]}
-                onPress={() => setOfferErrorModalVisible(false)}
-              >
-                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Offer errors are shown as a top toast (no modal). */}
     </View>
   );
 };

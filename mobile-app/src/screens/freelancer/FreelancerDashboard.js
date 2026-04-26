@@ -4,7 +4,21 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Modal, Animated, Dimensions, ActivityIndicator, BackHandler, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  Modal,
+  Animated,
+  Dimensions,
+  ActivityIndicator,
+  BackHandler,
+  Platform,
+  PanResponder,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -147,6 +161,7 @@ function createFreelancerDashboardStyles(colors) {
   tabContent: {
     flex: 1,
     backgroundColor: colors.background,
+    overflow: 'hidden',
   },
   // Drawer Styles
   drawerOverlay: {
@@ -365,6 +380,10 @@ const FreelancerDashboard = () => {
   const introCheckedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('AvailableJobs');
   const [hasActiveAssignedJobState, setHasActiveAssignedJobState] = useState(false);
+  // Smooth swipe: keep both tabs mounted and slide between them.
+  const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
+  const swipeAnimInFlightRef = useRef(false);
+  const swipeStartXRef = useRef(0);
 
   const refreshHasActiveAssignedJob = useCallback(async () => {
     try {
@@ -462,6 +481,10 @@ const FreelancerDashboard = () => {
       setActiveTab('MyJobs');
     } else if (pa.tab === 'Dashboard') {
       void goToMainTabPreferringMyJobs();
+    } else if (pa.tab === 'Wallet') {
+      // Payment received: open Wallet screen directly.
+      setActiveTab(null);
+      setDrawerScreenStack(['Wallet']);
     }
     navigation.setParams({ pushAction: undefined });
   }, [route.params?.pushAction, goToMainTabPreferringMyJobs, navigation]);
@@ -663,6 +686,94 @@ const FreelancerDashboard = () => {
   const { colors } = useTheme();
   const styles = useMemo(() => createFreelancerDashboardStyles(colors), [colors]);
 
+  const animateToTab = useCallback(
+    (nextTab, onDone) => {
+      if (swipeAnimInFlightRef.current) return;
+      const targetX = nextTab === 'MyJobs' ? -SCREEN_WIDTH : 0;
+      swipeAnimInFlightRef.current = true;
+      Animated.timing(swipeX, {
+        toValue: targetX,
+        duration: nextTab === 'AvailableJobs' ? 170 : 200,
+        useNativeDriver: true,
+      }).start(() => {
+        swipeAnimInFlightRef.current = false;
+        if (typeof onDone === 'function') onDone();
+      });
+    },
+    [swipeX]
+  );
+
+  // When tab changes via tap/pushAction, animate to it (only for main tabs).
+  useEffect(() => {
+    if (activeDrawerScreen) return;
+    if (activeTab !== 'AvailableJobs' && activeTab !== 'MyJobs') return;
+    animateToTab(activeTab);
+  }, [activeTab, activeDrawerScreen, animateToTab]);
+
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) => {
+        if (activeDrawerScreen) return false;
+        if (swipeAnimInFlightRef.current) return false;
+        if (activeTab !== 'AvailableJobs' && activeTab !== 'MyJobs') return false;
+        const dx = Math.abs(gesture.dx);
+        const dy = Math.abs(gesture.dy);
+        // Edge swipe only so we don't interfere with inner horizontal gestures.
+        const EDGE = 24;
+        const startedOnEdge = gesture.x0 <= EDGE || gesture.x0 >= SCREEN_WIDTH - EDGE;
+        if (!startedOnEdge) return false;
+        return dx > 12 && dx > dy * 1.2;
+      },
+      onPanResponderGrant: () => {
+        swipeX.stopAnimation((value) => {
+          swipeStartXRef.current = Number(value) || 0;
+        });
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        if (activeDrawerScreen) return;
+        if (swipeAnimInFlightRef.current) return;
+        // Resist swiping beyond bounds (only two tabs).
+        if (activeTab === 'AvailableJobs' && gesture.dx > 0) return;
+        if (activeTab === 'MyJobs' && gesture.dx < 0) return;
+        const next = swipeStartXRef.current + gesture.dx;
+        const clamped = Math.max(-SCREEN_WIDTH, Math.min(0, next));
+        swipeX.setValue(clamped);
+      },
+      onPanResponderRelease: (_evt, gesture) => {
+        if (activeDrawerScreen) return;
+        if (swipeAnimInFlightRef.current) return;
+        const threshold = 70;
+        if (activeTab === 'AvailableJobs' && gesture.dx < -threshold) {
+          animateToTab('MyJobs', () => setActiveTab('MyJobs'));
+          return;
+        }
+        if (activeTab === 'MyJobs' && gesture.dx > threshold) {
+          animateToTab('AvailableJobs', () => setActiveTab('AvailableJobs'));
+          return;
+        }
+        animateToTab(activeTab);
+      },
+      onPanResponderTerminate: () => {
+        animateToTab(activeTab);
+      },
+    });
+  }, [activeDrawerScreen, activeTab, animateToTab, swipeX]);
+
+  const onJobPickedUp = useCallback(() => setActiveTab('MyJobs'), []);
+  const availableElement = useMemo(
+    () => (
+      <AvailableJobsScreen
+        onJobPickedUp={onJobPickedUp}
+        workCooldownRemainMs={workCooldownRemainMs}
+        hasActiveAssignedJob={hasActiveAssignedJobState}
+        onActiveJobStatusChange={(active) => setHasActiveAssignedJobState(Boolean(active))}
+      />
+    ),
+    [onJobPickedUp, workCooldownRemainMs, hasActiveAssignedJobState]
+  );
+
+  const myJobsElement = useMemo(() => <MyJobsScreen />, []);
+
   if (!user) {
     return <LoadingSpinner />;
   }
@@ -739,16 +850,25 @@ const FreelancerDashboard = () => {
         )}
 
       {/* Tab Content */}
-      <View style={styles.tabContent}>
-        {activeTab === 'AvailableJobs' ? (
-          <AvailableJobsScreen
-            onJobPickedUp={() => setActiveTab('MyJobs')}
-            workCooldownRemainMs={workCooldownRemainMs}
-            hasActiveAssignedJob={hasActiveAssignedJobState}
-            onActiveJobStatusChange={(active) => setHasActiveAssignedJobState(Boolean(active))}
-          />
-        ) : (
+      <View style={styles.tabContent} {...(!activeDrawerScreen ? panResponder.panHandlers : {})}>
+        {activeDrawerScreen ? (
           <ActiveScreen />
+        ) : (
+          <Animated.View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              width: SCREEN_WIDTH * 2,
+              transform: [{ translateX: swipeX }],
+            }}
+          >
+            <View style={{ width: SCREEN_WIDTH, flex: 1 }} pointerEvents={activeTab === 'AvailableJobs' ? 'auto' : 'none'}>
+              {availableElement}
+            </View>
+            <View style={{ width: SCREEN_WIDTH, flex: 1 }} pointerEvents={activeTab === 'MyJobs' ? 'auto' : 'none'}>
+              {myJobsElement}
+            </View>
+          </Animated.View>
         )}
       </View>
 

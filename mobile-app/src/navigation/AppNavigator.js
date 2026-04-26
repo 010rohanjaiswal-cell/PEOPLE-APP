@@ -23,9 +23,11 @@ import ProfileSetupScreen from '../screens/auth/ProfileSetup';
 
 // Dashboard Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
+import ClientIntro from '../screens/client/ClientIntro';
 import VerificationScreen from '../screens/freelancer/Verification';
 import FaceVerificationScreen from '../screens/freelancer/FaceVerification';
 import FreelancerDashboard from '../screens/freelancer/FreelancerDashboard';
+import FreelancerIntro from '../screens/freelancer/FreelancerIntro';
 
 const Stack = createNativeStackNavigator();
 
@@ -100,8 +102,25 @@ const AppNavigator = () => {
         targetRoute = 'ClientDashboard';
       }
 
-      // Only navigate if we have a target and we're not already there
-      if (targetRoute && currentRoute !== targetRoute) {
+      const isAllowedToStay =
+        (!isAuthenticated && (currentRoute === 'Login' || currentRoute === 'OTP')) ||
+        (isAuthenticated &&
+          user?.role === 'client' &&
+          (currentRoute === 'ClientDashboard' ||
+            currentRoute === 'ClientIntro' ||
+            (currentRoute === 'ProfileSetup' && !user?.fullName))) ||
+        (isAuthenticated &&
+          user?.role === 'freelancer' &&
+          user?.verificationStatus !== 'approved' &&
+          (currentRoute === 'Verification' || currentRoute === 'FaceVerification')) ||
+        (isAuthenticated &&
+          user?.role === 'freelancer' &&
+          user?.verificationStatus === 'approved' &&
+          (currentRoute === 'FreelancerDashboard' || currentRoute === 'FreelancerIntro'));
+
+      // Only navigate if we have a target and we're not already there,
+      // AND we are not already on a valid screen for this auth state.
+      if (targetRoute && currentRoute !== targetRoute && !isAllowedToStay) {
         console.log(`🔄 Navigating from ${currentRoute} to ${targetRoute}`);
         navigationRef.current.reset({
           index: 0,
@@ -164,7 +183,10 @@ const AppNavigator = () => {
         
         {/* Client Dashboard - Available when authenticated */}
         {isAuthenticated && user?.role === 'client' && (
-          <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
+          <>
+            <Stack.Screen name="ClientIntro" component={ClientIntro} />
+            <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
+          </>
         )}
         
         {/* Freelancer Screens - Available when authenticated */}
@@ -172,6 +194,7 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="Verification" component={VerificationScreen} />
             <Stack.Screen name="FaceVerification" component={FaceVerificationScreen} />
+            <Stack.Screen name="FreelancerIntro" component={FreelancerIntro} />
             <Stack.Screen name="FreelancerDashboard" component={FreelancerDashboard} />
           </>
         )}

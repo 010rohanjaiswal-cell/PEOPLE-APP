@@ -19,6 +19,7 @@ import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import { useLocation } from '../../context/LocationContext';
 import { clientJobsAPI } from '../../api/clientJobs';
+import { hasSeenIntro } from '../../utils/introSeen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -145,6 +146,7 @@ function createClientDashboardStyles(colors) {
   tabContent: {
     flex: 1,
     backgroundColor: colors.background,
+    overflow: 'hidden',
   },
   // Drawer Styles
   drawerOverlay: {
@@ -304,6 +306,7 @@ const ClientDashboard = () => {
   const { requestPermission } = useLocation();
   const route = useRoute();
   const navigation = useNavigation();
+  const introCheckedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('PostJob');
   const [pendingOpenApplicationsJobId, setPendingOpenApplicationsJobId] = useState(null);
   // Stack of drawer screens so back goes through history: e.g. [Wallet, Profile, Settings] -> back -> [Wallet, Profile] -> back -> [Wallet] -> back -> []
@@ -374,6 +377,18 @@ const ClientDashboard = () => {
     switchToMyJobsIfActiveJobs();
   }, [switchToMyJobsIfActiveJobs]);
 
+  // First visit: show client intro once per user.
+  useEffect(() => {
+    if (introCheckedRef.current) return;
+    introCheckedRef.current = true;
+    (async () => {
+      const seen = await hasSeenIntro(user, 'client');
+      if (!seen) {
+        navigation.reset({ index: 0, routes: [{ name: 'ClientIntro' }] });
+      }
+    })();
+  }, [navigation, user]);
+
   // Push notification tap: switch tab / open applications modal (params from AppNavigator)
   useEffect(() => {
     const pa = route.params?.pushAction;
@@ -389,20 +404,101 @@ const ClientDashboard = () => {
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
 
-  // Swipe gesture to switch between Post Job and My Jobs
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 20,
-      onPanResponderRelease: (_, gestureState) => {
-        const currentIndex = tabs.findIndex(t => t.key === activeTab);
-        if (gestureState.dx < -50 && currentIndex < tabs.length - 1) {
-          setActiveTab(tabs[currentIndex + 1].key);
-        } else if (gestureState.dx > 50 && currentIndex > 0) {
-          setActiveTab(tabs[currentIndex - 1].key);
-        }
+  // Swipe gesture to switch between Post Job and My Jobs (with slide animation)
+  // Keep both screens mounted and slide between them to avoid jank from mounting PostJob/MyJobs mid-swipe.
+  const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
+  const swipeAnimInFlightRef = useRef(false);
+  const swipeStartXRef = useRef(0);
+
+  const animateToTab = useCallback(
+    (nextTab, onDone) => {
+      if (swipeAnimInFlightRef.current) return;
+      const targetX = nextTab === 'MyJobs' ? -SCREEN_WIDTH : 0;
+      swipeAnimInFlightRef.current = true;
+      Animated.timing(swipeX, {
+        toValue: targetX,
+        // Make "back" (MyJobs -> PostJob) feel snappier.
+        duration: nextTab === 'PostJob' ? 170 : 200,
+        useNativeDriver: true,
+      }).start(() => {
+        swipeAnimInFlightRef.current = false;
+        if (typeof onDone === 'function') onDone();
+      });
+    },
+    [swipeX]
+  );
+
+  // When tab changes via tap/pushAction, animate to it.
+  useEffect(() => {
+    if (activeDrawerScreen) return;
+    if (activeTab !== 'PostJob' && activeTab !== 'MyJobs') return;
+    animateToTab(activeTab);
+  }, [activeTab, activeDrawerScreen, animateToTab]);
+
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) => {
+        if (activeDrawerScreen) return false;
+        if (swipeAnimInFlightRef.current) return false;
+        // Only handle swipe between PostJob <-> MyJobs.
+        if (activeTab !== 'PostJob' && activeTab !== 'MyJobs') return false;
+        const dx = Math.abs(gesture.dx);
+        const dy = Math.abs(gesture.dy);
+        // Edge swipe only (start near left/right edge) so we don't interfere with PostJob's internal pager.
+        const EDGE = 24;
+        const startedOnEdge = gesture.x0 <= EDGE || gesture.x0 >= SCREEN_WIDTH - EDGE;
+        if (!startedOnEdge) return false;
+        return dx > 12 && dx > dy * 1.2;
       },
-    })
-  ).current;
+      onPanResponderGrant: () => {
+        swipeX.stopAnimation((value) => {
+          swipeStartXRef.current = Number(value) || 0;
+        });
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        if (activeDrawerScreen) return;
+        if (swipeAnimInFlightRef.current) return;
+        if (activeTab === 'PostJob' && gesture.dx > 0) return;
+        if (activeTab === 'MyJobs' && gesture.dx < 0) return;
+        const next = swipeStartXRef.current + gesture.dx;
+        const clamped = Math.max(-SCREEN_WIDTH, Math.min(0, next));
+        swipeX.setValue(clamped);
+      },
+      onPanResponderRelease: (_evt, gesture) => {
+        if (activeDrawerScreen) return;
+        if (swipeAnimInFlightRef.current) return;
+        const threshold = 70;
+        if (activeTab === 'PostJob' && gesture.dx < -threshold) {
+          // Animate first, then commit tab state (prevents hitch before animation starts).
+          animateToTab('MyJobs', () => setActiveTab('MyJobs'));
+          return;
+        }
+        if (activeTab === 'MyJobs' && gesture.dx > threshold) {
+          // Animate first, then commit tab state (prevents hitch before animation starts).
+          animateToTab('PostJob', () => setActiveTab('PostJob'));
+          return;
+        }
+        // Snap back to the current tab.
+        animateToTab(activeTab);
+      },
+      onPanResponderTerminate: () => {
+        animateToTab(activeTab);
+      },
+    });
+  }, [activeDrawerScreen, activeTab, animateToTab, swipeX]);
+
+  // Stable elements to avoid re-render churn during tab commits.
+  const onJobPosted = useCallback(() => setActiveTab('MyJobs'), []);
+  const postJobElement = useMemo(() => <PostJobScreen onJobPosted={onJobPosted} />, [onJobPosted]);
+  const myJobsElement = useMemo(
+    () => (
+      <MyJobsScreen
+        openApplicationsJobId={pendingOpenApplicationsJobId}
+        onConsumeOpenApplicationsJobId={clearPendingOpenApplications}
+      />
+    ),
+    [pendingOpenApplicationsJobId, clearPendingOpenApplications]
+  );
 
   const toggleDrawer = () => {
     if (drawerVisible) {
@@ -440,13 +536,24 @@ const ClientDashboard = () => {
     closeDrawer();
   };
 
+  const goToSupportAfterChatEnd = () => {
+    // Ensure we land on Support page (not Dashboard) after ending a chat.
+    setDrawerScreenStack(['Support']);
+    setActiveTab(null);
+  };
+
   const drawerScreens = {
     History: HistoryScreen,
     Profile: ProfileScreen,
     Settings: SettingsScreen,
     Support: (props) => <ClientSupportScreen {...props} onNavigate={handleDrawerNavigation} />,
     SupportChat: (props) => (
-      <ClientSupportChatScreen {...props} onBack={handleDrawerBack} bootstrapTicketRef={supportChatBootstrapTicketRef} />
+      <ClientSupportChatScreen
+        {...props}
+        onBack={handleDrawerBack}
+        onEndChat={goToSupportAfterChatEnd}
+        bootstrapTicketRef={supportChatBootstrapTicketRef}
+      />
     ),
   };
 
@@ -576,16 +683,25 @@ const ClientDashboard = () => {
         )}
 
       {/* Tab Content */}
-      <View style={styles.tabContent} {...panResponder.panHandlers}>
-        {activeTab === 'PostJob' ? (
-          <PostJobScreen onJobPosted={() => setActiveTab('MyJobs')} />
-        ) : activeTab === 'MyJobs' && !activeDrawerScreen ? (
-          <MyJobsScreen
-            openApplicationsJobId={pendingOpenApplicationsJobId}
-            onConsumeOpenApplicationsJobId={clearPendingOpenApplications}
-          />
-        ) : (
+      <View style={styles.tabContent} {...(!activeDrawerScreen ? panResponder.panHandlers : {})}>
+        {activeDrawerScreen ? (
           <ActiveScreen />
+        ) : (
+          <Animated.View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              width: SCREEN_WIDTH * 2,
+              transform: [{ translateX: swipeX }],
+            }}
+          >
+            <View style={{ width: SCREEN_WIDTH, flex: 1 }} pointerEvents={activeTab === 'PostJob' ? 'auto' : 'none'}>
+              {postJobElement}
+            </View>
+            <View style={{ width: SCREEN_WIDTH, flex: 1 }} pointerEvents={activeTab === 'MyJobs' ? 'auto' : 'none'}>
+              {myJobsElement}
+            </View>
+          </Animated.View>
         )}
       </View>
 

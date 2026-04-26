@@ -42,6 +42,8 @@ const OTP = ({ navigation, route }) => {
   // Start at 60s: OTP was just sent from Login; resend only after cooldown.
   const [resendCooldown, setResendCooldown] = useState(60);
   const otpInputRef = useRef(null);
+  const cachedAccessTokenRef = useRef(null);
+  const lastLoginContextRef = useRef(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const toastTimerRef = useRef(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -174,6 +176,15 @@ const OTP = ({ navigation, route }) => {
       }
 
       const phoneE164 = String(phoneNumber).replace(/\s/g, '');
+
+      // Cache the verified access-token so force-login doesn't re-run verifyOTP (which can return "otp already verified").
+      cachedAccessTokenRef.current = accessToken;
+      lastLoginContextRef.current = {
+        role,
+        phoneE164,
+        deviceId,
+      };
+
       const result = await authAPI.verifyMsg91AccessToken(
         accessToken,
         role,
@@ -216,6 +227,40 @@ const OTP = ({ navigation, route }) => {
 
       setError(errorMessage);
       showToast(errorMessage);
+      setLoading(false);
+    }
+  };
+
+  const handleForceLoginConfirm = async () => {
+    try {
+      const accessToken = cachedAccessTokenRef.current;
+      const ctx = lastLoginContextRef.current;
+      if (!accessToken || !ctx?.role || !ctx?.phoneE164 || !ctx?.deviceId) {
+        showToast('Session expired. Please request a new OTP.');
+        return;
+      }
+      setLoading(true);
+      const result = await authAPI.verifyMsg91AccessToken(
+        accessToken,
+        ctx.role,
+        ctx.phoneE164,
+        ctx.deviceId,
+        true
+      );
+      if (result.success) {
+        await loginWithToken(result.token, result.user);
+      } else {
+        throw new Error(result.error || 'Login failed');
+      }
+      setLoading(false);
+    } catch (err) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Login failed. Please try again.';
+      setError(msg);
+      showToast(msg);
       setLoading(false);
     }
   };
@@ -390,7 +435,7 @@ const OTP = ({ navigation, route }) => {
                 style={[styles.modalButton, styles.modalPrimaryButton]}
                 onPress={() => {
                   setForceLoginModalVisible(false);
-                  handleVerifyOTP(true);
+                  handleForceLoginConfirm();
                 }}
                 activeOpacity={0.9}
               >

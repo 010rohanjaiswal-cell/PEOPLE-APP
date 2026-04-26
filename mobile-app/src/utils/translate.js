@@ -8,11 +8,15 @@
  */
 
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isDeliveryJob } from './jobDisplay';
 
 const CACHE = {};
 /** Bump when prompt changes so stale cache entries are ignored. */
 const CACHE_KEY_VERSION = '4';
+
+const PERSIST_PREFIX = `@people_app_translate_cache:${CACHE_KEY_VERSION}:`;
+const IN_FLIGHT = {};
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_MODEL = 'gpt-4o-mini';
@@ -28,6 +32,10 @@ function getOpenAIApiKey() {
 
 function cacheKeyFor(text) {
   return `hi:${CACHE_KEY_VERSION}:${text}`;
+}
+
+function storageKeyFor(cacheKey) {
+  return `${PERSIST_PREFIX}${cacheKey}`;
 }
 
 /**
@@ -109,10 +117,38 @@ export async function translateToHindi(text) {
     return trimmed;
   }
 
-  const translated = await openaiTranslateToHindi(trimmed);
-  const result = translated != null && translated !== '' ? translated : trimmed;
-  CACHE[key] = result;
-  return result;
+  // De-dupe concurrent requests for the same string.
+  if (IN_FLIGHT[key]) return IN_FLIGHT[key];
+
+  IN_FLIGHT[key] = (async () => {
+    // Persistent cache (AsyncStorage) so fresh app sessions don't re-translate.
+    try {
+      const stored = await AsyncStorage.getItem(storageKeyFor(key));
+      if (stored != null && stored !== '') {
+        CACHE[key] = stored;
+        return stored;
+      }
+    } catch (_) {
+      // Ignore storage read errors; fall back to live translate.
+    }
+
+    const translated = await openaiTranslateToHindi(trimmed);
+    const result = translated != null && translated !== '' ? translated : trimmed;
+    CACHE[key] = result;
+
+    try {
+      // Best-effort persist; safe to ignore failures.
+      await AsyncStorage.setItem(storageKeyFor(key), result);
+    } catch (_) {}
+
+    return result;
+  })();
+
+  try {
+    return await IN_FLIGHT[key];
+  } finally {
+    delete IN_FLIGHT[key];
+  }
 }
 
 /** Same as translateToHindi (OpenAI-only); kept for call-site clarity. */

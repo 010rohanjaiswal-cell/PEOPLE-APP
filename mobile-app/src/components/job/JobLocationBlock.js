@@ -1,220 +1,169 @@
-/**
- * Shared job location UI: Delivery (from/to) vs single address.
- */
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 
-function createJobLocationBlockStyles(colors) {
+function safeT(t) {
+  return typeof t === 'function' ? t : (key) => key;
+}
+
+function normalizePincode(v) {
+  if (v == null) return '';
+  const s = String(v).trim();
+  return s;
+}
+
+function getJobField(job, translated, key) {
+  const tv = translated && translated[key] != null ? translated[key] : null;
+  if (tv != null && String(tv).trim() !== '') return String(tv);
+  const jv = job && job[key] != null ? job[key] : '';
+  return String(jv || '');
+}
+
+function createStyles(colors, compact) {
+  const rowGap = compact ? spacing.xs : spacing.sm;
+  const iconSize = compact ? 16 : 18;
   return StyleSheet.create({
-    jobAddressRow: {
+    container: {
+      marginTop: compact ? spacing.xs : spacing.sm,
+      marginBottom: compact ? spacing.xs : spacing.sm,
+      gap: rowGap,
+    },
+    row: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      marginBottom: spacing.sm,
       gap: spacing.xs,
     },
-    jobAddress: {
+    icon: {
+      marginTop: 1,
+      width: iconSize,
+    },
+    textWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    primaryText: {
       ...typography.small,
       color: colors.text.primary,
-      flex: 1,
+      lineHeight: compact ? 18 : 20,
     },
-    deliveryBlock: {
-      marginBottom: spacing.sm,
-    },
-    deliveryRouteLabel: {
+    secondaryText: {
       ...typography.small,
+      color: colors.text.secondary,
+      marginTop: 2,
+      lineHeight: compact ? 18 : 20,
+    },
+    deliveryLegLabel: {
+      ...typography.small,
+      color: colors.text.secondary,
       fontWeight: '600',
-      color: colors.text.primary,
-      marginBottom: spacing.xs,
-    },
-    deliveryTextCol: {
-      flex: 1,
-    },
-    deliverySubLabel: {
-      ...typography.small,
-      color: colors.text.secondary,
-      marginTop: spacing.xs,
       marginBottom: 2,
-    },
-    jobMetaLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      flexWrap: 'wrap',
-    },
-    jobMeta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-    },
-    jobMetaText: {
-      ...typography.small,
-      color: colors.text.secondary,
-    },
-    deliveryBlockCompact: {
-      marginBottom: spacing.xs,
-    },
-    jobAddressRowCompact: {
-      marginBottom: spacing.xs,
-    },
-    jobAddressRowTight: {
-      marginBottom: 0,
-    },
-    jobAddressCompact: {
-      ...typography.small,
-      fontSize: 12,
-      lineHeight: 18,
-      color: colors.text.primary,
-      flex: 1,
-    },
-    deliverySubLabelCompact: {
-      ...typography.small,
-      fontSize: 11,
-      color: colors.text.secondary,
-      marginTop: 4,
-      marginBottom: 0,
-    },
-    locationIconButton: {
-      borderWidth: 1.5,
-      borderColor: colors.primary.main,
-      borderRadius: spacing.sm,
-      padding: 5,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
   });
 }
 
-/**
- * @param {object} props
- * @param {object} props.job
- * @param {object} [props.translated] — optional Hindi translations
- * @param {function} props.t — i18n
- * @param {boolean} [props.compact] — tighter list-card layout (e.g. Available Jobs)
- * @param {function} [props.onLocationIconPress] — when set, location icon is tappable (e.g. open Maps)
- * @param {boolean} [props.hideLeadingIcon] — address text only (no pin before address)
- */
-export function JobLocationBlock({ job, translated, t, compact = false, onLocationIconPress, hideLeadingIcon = false }) {
-  const { colors } = useTheme();
-  const styles = useMemo(() => createJobLocationBlockStyles(colors), [colors]);
-  const tr = translated || {};
-  const address = tr.address ?? job.address ?? '';
-  const delivery = isDeliveryJob(job);
-  const dFromA = tr.deliveryFromAddress ?? job.deliveryFromAddress;
-  const dFromP = tr.deliveryFromPincode ?? job.deliveryFromPincode;
-  const dToA = tr.deliveryToAddress ?? job.deliveryToAddress;
-  const dToP = tr.deliveryToPincode ?? job.deliveryToPincode;
+export const JobLocationBlock = memo(
+  ({ job, translated, t, compact = false, hideLeadingIcon = false }) => {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors, compact), [colors, compact]);
+    const tt = safeT(t);
 
-  if (delivery && (dFromA || dToA)) {
-    if (compact) {
+    const delivery = isDeliveryJob(job);
+
+    if (delivery) {
+      const fromAddress = getJobField(job, translated, 'deliveryFromAddress');
+      const fromPin = normalizePincode(getJobField(job, translated, 'deliveryFromPincode'));
+      const toAddress = getJobField(job, translated, 'deliveryToAddress');
+      const toPin = normalizePincode(getJobField(job, translated, 'deliveryToPincode'));
+
+      const fromLine = [fromAddress, fromPin].filter(Boolean).join(fromAddress && fromPin ? ' • ' : '');
+      const toLine = [toAddress, toPin].filter(Boolean).join(toAddress && toPin ? ' • ' : '');
+
+      if (!fromLine && !toLine) return null;
+
       return (
-        <View style={[styles.deliveryBlock, styles.deliveryBlockCompact]}>
-          <View style={styles.deliveryTextCol}>
-            <Text style={styles.deliverySubLabelCompact}>
-              {t('jobs.fromShort')} · {dFromA || '—'} · {dFromP || '—'}
-            </Text>
-            <Text style={[styles.deliverySubLabelCompact, { marginTop: 6 }]}>
-              {t('jobs.toShort')} · {dToA || '—'} · {dToP || '—'}
-            </Text>
+        <View style={styles.container}>
+          <View style={styles.row}>
+            {!hideLeadingIcon ? (
+              <MaterialIcons
+                name="local-shipping"
+                size={compact ? 16 : 18}
+                color={colors.text.secondary}
+                style={styles.icon}
+              />
+            ) : null}
+            <View style={styles.textWrap}>
+              {fromLine ? (
+                <>
+                  <Text style={styles.deliveryLegLabel}>{tt('jobs.deliveryFromHeading')}</Text>
+                  <Text style={styles.primaryText}>{fromLine}</Text>
+                </>
+              ) : null}
+              {toLine ? (
+                <>
+                  <Text style={[styles.deliveryLegLabel, { marginTop: fromLine ? rowGap : 0 }]}>
+                    {tt('jobs.deliveryToHeading')}
+                  </Text>
+                  <Text style={styles.primaryText}>{toLine}</Text>
+                </>
+              ) : null}
+            </View>
           </View>
         </View>
       );
     }
+
+    const address = getJobField(job, translated, 'address');
+    const pincode = normalizePincode(getJobField(job, translated, 'pincode'));
+    const locationLine = [address, pincode].filter(Boolean).join(address && pincode ? ' • ' : '');
+    if (!locationLine) return null;
+
     return (
-      <View style={styles.deliveryBlock}>
-        <Text style={styles.deliveryRouteLabel}>{t('jobs.deliveryRoute')}</Text>
-        <View style={styles.jobAddressRow}>
-          <MaterialIcons name="trending-flat" size={16} color={colors.text.secondary} />
-          <View style={styles.deliveryTextCol}>
-            <Text style={[styles.deliverySubLabel, { marginTop: 0 }]}>{t('jobs.fromShort')}</Text>
-            <Text style={styles.jobAddress}>
-              {dFromA || '—'} · {dFromP || '—'}
-            </Text>
-            <Text style={styles.deliverySubLabel}>{t('jobs.toShort')}</Text>
-            <Text style={styles.jobAddress}>
-              {dToA || '—'} · {dToP || '—'}
-            </Text>
+      <View style={styles.container}>
+        <View style={styles.row}>
+          {!hideLeadingIcon ? (
+            <MaterialIcons
+              name="location-on"
+              size={compact ? 16 : 18}
+              color={colors.text.secondary}
+              style={styles.icon}
+            />
+          ) : null}
+          <View style={styles.textWrap}>
+            <Text style={styles.primaryText}>{locationLine}</Text>
           </View>
         </View>
       </View>
     );
   }
+);
 
-  if (hideLeadingIcon) {
-    return (
-      <View style={[styles.jobAddressRow, compact && styles.jobAddressRowCompact]}>
-        <Text style={compact ? styles.jobAddressCompact : styles.jobAddress} numberOfLines={compact ? 3 : undefined}>
-          {address}
-        </Text>
-      </View>
-    );
-  }
-
-  const iconSize = compact ? 15 : 16;
-  const iconColor = onLocationIconPress ? colors.primary.main : colors.text.secondary;
-  const iconEl = (
-    <MaterialIcons name="location-on" size={iconSize} color={iconColor} />
-  );
-
-  return (
-    <View style={[styles.jobAddressRow, compact && styles.jobAddressRowCompact]}>
-      {onLocationIconPress ? (
-        <Pressable
-          onPress={onLocationIconPress}
-          hitSlop={8}
-          style={({ pressed }) => [styles.locationIconButton, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-          accessibilityLabel={t('jobs.openDirectionsA11y')}
-        >
-          {iconEl}
-        </Pressable>
-      ) : (
-        iconEl
-      )}
-      <Text style={compact ? styles.jobAddressCompact : styles.jobAddress} numberOfLines={compact ? 3 : undefined}>
-        {address}
-      </Text>
-    </View>
-  );
-}
-
-/**
- * Meta row: gender + pincode OR delivery pin route.
- */
-export function JobMetaGenderOrDeliveryPins({ job, translated, t, style }) {
+export const JobMetaGenderOrDeliveryPins = memo(({ job, translated, t, style }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => createJobLocationBlockStyles(colors), [colors]);
-  const tr = translated || {};
-  const pincode = tr.pincode ?? job.pincode ?? '';
+  const styles = useMemo(() => createStyles(colors, true), [colors]);
+  const tt = safeT(t);
   const delivery = isDeliveryJob(job);
-  const dFromP = tr.deliveryFromPincode ?? job.deliveryFromPincode;
-  const dToP = tr.deliveryToPincode ?? job.deliveryToPincode;
 
   if (delivery) {
+    const fromPin = normalizePincode(getJobField(job, translated, 'deliveryFromPincode'));
+    const toPin = normalizePincode(getJobField(job, translated, 'deliveryToPincode'));
+    const route = `${fromPin || '—'} → ${toPin || '—'}`;
     return (
-      <View style={[styles.jobMetaLeft, style]}>
-        <View style={styles.jobMeta}>
-          <Text style={styles.jobMetaText}>
-            {dFromP || '—'} → {dToP || '—'}
-          </Text>
-        </View>
+      <View style={[styles.row, style]}>
+        <MaterialIcons name="local-shipping" size={16} color={colors.text.secondary} />
+        <Text style={styles.secondaryText}>{route}</Text>
       </View>
     );
   }
 
+  const gender = String(job?.gender || 'any').toLowerCase();
   return (
-    <View style={[styles.jobMetaLeft, style]}>
-      <View style={styles.jobMeta}>
-        <MaterialIcons name="person" size={16} color={colors.text.secondary} />
-        <Text style={styles.jobMetaText}>{t('gender.' + (job.gender || 'any'))}</Text>
-      </View>
-      <View style={styles.jobMeta}>
-        <MaterialIcons name="location-on" size={16} color={colors.text.secondary} />
-        <Text style={styles.jobMetaText}>{pincode}</Text>
-      </View>
+    <View style={[styles.row, style]}>
+      <MaterialIcons name="person" size={16} color={colors.text.secondary} />
+      <Text style={styles.secondaryText}>{tt('gender.' + gender)}</Text>
     </View>
   );
-}
+});
+

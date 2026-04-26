@@ -1413,12 +1413,15 @@ router.get('/orders', authenticate, async (req, res) => {
     }
 
     const freelancerId = user._id || user.id;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 1);
 
     // Orders = jobs assigned to this freelancer that they've fully completed
     const jobs = await Job.find({
       assignedFreelancer: freelancerId,
       freelancerCompleted: true,
       status: 'completed',
+      updatedAt: { $gte: cutoff },
     })
       .populate('client', 'fullName phone profilePhoto')
       .sort({ updatedAt: -1 })
@@ -1863,14 +1866,24 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
       }
     }
 
-    // Add new offer
-    job.offers.push({
-      freelancer: freelancerId,
-      amount: Number(amount),
-      message: message || null,
-      status: 'pending',
-      createdAt: now,
-    });
+    // One active offer per freelancer per job:
+    // if they already have a pending offer, replace it with the latest values.
+    const pendingExisting = (job.offers || []).find(
+      (o) => o.status === 'pending' && o.freelancer?.toString?.() === freelancerId.toString()
+    );
+    if (pendingExisting) {
+      pendingExisting.amount = Number(amount);
+      pendingExisting.message = message || null;
+      pendingExisting.createdAt = now;
+    } else {
+      job.offers.push({
+        freelancer: freelancerId,
+        amount: Number(amount),
+        message: message || null,
+        status: 'pending',
+        createdAt: now,
+      });
+    }
 
     await job.save();
 

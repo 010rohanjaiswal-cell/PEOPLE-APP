@@ -532,9 +532,13 @@ router.get('/jobs/history', authenticate, async (req, res) => {
       });
     }
 
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 1);
+
     const jobs = await Job.find({
       client: user._id || user.id,
       status: 'completed',
+      updatedAt: { $gte: cutoff },
     })
       .populate('assignedFreelancer', 'fullName profilePhoto phone')
       .sort({ createdAt: -1 });

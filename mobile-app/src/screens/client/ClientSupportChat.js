@@ -119,7 +119,7 @@ function createStyles(colors, insets) {
   });
 }
 
-export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
+export default function ClientSupportChat({ onBack, onEndChat, bootstrapTicketRef }) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -309,7 +309,12 @@ export default function ClientSupportChat({ onBack, bootstrapTicketRef }) {
       const resp = await supportAPI.complete(ticketId);
       if (resp?.success) {
         await AsyncStorage.removeItem(TICKET_KEY);
-        onBack?.();
+        // After ending, always return to Support page (avoid immediately creating a new ticket).
+        if (typeof onEndChat === 'function') {
+          onEndChat();
+        } else {
+          onBack?.();
+        }
       }
     } catch (_) {}
   };

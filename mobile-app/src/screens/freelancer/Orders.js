@@ -121,11 +121,14 @@ function createOrdersStyles(colors) {
   filterBar: {
     marginBottom: spacing.xs,
     paddingBottom: 0,
+    width: '95%',
+    alignSelf: 'center',
   },
   filterBarContent: {
-    paddingHorizontal: spacing.sm,
-    gap: spacing.xs,
+    paddingHorizontal: 0,
     paddingBottom: 0,
+    width: '100%',
+    justifyContent: 'space-between',
   },
   filterButton: {
     paddingHorizontal: spacing.sm,
@@ -135,7 +138,6 @@ function createOrdersStyles(colors) {
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.cardBackground,
-    marginRight: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -265,8 +267,6 @@ const Orders = () => {
     weekAgo.setDate(weekAgo.getDate() - 7);
     const monthAgo = new Date(today);
     monthAgo.setMonth(monthAgo.getMonth() - 1);
-    const sixMonthsAgo = new Date(today);
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     return orders.filter((order) => {
       const orderDate = new Date(order.updatedAt || order.createdAt);
@@ -285,8 +285,6 @@ const Orders = () => {
           return orderDate >= weekAgo;
         case 'month':
           return orderDate >= monthAgo;
-        case '6months':
-          return orderDate >= sixMonthsAgo;
         default:
           return true;
       }
@@ -312,7 +310,6 @@ const Orders = () => {
     { key: 'yesterday', labelKey: 'filterYesterday' },
     { key: 'week', labelKey: 'filterWeek' },
     { key: 'month', labelKey: 'filterMonth' },
-    { key: '6months', labelKey: 'filter6Months' },
   ];
   const getFilterLabel = (option) => t('orders.' + option.labelKey);
 

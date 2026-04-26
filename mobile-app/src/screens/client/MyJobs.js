@@ -24,13 +24,15 @@ import { useLanguage } from '../../context/LanguageContext';
 import EmptyState from '../../components/common/EmptyState';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { translateJobToHindi } from '../../utils/translate';
-import EditJobModal from '../../components/modals/EditJobModal';
 import OffersModal from '../../components/modals/OffersModal';
 import ApplicationsModal from '../../components/modals/ApplicationsModal';
 import BillModal from '../../components/modals/BillModal';
 import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
+import { useAuth } from '../../context/AuthContext';
+import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
+import { useNotifications } from '../../context/NotificationContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -209,6 +211,7 @@ function createClientMyJobsStyles(colors) {
     paddingVertical: spacing.sm,
     borderRadius: spacing.sm,
     borderWidth: 1,
+    position: 'relative',
   },
   viewOffersButton: {
     borderColor: colors.primary.main,
@@ -217,6 +220,33 @@ function createClientMyJobsStyles(colors) {
   viewApplicationsButton: {
     borderColor: colors.primary.main,
     backgroundColor: 'transparent',
+  },
+  actionButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  countBadge: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    backgroundColor: colors.error.main,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+    borderWidth: 2,
+    borderColor: colors.cardBackground,
+  },
+  countBadgeText: {
+    ...typography.small,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 10,
   },
   viewFreelancerButton: {
     borderColor: colors.success.main,
@@ -330,12 +360,13 @@ const MyJobs = ({
   const { t, locale } = useLanguage();
   const { colors } = useTheme();
   const styles = useMemo(() => createClientMyJobsStyles(colors), [colors]);
+  const { user } = useAuth();
+  const { notifications } = useNotifications();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedJob, setSelectedJob] = useState(null);
-  const [editModalVisible, setEditModalVisible] = useState(false);
   const [offersModalVisible, setOffersModalVisible] = useState(false);
   const [applicationsModalVisible, setApplicationsModalVisible] = useState(false);
   const [billModalVisible, setBillModalVisible] = useState(false);
@@ -362,8 +393,10 @@ const MyJobs = ({
         const response = await clientJobsAPI.getActiveJobs();
         if (response?.success && Array.isArray(response.jobs)) {
           setJobs(response.jobs);
+          void writeJobListCache({ user, scope: 'client:my_jobs', data: response.jobs });
         } else if (Array.isArray(response)) {
           setJobs(response);
+          void writeJobListCache({ user, scope: 'client:my_jobs', data: response });
         } else {
           setJobs([]);
         }
@@ -383,6 +416,22 @@ const MyJobs = ({
     },
     [t]
   );
+
+  // Fast paint from cache
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await readJobListCache({ user, scope: 'client:my_jobs', maxAgeMs: 10 * 60 * 1000 });
+      if (cancelled) return;
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setJobs(cached);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?._id]);
 
   useEffect(() => {
     loadJobs();
@@ -453,10 +502,36 @@ const MyJobs = ({
     loadJobs();
   };
 
-  const handleEditJob = (job) => {
-    setSelectedJob(job);
-    setEditModalVisible(true);
-  };
+  // Sort My Jobs by latest notification received for that job (most recent first).
+  const latestNotifTsByJobId = useMemo(() => {
+    const map = new Map();
+    const list = Array.isArray(notifications) ? notifications : [];
+    for (const n of list) {
+      const jobIdRaw = n?.data?.jobId ?? null;
+      if (!jobIdRaw) continue;
+      const jobId = String(jobIdRaw);
+      const ts = new Date(n?.createdAt || n?.updatedAt || 0).getTime();
+      if (!Number.isFinite(ts) || ts <= 0) continue;
+      const prev = map.get(jobId) || 0;
+      if (ts > prev) map.set(jobId, ts);
+    }
+    return map;
+  }, [notifications]);
+
+  const sortedJobs = useMemo(() => {
+    const list = Array.isArray(jobs) ? jobs.slice() : [];
+    list.sort((a, b) => {
+      const aId = String(a?._id || a?.id || '');
+      const bId = String(b?._id || b?.id || '');
+      const aTs = latestNotifTsByJobId.get(aId) || 0;
+      const bTs = latestNotifTsByJobId.get(bId) || 0;
+      if (bTs !== aTs) return bTs - aTs;
+      const aUpd = new Date(a?.updatedAt || a?.createdAt || 0).getTime() || 0;
+      const bUpd = new Date(b?.updatedAt || b?.createdAt || 0).getTime() || 0;
+      return bUpd - aUpd;
+    });
+    return list;
+  }, [jobs, latestNotifTsByJobId]);
 
   const handleDeleteJob = (job) => {
     setDeleteJob(job);
@@ -645,15 +720,6 @@ const MyJobs = ({
                   style={styles.iconButton}
                   onPress={(e) => {
                     e.stopPropagation();
-                    handleEditJob(item);
-                  }}
-                >
-                  <MaterialIcons name="edit" size={20} color={colors.primary.main} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
                     handleDeleteJob(item);
                   }}
                 >
@@ -714,10 +780,17 @@ const MyJobs = ({
                   handleViewOffers(item);
                 }}
               >
-                <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
-                <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                  {offersCount > 0 ? `${t('jobs.viewOffers')} (${offersCount})` : t('jobs.viewOffers')}
-                </Text>
+                <View style={styles.actionButtonInner}>
+                  <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
+                  <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
+                    {t('jobs.viewOffers')}
+                  </Text>
+                </View>
+                {offersCount > 0 ? (
+                  <View style={styles.countBadge} pointerEvents="none">
+                    <Text style={styles.countBadgeText}>{offersCount > 99 ? '99+' : offersCount}</Text>
+                  </View>
+                ) : null}
               </TouchableOpacity>
             ) : (
               <View style={styles.actionsRowOpenPair}>
@@ -728,10 +801,17 @@ const MyJobs = ({
                     handleViewOffers(item);
                   }}
                 >
-                  <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
-                  <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                    {offersCount > 0 ? `${t('jobs.viewOffers')} (${offersCount})` : t('jobs.viewOffers')}
-                  </Text>
+                  <View style={styles.actionButtonInner}>
+                    <MaterialIcons name="local-offer" size={18} color={colors.primary.main} />
+                    <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
+                      {t('jobs.viewOffers')}
+                    </Text>
+                  </View>
+                  {offersCount > 0 ? (
+                    <View style={styles.countBadge} pointerEvents="none">
+                      <Text style={styles.countBadgeText}>{offersCount > 99 ? '99+' : offersCount}</Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.viewApplicationsButton, styles.openJobActionHalf]}
@@ -740,12 +820,19 @@ const MyJobs = ({
                     handleViewApplications(item);
                   }}
                 >
-                  <MaterialIcons name="assignment" size={18} color={colors.primary.main} />
-                  <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
-                    {applicationsCount > 0
-                      ? `${t('jobs.viewApplications')} (${applicationsCount})`
-                      : t('jobs.viewApplications')}
-                  </Text>
+                  <View style={styles.actionButtonInner}>
+                    <MaterialIcons name="assignment" size={18} color={colors.primary.main} />
+                    <Text style={[styles.actionButtonText, { color: colors.primary.main }]}>
+                      {t('jobs.viewApplications')}
+                    </Text>
+                  </View>
+                  {applicationsCount > 0 ? (
+                    <View style={styles.countBadge} pointerEvents="none">
+                      <Text style={styles.countBadgeText}>
+                        {applicationsCount > 99 ? '99+' : applicationsCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
               </View>
             )
@@ -801,7 +888,7 @@ const MyJobs = ({
         />
       ) : (
         <FlatList
-          data={jobs}
+          data={sortedJobs}
           keyExtractor={(item) => item._id || item.id}
           renderItem={renderJobItem}
           contentContainerStyle={styles.listContent}
@@ -817,15 +904,6 @@ const MyJobs = ({
       )}
 
       {/* Modals */}
-      <EditJobModal
-        visible={editModalVisible}
-        job={selectedJob}
-        onClose={() => {
-          setEditModalVisible(false);
-          setSelectedJob(null);
-        }}
-        onSuccess={loadJobs}
-      />
 
       <OffersModal
         visible={offersModalVisible}

@@ -12,7 +12,7 @@ export function normalizeExpoPushData(data) {
 }
 
 /**
- * @returns {{ tab: 'MyJobs' | 'Dashboard', openApplicationsJobId?: string | null } | null}
+ * @returns {{ tab: 'MyJobs' | 'Dashboard' | 'Wallet', openApplicationsJobId?: string | null } | null}
  * null = only navigate to root dashboard screen (existing default).
  */
 export function resolvePushActionFromNotificationData(normalizedData, userRole) {
@@ -37,6 +37,9 @@ export function resolvePushActionFromNotificationData(normalizedData, userRole) 
   if (userRole === 'freelancer') {
     if (type === 'offer_accepted' || type === 'job_assigned' || type === 'auto_pick') {
       return { tab: 'MyJobs' };
+    }
+    if (type === 'payment_received') {
+      return { tab: 'Wallet' };
     }
     if (type === 'offer_rejected' || type === 'application_rejected') {
       return { tab: 'Dashboard' };

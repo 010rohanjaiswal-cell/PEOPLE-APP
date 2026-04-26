@@ -11,6 +11,7 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -47,6 +48,7 @@ const RatingModal = ({
   submitting,
 }) => {
   const { t } = useLanguage();
+  const { width: windowW } = useWindowDimensions();
 
   const title = useMemo(() => t('rating.title'), [t]);
   const subtitle = useMemo(() => {
@@ -58,6 +60,16 @@ const RatingModal = ({
   const needsReason = rating === 1;
   const hasReason = !needsReason || (reason != null && String(reason).trim().length > 0);
   const canSubmit = rating !== null && rating !== undefined && hasReason && !submitting;
+
+  // Keep stars always inside modal on all screens (no overflow).
+  // Modal width is styles.modal width: 92% of screen, capped at 420.
+  const modalW = Math.min(420, Math.floor(windowW * 0.92));
+  const modalPad = spacing.xl * 2; // left+right padding in styles.modal
+  const availableW = Math.max(220, modalW - modalPad);
+  const colW = Math.floor(availableW / 5);
+  const starSize = Math.max(24, Math.min(34, colW - 22));
+  const labelFont = Math.max(9, Math.min(11, Math.floor(colW / 6)));
+  const gap = Math.max(6, Math.min(10, Math.floor((availableW - colW * 5) / 4)));
 
   return (
     <Modal
@@ -91,14 +103,20 @@ const RatingModal = ({
                   }}
                   activeOpacity={0.8}
                   disabled={submitting}
-                  style={[styles.starCol, dim && { opacity: 0.25 }]}
+                  style={[
+                    styles.starCol,
+                    { width: colW },
+                    dim && { opacity: 0.25 },
+                  ]}
                 >
                   <MaterialIcons
                     name={m.value === 1 ? (active ? 'star' : 'star-border') : 'star'}
-                    size={34}
+                    size={starSize}
                     color={m.color}
                   />
-                  <Text style={styles.starLabel}>{m.label}</Text>
+                  <Text style={[styles.starLabel, { fontSize: labelFont, lineHeight: labelFont + 1 }]} numberOfLines={1}>
+                    {m.label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -181,11 +199,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     flexWrap: 'nowrap',
-    gap: 10,
+    gap: 8,
     marginBottom: spacing.xl,
   },
   starCol: {
-    width: 62,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
@@ -194,8 +211,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.text.secondary,
     marginTop: 6,
-    fontSize: 11,
-    lineHeight: 12,
     fontWeight: '600',
   },
   submitButton: {

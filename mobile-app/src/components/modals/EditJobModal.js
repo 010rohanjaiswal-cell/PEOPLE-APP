@@ -241,6 +241,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
   const [moderationRejectedVisible, setModerationRejectedVisible] = useState(false);
   const [error, setError] = useState('');
   const verifyProgressAnim = useRef(new Animated.Value(0)).current;
+  const verifyProgressDriverRef = useRef(null);
   const [addressPickerVisible, setAddressPickerVisible] = useState(false);
   const [addressPickerTarget, setAddressPickerTarget] = useState(null); // 'address'|'deliveryFrom'|'deliveryTo'
 
@@ -254,7 +255,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
     'Driver',
     'Care taker',
     'Tailor',
-    'Barber',
+    'Salon',
     'Laundry',
     'Other',
   ];
@@ -408,21 +409,18 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
 
     try {
       setVerifyingModalVisible(true);
+      // Truthful loader: NO LOOP. Progress moves forward and only completes on success.
+      try {
+        verifyProgressDriverRef.current?.stop?.();
+      } catch (_) {}
+      verifyProgressAnim.stopAnimation();
       verifyProgressAnim.setValue(0);
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(verifyProgressAnim, {
-            toValue: 1,
-            duration: 1400,
-            useNativeDriver: false,
-          }),
-          Animated.timing(verifyProgressAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: false,
-          }),
-        ])
-      ).start();
+      verifyProgressDriverRef.current = Animated.timing(verifyProgressAnim, {
+        toValue: 0.9,
+        duration: 12000,
+        useNativeDriver: false,
+      });
+      verifyProgressDriverRef.current.start();
       setLoading(true);
       setError('');
 
@@ -455,6 +453,16 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       const result = await clientJobsAPI.updateJob(job._id, jobData);
 
       if (result.success) {
+        try {
+          verifyProgressDriverRef.current?.stop?.();
+        } catch (_) {}
+        await new Promise((r) => {
+          Animated.timing(verifyProgressAnim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: false,
+          }).start(() => r());
+        });
         Alert.alert(t('common.success'), t('jobs.jobUpdatedSuccess'));
         if (onSuccess) onSuccess();
         onClose();
@@ -476,6 +484,9 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
       }
     } finally {
       setVerifyingModalVisible(false);
+      try {
+        verifyProgressDriverRef.current?.stop?.();
+      } catch (_) {}
       verifyProgressAnim.stopAnimation();
       setLoading(false);
     }
@@ -703,7 +714,7 @@ const EditJobModal = ({ visible, job, onClose, onSuccess }) => {
                   {
                     width: verifyProgressAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: ['10%', '95%'],
+                      outputRange: ['0%', '100%'],
                     }),
                   },
                 ]}

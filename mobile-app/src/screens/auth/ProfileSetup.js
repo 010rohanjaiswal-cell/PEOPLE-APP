@@ -14,6 +14,7 @@ import {
   Alert,
   TouchableOpacity,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -35,17 +36,19 @@ const ProfileSetup = () => {
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [profilePhotoUri, setProfilePhotoUri] = useState(user?.profilePhoto || null);
   const [loading, setLoading] = useState(false);
+  const [continueLoading, setContinueLoading] = useState(false);
   const [error, setError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [legalDoc, setLegalDoc] = useState(null);
 
   const [role, setRole] = useState(user?.role || 'client');
+  const roleNorm = String(role || '').trim().toLowerCase();
 
   React.useEffect(() => {
     const getRole = async () => {
       const storedRole = await AsyncStorage.getItem('selectedRole');
       if (storedRole) {
-        setRole(storedRole);
+        setRole(String(storedRole).trim().toLowerCase());
       }
     };
     getRole();
@@ -62,8 +65,9 @@ const ProfileSetup = () => {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
+        aspect: [9, 16],
         quality: 0.8,
+        cameraType: ImagePicker.CameraType.front,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -83,12 +87,19 @@ const ProfileSetup = () => {
       return;
     }
 
-    if (role === 'client' && !termsAccepted) {
+    // Clients must upload a profile photo during setup
+    if (roleNorm === 'client' && !profilePhoto && !profilePhotoUri) {
+      setError('Please upload your photo to continue');
+      return;
+    }
+
+    if (roleNorm === 'client' && !termsAccepted) {
       setError(t('legalAcceptance.mustAccept'));
       return;
     }
 
     setLoading(true);
+    setContinueLoading(true);
     setError('');
 
     try {
@@ -104,16 +115,18 @@ const ProfileSetup = () => {
       }
 
       setLoading(false);
+      setContinueLoading(false);
     } catch (err) {
       console.error('Error completing profile setup:', err);
       setError(
         err.response?.data?.error || err.message || 'Failed to complete setup. Please try again.'
       );
       setLoading(false);
+      setContinueLoading(false);
     }
   };
 
-  const roleLabel = role === 'client' ? 'Client' : 'Freelancer';
+  const roleLabel = roleNorm === 'client' ? 'Client' : 'Freelancer';
 
   return (
     <SafeAreaView style={styles.screenRoot} edges={['top', 'left', 'right']}>
@@ -138,7 +151,7 @@ const ProfileSetup = () => {
                 <View style={styles.brandAccentGreen} />
               </View>
               <Text style={styles.subtitle}>
-                {role === 'client' ? (
+                {roleNorm === 'client' ? (
                   <>
                     Add your details to continue as a{' '}
                     <Text style={styles.subtitleAccent}>client</Text>.
@@ -177,14 +190,19 @@ const ProfileSetup = () => {
                 </View>
                 <Button
                   onPress={handleCameraPress}
-                  style={[styles.photoButton, styles.cameraButton]}
+                  size={profilePhotoUri ? 'sm' : 'default'}
+                  style={[styles.photoButton, profilePhotoUri ? styles.photoButtonCompact : null, styles.cameraButton]}
                 >
                   <View style={styles.photoButtonContent}>
                     <MaterialIcons name="camera-alt" size={18} color="#FFFFFF" />
-                    <Text style={styles.photoButtonText}>Take photo</Text>
+                    <Text style={styles.photoButtonText}>
+                      {profilePhotoUri ? 'Retake photo' : 'Take photo'}
+                    </Text>
                   </View>
                 </Button>
-                <Text style={styles.photoHelperText}>Optional. You can add this later.</Text>
+                <Text style={styles.photoHelperText}>
+                  {roleNorm === 'client' ? 'Required to continue.' : 'Optional. You can add this later.'}
+                </Text>
               </View>
 
               <Text style={[styles.fieldLabel, styles.fieldLabelSpacing]}>Full name</Text>
@@ -201,7 +219,7 @@ const ProfileSetup = () => {
                 style={styles.inputWrap}
               />
 
-              {role === 'client' ? (
+              {roleNorm === 'client' ? (
                 <TouchableOpacity
                   style={styles.termsRow}
                   activeOpacity={0.7}
@@ -231,20 +249,28 @@ const ProfileSetup = () => {
                 onPress={handleCompleteSetup}
                 disabled={
                   !validateRequired(fullName) ||
+                  (roleNorm === 'client' && !profilePhoto && !profilePhotoUri) ||
                   loading ||
-                  (role === 'client' && !termsAccepted)
+                  continueLoading ||
+                  (roleNorm === 'client' && !termsAccepted)
                 }
-                loading={loading}
+                loading={false}
                 style={styles.submitButton}
               >
-                {user?.fullName ? 'Save and continue' : 'Continue'}
+                {continueLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : user?.fullName ? (
+                  'Save and continue'
+                ) : (
+                  'Continue'
+                )}
               </Button>
 
-              {user?.fullName && !user?.profilePhoto && !profilePhoto ? (
+              {roleNorm !== 'client' && user?.fullName && !user?.profilePhoto && !profilePhoto ? (
                 <Button
                   variant="ghost"
                   onPress={async () => {
-                    if (role === 'client' && !termsAccepted) {
+                    if (roleNorm === 'client' && !termsAccepted) {
                       setError(t('legalAcceptance.mustAccept'));
                       return;
                     }
@@ -455,8 +481,11 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   photoButton: {
-    minHeight: 44,
     paddingHorizontal: spacing.lg,
+  },
+  photoButtonCompact: {
+    height: 36,
+    paddingHorizontal: spacing.md,
   },
   cameraButton: {
     backgroundColor: colors.success.main,

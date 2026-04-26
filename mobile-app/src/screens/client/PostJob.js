@@ -15,6 +15,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Easing,
+  Image,
+  BackHandler,
   Alert,
   Keyboard,
 } from 'react-native';
@@ -38,6 +41,199 @@ import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
+import { translateToHindi } from '../../utils/translate';
+
+const { height: SCREEN_H, width: SCREEN_W } = require('react-native').Dimensions.get('window');
+const PAGE_W = SCREEN_W;
+
+function normalizeOtherOption(s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.]/g, '')
+    .replace(/[()]/g, '')
+    .replace(/[/]/g, ' ')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const OTHER_WORK_OPTIONS_RAW = [
+  // Keep first: "Others" should appear at the top in UI.
+  'Others',
+
+  // Existing options
+  'Interior decorator',
+  'Carpenter / furniture maker',
+  'Floor tiler (tiles, marble, granite)',
+  'Painter (wall, texture, spray)',
+  'Plumber',
+  'Electrician',
+  'POP (Plaster of Paris) worker',
+  'False ceiling installer',
+  'Welder',
+  'Mason (brick/block work)',
+  'Glass & window installer (aluminum/uPVC)',
+  'Cabinet maker',
+  'Wood polisher / finisher',
+  'Sofa maker / upholsterer',
+  'Modular kitchen installer',
+  'Door & window fabricator',
+  'Bamboo craftsman',
+  'Gardener / landscaper',
+  'Nursery plant caretaker',
+  'Irrigation system installer',
+  'Lawn maintenance worker',
+  'Tree trimmer / cutter',
+  'Potter (clay items)',
+  'Sculptor',
+  'Handicraft maker',
+  'Textile weaver',
+  'Embroidery worker',
+  'Leather goods maker',
+  'Candle / soap maker',
+  'Pest control technician',
+  'Housekeeping staff',
+  'Waste management worker',
+  'Mobile repair technician',
+  'HVAC (AC) technician',
+  'Refrigeration mechanic',
+  'AC & refrigerator mechanic',
+  'TV / appliance repair technician',
+  'Bike mechanic',
+  'Car mechanic',
+  'Generator technician',
+  'Generator repair technician',
+  'CCTV installation technician',
+  'Warehouse handler',
+  'Packing & moving labor',
+  'Heavy equipment operator (JCB, crane, etc.)',
+  'Makeup artist',
+  'Mehndi artist',
+  'Fitness trainer (skill-based)',
+  'Solar panel installer',
+  'Solar maintenance technician',
+  'Elevator (lift) technician',
+  'Lift (elevator) technician',
+  'Fire safety equipment installer',
+  'Waterproofing specialist',
+  'Roofing worker',
+  'Drone operator',
+  'Photographer / videographer',
+  'Video editor (skill > degree)',
+  'Social media content creator',
+  'Freelance graphic designer',
+
+  // Newly added options (deduped by normalizeOtherOption)
+  'Scaffolding specialist',
+  'Formwork (shuttering) carpenter',
+  'Steel fixer (rebar worker)',
+  'Concrete pump operator',
+  'Tower crane operator',
+  'Excavator / JCB operator',
+  'Road roller operator',
+  'Asphalt paving specialist',
+  'Waterproofing technician',
+  'Basement sealing expert',
+  'High-voltage line technician',
+  'Industrial electrician',
+  'Wind turbine technician',
+  'Transformer repair technician',
+  'Electrical panel board fabricator',
+  'Cable tray installer',
+  'Lightning protection system installer',
+  'Duct fabrication specialist',
+  'Ventilation system installer',
+  'Boiler operator',
+  'Chiller plant technician',
+  'Cooling tower technician',
+  'Gas pipeline installer',
+  'Compressed air system technician',
+  'MIG/TIG welder',
+  'CNC machine operator',
+  'Lathe machine operator',
+  'Sheet metal fabricator',
+  'Aluminum fabricator',
+  'Steel structure fabricator',
+  'Pipe fitter',
+  'Industrial rigging specialist',
+  'Blacksmith',
+  'Tool and die maker',
+  'Industrial plumber',
+  'Pipeline welder',
+  'Drainage system specialist',
+  'Fire sprinkler system installer',
+  'Water treatment plant technician',
+  'Borewell drilling technician',
+  'Sewage treatment plant operator',
+  'Irrigation system technician',
+  'Fire alarm system technician',
+  'Fire extinguisher technician',
+  'Access control system installer',
+  'Security system integrator',
+  'Smoke detector installer',
+  'False ceiling specialist',
+  'Glass façade installer',
+  'uPVC window fabricator',
+  'Stone (granite/marble) polisher',
+  'Epoxy flooring specialist',
+  'Wooden flooring installer',
+  'Acoustic panel installer',
+  'Rainwater harvesting technician',
+  'Waste recycling plant operator',
+  'Biogas plant technician',
+  'EV (electric vehicle) charging station installer',
+  'Smart home automation technician',
+  'Drone surveying operator',
+  'Fiber optic cable technician',
+  'Data cabling technician',
+];
+
+const OTHER_WORK_OPTIONS = (() => {
+  const seen = new Set();
+  const out = [];
+  for (const opt of OTHER_WORK_OPTIONS_RAW) {
+    const key = normalizeOtherOption(opt);
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(opt.trim());
+  }
+  return out;
+})();
+
+const CATEGORY_ICON_BY_LABEL = {
+  Delivery: require('../../../assets/category-icons/delivery-29f0ecd4-7672-42da-8428-99aba3ef41a2.png'),
+  Cooking: require('../../../assets/category-icons/cooking-d8e79234-d8ce-4963-a869-5a43c511e727.png'),
+  Cleaning: require('../../../assets/category-icons/cleaning-4d1be5f5-6486-4639-bba4-7a9a6c62b3a1.png'),
+  Plumbing: require('../../../assets/category-icons/plumbing-6dc8737a-6a3c-4319-9a88-d6cf7908aa89.png'),
+  Electrical: require('../../../assets/category-icons/electrician-671976ab-ebc9-4f7f-b367-c41667c7ac3d.png'),
+  Mechanic: require('../../../assets/category-icons/technician-c032818a-f250-4c06-a58c-3ce1ed68e653.png'),
+  Driver: require('../../../assets/category-icons/driver-54f8dfaa-d227-49e9-ba55-c1c5d51bfc30.png'),
+  'Care taker': require('../../../assets/category-icons/social-services-84ecf7be-9105-4a51-9abf-830f9262ed3b.png'),
+  Tailor: require('../../../assets/category-icons/sewing-9fcc1742-c8b3-413d-88b4-08d6e7fca9c9.png'),
+  Salon: require('../../../assets/category-icons/salon-89fc9921-c2e6-47ca-a608-42f77d04b88f.png'),
+  // Back-compat: older jobs stored "Barber" in DB
+  Barber: require('../../../assets/category-icons/salon-89fc9921-c2e6-47ca-a608-42f77d04b88f.png'),
+  Laundry: require('../../../assets/category-icons/washing-212b8f18-6896-4f4f-8ea8-b9df9e9678b4.png'),
+  Other: require('../../../assets/category-icons/other.png'),
+};
+
+function labelForCategory(t, cat) {
+  const s = String(cat || '').trim();
+  if (!s) return '';
+  const keySuffix = JOB_CATEGORY_I18N_KEYS?.[s];
+  if (keySuffix) return t('postJob.category' + keySuffix);
+  return s;
+}
+
+function iconForCategory(cat) {
+  const s = String(cat || '').trim();
+  if (CATEGORY_ICON_BY_LABEL[s]) return CATEGORY_ICON_BY_LABEL[s];
+  // If user picked a custom "Other" work, show the Other icon.
+  if (OTHER_WORK_OPTIONS.includes(s)) return CATEGORY_ICON_BY_LABEL.Other;
+  return null;
+}
 
 /**
  * Scroll so the focused field stays just below the top padding of the scroll area
@@ -71,6 +267,16 @@ function createPostJobStyles(colors, isDark) {
     flex: 1,
     backgroundColor: colors.background,
   },
+  page: {
+    flex: 1,
+    width: PAGE_W,
+  },
+  pageInner: {
+    flex: 1,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
   scrollView: {
     flex: 1,
   },
@@ -80,6 +286,125 @@ function createPostJobStyles(colors, isDark) {
   },
   card: {
     width: '100%',
+  },
+  categoryPickerContent: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  stageTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  stageSubTitle: {
+    ...typography.body,
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text.secondary,
+    lineHeight: 26,
+    minHeight: 52,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  categoryTilesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignContent: 'flex-start',
+  },
+  categoryTileWrap: {
+    width: '33.3333%',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  categoryTile: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  categoryTilePressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
+  },
+  categoryTileSelected: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.light,
+  },
+  categoryTileIcon: {},
+  categoryTileIconImage: {
+    width: 56,
+    height: 56,
+  },
+  categoryTileLabel: {
+    marginTop: spacing.sm,
+    ...typography.small,
+    color: colors.text.primary,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  otherHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  otherHeaderSideSpacer: {
+    width: 76,
+  },
+  otherBackBtn: {
+    minWidth: 76,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+    alignItems: 'center',
+  },
+  otherBackText: {
+    ...typography.small,
+    color: isDark ? colors.text.primary : colors.primary.main,
+    fontWeight: '800',
+  },
+  otherTitle: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '800',
+    flex: 1,
+    textAlign: 'center',
+  },
+  otherSearchWrap: {
+    marginBottom: spacing.md,
+    width: '100%',
+  },
+  otherScroll: {
+    flex: 1,
+  },
+  otherList: {
+    gap: spacing.sm,
+    width: '100%',
+  },
+  otherItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+  },
+  otherItemText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '600',
   },
   title: {
     ...typography.h2,
@@ -99,8 +424,9 @@ function createPostJobStyles(colors, isDark) {
   measureFieldWrap: {},
   errorBorderBox: {
     ...StyleSheet.absoluteFillObject,
-    borderWidth: 2,
-    borderColor: colors.error.main,
+    // Disabled: user requested to remove red validation outline.
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: spacing.sm,
   },
   label: {
@@ -144,6 +470,43 @@ function createPostJobStyles(colors, isDark) {
   categoryTextActive: {
     color: isDark ? colors.text.primary : colors.primary.main,
     fontWeight: '600',
+  },
+  selectedCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  selectedCategoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: 1,
+    minWidth: 0,
+  },
+  selectedCategoryIcon: {
+    width: 22,
+    height: 22,
+  },
+  selectedCategoryText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  changeCategoryBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBackground,
+  },
+  changeCategoryText: {
+    ...typography.small,
+    color: isDark ? colors.text.primary : colors.primary.main,
+    fontWeight: '700',
   },
   genderContainer: {
     flexDirection: 'row',
@@ -251,6 +614,25 @@ function createPostJobStyles(colors, isDark) {
   },
   errorModalButton: {
     backgroundColor: colors.error.main,
+  },
+  toast: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 30,
+    elevation: 30,
+    backgroundColor: 'rgba(17, 24, 39, 0.92)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   verifyModalContent: {
     width: '88%',
@@ -380,7 +762,7 @@ function createPostJobStyles(colors, isDark) {
 }
 
 const PostJob = ({ onJobPosted }) => {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createPostJobStyles(colors, isDark), [colors, isDark]);
   const insets = useSafeAreaInsets();
@@ -392,7 +774,19 @@ const PostJob = ({ onJobPosted }) => {
   const budgetWrapRef = useRef(null);
   const ndAddressWrapRef = useRef(null);
   const descriptionWrapRef = useRef(null);
+  const titleWrapRef = useRef(null);
+  const categoryWrapRef = useRef(null);
+  const genderWrapRef = useRef(null);
   const [keyboardPad, setKeyboardPad] = useState(0);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  const [postJobStep, setPostJobStep] = useState('categories'); // 'categories' | 'other' | 'form'
+  const shiftAnim = useRef(new Animated.Value(0)).current; // 0 = categories, 1 = other, 2 = form
+  const stepTransitioningRef = useRef(false);
+  const [otherQuery, setOtherQuery] = useState('');
+  const [otherTranslated, setOtherTranslated] = useState({});
 
   /** Android: KAV offset. iOS: rely on ScrollView automaticallyAdjustKeyboardInsets + measure scroll. */
   const keyboardVerticalOffset =
@@ -410,6 +804,30 @@ const PostJob = ({ onJobPosted }) => {
     return () => {
       show.remove();
       hide.remove();
+    };
+  }, []);
+
+  const showToast = (msg) => {
+    if (!msg) return;
+    setToastMsg(String(msg));
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    Animated.timing(toastAnim, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => setToastMsg(''));
+    }, 5000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
@@ -433,10 +851,10 @@ const PostJob = ({ onJobPosted }) => {
   const [notAppropriateModalVisible, setNotAppropriateModalVisible] = useState(false);
   const [verifyingModalVisible, setVerifyingModalVisible] = useState(false);
   const [moderationRejectedVisible, setModerationRejectedVisible] = useState(false);
-  const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [addressPickerVisible, setAddressPickerVisible] = useState(false);
   const [addressPickerTarget, setAddressPickerTarget] = useState(null); // 'address'|'deliveryFrom'|'deliveryTo'
   const verifyProgressAnim = useRef(new Animated.Value(0)).current;
+  const verifyProgressDriverRef = useRef(null);
   const titleBorderOpacity = useRef(new Animated.Value(0)).current;
   const categoryBorderOpacity = useRef(new Animated.Value(0)).current;
   const addressBorderOpacity = useRef(new Animated.Value(0)).current;
@@ -454,11 +872,130 @@ const PostJob = ({ onJobPosted }) => {
     toAddr: toAddrBorderOpacity,
   };
 
+  // Shake animations for invalid fields (left-right) — 1.5s total.
+  const titleShakeX = useRef(new Animated.Value(0)).current;
+  const categoryShakeX = useRef(new Animated.Value(0)).current;
+  const addressShakeX = useRef(new Animated.Value(0)).current;
+  const budgetShakeX = useRef(new Animated.Value(0)).current;
+  const genderShakeX = useRef(new Animated.Value(0)).current;
+  const fromAddrShakeX = useRef(new Animated.Value(0)).current;
+  const toAddrShakeX = useRef(new Animated.Value(0)).current;
+  const shakeX = {
+    title: titleShakeX,
+    category: categoryShakeX,
+    address: addressShakeX,
+    budget: budgetShakeX,
+    gender: genderShakeX,
+    fromAddr: fromAddrShakeX,
+    toAddr: toAddrShakeX,
+  };
+
   const genders = ['Male', 'Female', 'Any'];
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const filteredOtherOptions = useMemo(() => {
+    const q = String(otherQuery || '').trim().toLowerCase();
+    if (!q) return OTHER_WORK_OPTIONS;
+    return OTHER_WORK_OPTIONS.filter((opt) => {
+      const en = opt.toLowerCase();
+      const hi = String(otherTranslated[opt] || '').toLowerCase();
+      return en.includes(q) || (hi && hi.includes(q));
+    });
+  }, [otherQuery, otherTranslated]);
+
+  useEffect(() => {
+    if (postJobStep !== 'other') return;
+    if (locale !== 'hi') return;
+    let cancelled = false;
+
+    const toTranslate = filteredOtherOptions.filter((opt) => otherTranslated[opt] == null);
+    if (toTranslate.length === 0) return;
+
+    (async () => {
+      // Translate a limited batch to avoid spamming the API if user scrolls a lot.
+      const batch = toTranslate.slice(0, 20);
+      const results = await Promise.all(batch.map((s) => translateToHindi(s)));
+      if (cancelled) return;
+      setOtherTranslated((prev) => {
+        const next = { ...prev };
+        batch.forEach((k, idx) => {
+          next[k] = results[idx] || k;
+        });
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [postJobStep, locale, filteredOtherOptions, otherTranslated]);
+
+  const stepIndex = (step) => (step === 'categories' ? 0 : step === 'other' ? 1 : 2);
+
+  const animateToStep = (nextStep) => {
+    if (stepTransitioningRef.current) return;
+    if (nextStep === postJobStep) return;
+    stepTransitioningRef.current = true;
+
+    // Update step immediately so the correct page is visible during the animation.
+    // (Otherwise pages that are conditionally hidden via postJobStep can appear with a delay.)
+    setPostJobStep(nextStep);
+
+    const target = stepIndex(nextStep);
+    Animated.timing(shiftAnim, {
+      toValue: target,
+      duration: 320,
+      easing: Easing.bezier(0.22, 1, 0.36, 1), // smooth "push" shift
+      useNativeDriver: true,
+    }).start(() => {
+      stepTransitioningRef.current = false;
+      if (nextStep === 'form') {
+        scrollViewRef.current?.scrollTo?.({ y: 0, animated: false });
+      }
+    });
+  };
+
+  const selectCategoryAndOpenForm = (cat) => {
+    handleChange('category', cat);
+    animateToStep('form');
+  };
+
+  const selectMainCategory = (cat) => {
+    if (String(cat) === 'Other') {
+      handleChange('category', 'Other');
+      setOtherQuery('');
+      animateToStep('other');
+      return;
+    }
+    selectCategoryAndOpenForm(cat);
+  };
+
+  const selectOtherWorkAndOpenForm = (work) => {
+    // "Others" means user didn't find a match; keep stored category as "Other"
+    handleChange('category', work === 'Others' ? 'Other' : work);
+    animateToStep('form');
+  };
+
+  useEffect(() => {
+    // Android hardware back: move within PostJob flow instead of exiting screen
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (postJobStep === 'form') {
+        const cat = String(formData.category || '').trim();
+        const shouldGoOther = OTHER_WORK_OPTIONS.includes(cat) || cat === 'Other';
+        animateToStep(shouldGoOther ? 'other' : 'categories');
+        return true;
+      }
+      if (postJobStep === 'other') {
+        animateToStep('categories');
+        return true;
+      }
+      return false; // allow default behavior (exit/back)
+    });
+    return () => sub.remove();
+  }, [postJobStep, formData.category]);
 
   const openAddressPicker = (target) => {
     setAddressPickerTarget(target);
@@ -515,24 +1052,54 @@ const PostJob = ({ onJobPosted }) => {
     ]).start();
   };
 
+  const runShakeAnimation = (animValue) => {
+    try {
+      animValue.stopAnimation();
+    } catch (_) {}
+    animValue.setValue(0);
+    const amp = 8;
+    // 3 shakes in ~500ms: L-R-L-R-L then settle.
+    const keyframes = [-amp, amp, -amp, amp, -amp, 0];
+    const stepMs = Math.round(500 / keyframes.length);
+    Animated.sequence(
+      keyframes.map((toValue) =>
+        Animated.timing(animValue, {
+          toValue,
+          duration: stepMs,
+          useNativeDriver: true,
+        })
+      )
+    ).start();
+  };
+
+  const scrollToAndShake = (fieldKey, ref) => {
+    // 1) Scroll into view (if ref provided)
+    if (ref?.current) {
+      focusScrollToField(ref);
+    }
+    // 2) Shake after the scroll timing completes (matches createScrollFieldIntoView delay)
+    const delay = Platform.OS === 'ios' ? 260 : 320;
+    setTimeout(() => runShakeAnimation(shakeX[fieldKey]), delay);
+  };
+
   const isDelivery = String(formData.category || '').trim().toLowerCase() === 'delivery';
 
   const handleSubmit = async () => {
     if (gpsDenied || !gpsEnabled) {
-      runErrorBorderAnimation(borderOpacity.title);
+      scrollToAndShake('title', titleWrapRef);
       return;
     }
     if (!validateRequired(formData.title)) {
-      runErrorBorderAnimation(borderOpacity.title);
+      scrollToAndShake('title', titleWrapRef);
       return;
     }
     if (!isValidJobTitle(formData.title)) {
-      runErrorBorderAnimation(borderOpacity.title);
+      scrollToAndShake('title', titleWrapRef);
       Alert.alert(t('common.error'), t('postJob.titleInvalidAlphanumeric'));
       return;
     }
     if (hasUnsupportedJobChars(formData.title)) {
-      runErrorBorderAnimation(borderOpacity.title);
+      scrollToAndShake('title', titleWrapRef);
       Alert.alert(t('common.error'), t('postJob.onlyEnglishHindi'));
       return;
     }
@@ -545,65 +1112,70 @@ const PostJob = ({ onJobPosted }) => {
       return;
     }
     if (!formData.category) {
-      runErrorBorderAnimation(borderOpacity.category);
+      scrollToAndShake('category', categoryWrapRef);
       return;
     }
 
     if (isDelivery) {
       if (!validateRequired(formData.deliveryFromAddress)) {
-        runErrorBorderAnimation(borderOpacity.fromAddr);
+        scrollToAndShake('fromAddr', fromAddrWrapRef);
         return;
       }
       if (!validatePincode(formData.deliveryFromPincode)) {
-        runErrorBorderAnimation(borderOpacity.fromAddr);
+        scrollToAndShake('fromAddr', fromAddrWrapRef);
         return;
       }
       if (!validateRequired(formData.deliveryToAddress)) {
-        runErrorBorderAnimation(borderOpacity.toAddr);
+        scrollToAndShake('toAddr', toAddrWrapRef);
         return;
       }
       if (!validatePincode(formData.deliveryToPincode)) {
-        runErrorBorderAnimation(borderOpacity.toAddr);
+        scrollToAndShake('toAddr', toAddrWrapRef);
         return;
       }
     } else {
       if (!validateRequired(formData.address)) {
-        runErrorBorderAnimation(borderOpacity.address);
+        scrollToAndShake('address', ndAddressWrapRef);
         return;
       }
       if (!validatePincode(formData.pincode)) {
-        runErrorBorderAnimation(borderOpacity.address);
+        scrollToAndShake('address', ndAddressWrapRef);
         return;
       }
       if (!formData.gender) {
-        runErrorBorderAnimation(borderOpacity.gender);
+        scrollToAndShake('gender', genderWrapRef);
         return;
       }
     }
 
     const budgetNum = parseFloat(String(formData.budget || '').replace(/,/g, ''));
     if (!Number.isFinite(budgetNum) || budgetNum < 10) {
-      runErrorBorderAnimation(borderOpacity.budget);
-      Alert.alert(t('common.error'), t('jobs.budgetMin10'));
+      scrollToAndShake('budget', budgetWrapRef);
+      showToast(t('jobs.budgetMin10'));
       return;
     }
 
     const blocked = isJobTextBlockedByWords(formData.title, formData.description);
     if (blocked.blocked) {
-      runErrorBorderAnimation(borderOpacity.title);
+      scrollToAndShake('title', titleWrapRef);
       setNotAppropriateModalVisible(true);
       return;
     }
 
     try {
       setVerifyingModalVisible(true);
+      // Truthful loader: NO LOOP. Progress moves forward and only completes on success.
+      try {
+        verifyProgressDriverRef.current?.stop?.();
+      } catch (_) {}
+      verifyProgressAnim.stopAnimation();
       verifyProgressAnim.setValue(0);
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(verifyProgressAnim, { toValue: 1, duration: 1400, useNativeDriver: false }),
-          Animated.timing(verifyProgressAnim, { toValue: 0, duration: 800, useNativeDriver: false }),
-        ])
-      ).start();
+      verifyProgressDriverRef.current = Animated.timing(verifyProgressAnim, {
+        toValue: 0.9,
+        duration: 12000,
+        useNativeDriver: false,
+      });
+      verifyProgressDriverRef.current.start();
       setLoading(true);
 
       const categoryTrimmed = String(formData.category || '').trim();
@@ -636,7 +1208,39 @@ const PostJob = ({ onJobPosted }) => {
       const result = await clientJobsAPI.postJob(jobData);
 
       if (result.success) {
-        setSuccessModalVisible(true);
+        try {
+          verifyProgressDriverRef.current?.stop?.();
+        } catch (_) {}
+        await new Promise((r) => {
+          Animated.timing(verifyProgressAnim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: false,
+          }).start(() => r());
+        });
+        // Keep UX: clear form and switch to My Jobs, then toast.
+        setFormData({
+          title: '',
+          category: '',
+          address: '',
+          pincode: '',
+          jobLat: null,
+          jobLng: null,
+          deliveryFromAddress: '',
+          deliveryFromPincode: '',
+          deliveryToAddress: '',
+          deliveryToPincode: '',
+          budget: '',
+          gender: '',
+          description: '',
+        });
+        // After successful post, return to category picker for the next job.
+        setPostJobStep('categories');
+        shiftAnim.setValue(0);
+        if (typeof onJobPosted === 'function') {
+          onJobPosted();
+        }
+        showToast(t('postJob.jobPostedSuccessfully'));
       } else {
         throw new Error(result.error || t('postJob.failedToPostJob'));
       }
@@ -653,6 +1257,9 @@ const PostJob = ({ onJobPosted }) => {
       }
     } finally {
       setVerifyingModalVisible(false);
+      try {
+        verifyProgressDriverRef.current?.stop?.();
+      } catch (_) {}
       verifyProgressAnim.stopAnimation();
       setLoading(false);
     }
@@ -666,21 +1273,164 @@ const PostJob = ({ onJobPosted }) => {
       behavior={Platform.OS === 'android' ? 'padding' : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: contentPaddingBottom }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        keyboardDismissMode="on-drag"
-        nestedScrollEnabled={true}
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-      >
+      {toastMsg ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.toast,
+            { top: insets?.top || 0 },
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.toastText}>{toastMsg}</Text>
+        </Animated.View>
+      ) : null}
+      <View style={{ flex: 1 }}>
         {/* GPS banner is shown globally (ClientDashboard). Keep this screen uncluttered. */}
-        <Card style={styles.card}>
-        <CardContent>
+        <Animated.View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            width: PAGE_W * 3,
+            transform: [
+              {
+                translateX: shiftAnim.interpolate({
+                  inputRange: [0, 2],
+                  outputRange: [0, -PAGE_W * 2],
+                }),
+              },
+            ],
+          }}
+        >
+          {/* Page 0: Categories */}
+          <View style={styles.page}>
+            <View
+              style={[
+                styles.pageInner,
+                styles.categoryPickerContent,
+                { paddingBottom: spacing.md + (insets?.bottom || 0) },
+              ]}
+            >
+              <Text style={styles.stageSubTitle}>{t('postJob.selectCategoryToContinue')}</Text>
+
+              <View style={styles.categoryTilesGrid}>
+                {JOB_CATEGORIES.map((cat) => {
+                  const iconSrc = iconForCategory(cat);
+                  const active = formData.category === cat;
+                  return (
+                    <View key={cat} style={styles.categoryTileWrap}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        style={[styles.categoryTile, active && styles.categoryTileSelected]}
+                        onPress={() => selectMainCategory(cat)}
+                      >
+                        {iconSrc ? (
+                          <Image source={iconSrc} style={styles.categoryTileIconImage} resizeMode="contain" />
+                        ) : (
+                          <MaterialIcons
+                            name="category"
+                            size={52}
+                            color={colors.primary.main}
+                            style={styles.categoryTileIcon}
+                          />
+                        )}
+                        <Text style={styles.categoryTileLabel} numberOfLines={2}>
+                          {labelForCategory(t, cat)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* Page 1: Other picker */}
+          <View style={[styles.page, postJobStep !== 'other' && { opacity: 0 }]}>
+            <View
+              style={[
+                styles.pageInner,
+                styles.categoryPickerContent,
+                { paddingBottom: spacing.md + (insets?.bottom || 0) },
+              ]}
+            >
+              <View style={styles.otherHeaderRow}>
+                <TouchableOpacity style={styles.otherBackBtn} onPress={() => animateToStep('categories')}>
+                  <Text style={styles.otherBackText}>{t('common.back') || 'Back'}</Text>
+                </TouchableOpacity>
+                <Text style={styles.otherTitle} numberOfLines={1}>
+                  {labelForCategory(t, 'Other')}
+                </Text>
+                <View style={styles.otherHeaderSideSpacer} />
+              </View>
+
+              <View style={styles.otherSearchWrap}>
+                <Input
+                  placeholder={t('postJob.searchOther')}
+                  value={otherQuery}
+                  onChangeText={setOtherQuery}
+                  // Remove default Input bottom margin to keep size tight.
+                  style={{ marginBottom: 0 }}
+                  inputStyle={{ minHeight: 48, paddingVertical: 12 }}
+                  inputContainerStyle={{
+                    borderWidth: 0,
+                    borderBottomWidth: 1.5,
+                    borderBottomColor: colors.primary.main + '80',
+                    borderRadius: 0,
+                    backgroundColor: 'transparent',
+                  }}
+                />
+              </View>
+
+              <ScrollView
+                style={styles.otherScroll}
+                contentContainerStyle={styles.otherList}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {filteredOtherOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={styles.otherItem}
+                    activeOpacity={0.75}
+                    onPress={() => selectOtherWorkAndOpenForm(opt)}
+                  >
+                    <Text style={styles.otherItemText}>
+                      {locale === 'hi' ? otherTranslated[opt] || opt : opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          {/* Page 2: Form */}
+          <View style={styles.page}>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.scrollView}
+              contentContainerStyle={[styles.content, { paddingBottom: contentPaddingBottom }]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              nestedScrollEnabled={true}
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            >
+              <Card style={styles.card}>
+                <CardContent>
           {/* Job Title */}
-          <View style={styles.fieldWithErrorWrap}>
+          <View ref={titleWrapRef} collapsable={false} style={styles.measureFieldWrap}>
+          <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.title }] }]}>
             <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.title }]} pointerEvents="none" />
             <Input
               label={t('postJob.jobTitle')}
@@ -689,26 +1439,40 @@ const PostJob = ({ onJobPosted }) => {
               onChangeText={handleTitleChange}
               style={styles.inputField}
             />
+          </Animated.View>
           </View>
 
           {/* Category */}
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>{t('postJob.category')}</Text>
-            <View style={styles.fieldWithErrorWrap}>
+            <View ref={categoryWrapRef} collapsable={false} style={styles.measureFieldWrap}>
+            <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.category }] }]}>
               <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.category }]} pointerEvents="none" />
-              <View style={styles.categoryGrid}>
-                {JOB_CATEGORIES.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.categoryButton, formData.category === cat && styles.categoryButtonActive]}
-                    onPress={() => handleChange('category', cat)}
-                  >
-                    <Text style={[styles.categoryText, formData.category === cat && styles.categoryTextActive]}>
-                      {t('postJob.category' + (JOB_CATEGORY_I18N_KEYS[cat] || cat))}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.selectedCategoryRow}>
+                <View style={styles.selectedCategoryLeft}>
+                  {iconForCategory(formData.category) ? (
+                    <Image
+                      source={iconForCategory(formData.category)}
+                      style={styles.selectedCategoryIcon}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <MaterialIcons name="category" size={18} color={colors.text.secondary} />
+                  )}
+                  <Text style={styles.selectedCategoryText} numberOfLines={1}>
+                    {labelForCategory(t, formData.category)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.changeCategoryBtn}
+                  onPress={() => animateToStep(OTHER_WORK_OPTIONS.includes(String(formData.category || '').trim()) || String(formData.category) === 'Other' ? 'other' : 'categories')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('postJob.changeCategory')}
+                >
+                  <Text style={styles.changeCategoryText}>{t('postJob.change')}</Text>
+                </TouchableOpacity>
               </View>
+            </Animated.View>
             </View>
           </View>
 
@@ -729,7 +1493,7 @@ const PostJob = ({ onJobPosted }) => {
                   collapsable={false}
                   style={styles.measureFieldWrap}
                 >
-                  <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.fromAddr }] }]}>
                     <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.fromAddr }]} pointerEvents="none" />
                     <Input
                       label={t('postJob.address')}
@@ -742,7 +1506,7 @@ const PostJob = ({ onJobPosted }) => {
                       style={styles.inputField}
                       onFocus={() => focusScrollToField(fromAddrWrapRef)}
                     />
-                  </View>
+                  </Animated.View>
                 </View>
               </View>
 
@@ -761,7 +1525,7 @@ const PostJob = ({ onJobPosted }) => {
                   collapsable={false}
                   style={styles.measureFieldWrap}
                 >
-                  <View style={styles.fieldWithErrorWrap}>
+                  <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.toAddr }] }]}>
                     <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.toAddr }]} pointerEvents="none" />
                     <Input
                       label={t('postJob.address')}
@@ -774,7 +1538,7 @@ const PostJob = ({ onJobPosted }) => {
                       style={styles.inputField}
                       onFocus={() => focusScrollToField(toAddrWrapRef)}
                     />
-                  </View>
+                  </Animated.View>
                 </View>
               </View>
             </View>
@@ -785,7 +1549,7 @@ const PostJob = ({ onJobPosted }) => {
                 collapsable={false}
                 style={styles.measureFieldWrap}
               >
-                <View style={styles.fieldWithErrorWrap}>
+                <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.address }] }]}>
                   <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.address }]} pointerEvents="none" />
                   <Input
                     label={t('postJob.address')}
@@ -796,16 +1560,21 @@ const PostJob = ({ onJobPosted }) => {
                     style={styles.inputField}
                     onFocus={() => focusScrollToField(ndAddressWrapRef)}
                   />
-                </View>
+                </Animated.View>
               </View>
             </>
           )}
 
           {/* Budget */}
-          <View
+          <Animated.View
             ref={budgetWrapRef}
             collapsable={false}
-            style={[styles.inputWrapper, styles.fieldWithErrorWrap, styles.measureFieldWrap]}
+            style={[
+              styles.inputWrapper,
+              styles.fieldWithErrorWrap,
+              styles.measureFieldWrap,
+              { transform: [{ translateX: shakeX.budget }] },
+            ]}
             onStartShouldSetResponder={() => true}
           >
             <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.budget }]} pointerEvents="none" />
@@ -818,13 +1587,14 @@ const PostJob = ({ onJobPosted }) => {
               style={styles.inputField}
               onFocus={() => focusScrollToField(budgetWrapRef)}
             />
-          </View>
+          </Animated.View>
 
           {!isDelivery ? (
             <>
               <View style={styles.fieldContainer}>
                 <Text style={styles.label}>{t('postJob.genderPreference')}</Text>
-                <View style={styles.fieldWithErrorWrap}>
+                <View ref={genderWrapRef} collapsable={false} style={styles.measureFieldWrap}>
+                <Animated.View style={[styles.fieldWithErrorWrap, { transform: [{ translateX: shakeX.gender }] }]}>
                   <Animated.View style={[styles.errorBorderBox, { opacity: borderOpacity.gender }]} pointerEvents="none" />
                   <View style={styles.genderContainer}>
                     {genders.map((gen) => (
@@ -839,6 +1609,7 @@ const PostJob = ({ onJobPosted }) => {
                       </TouchableOpacity>
                     ))}
                   </View>
+                </Animated.View>
                 </View>
               </View>
 
@@ -881,8 +1652,11 @@ const PostJob = ({ onJobPosted }) => {
               </View>
             )}
           </TouchableOpacity>
-        </CardContent>
-      </Card>
+                </CardContent>
+              </Card>
+            </ScrollView>
+          </View>
+        </Animated.View>
 
       <Modal
         visible={notAppropriateModalVisible}
@@ -927,7 +1701,7 @@ const PostJob = ({ onJobPosted }) => {
                   {
                     width: verifyProgressAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: ['10%', '95%'],
+                      outputRange: ['0%', '100%'],
                     }),
                   },
                 ]}
@@ -983,79 +1757,7 @@ const PostJob = ({ onJobPosted }) => {
         }}
         onSelect={(picked) => applyPickedAddress(picked, addressPickerTarget)}
       />
-
-      {/* Success Modal */}
-      <Modal
-        visible={successModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setSuccessModalVisible(false);
-          // Clear form
-          setFormData({
-            title: '',
-            category: '',
-            address: '',
-            pincode: '',
-            jobLat: null,
-            jobLng: null,
-            deliveryFromAddress: '',
-            deliveryFromPincode: '',
-            deliveryToAddress: '',
-            deliveryToPincode: '',
-            budget: '',
-            gender: '',
-            description: '',
-          });
-          // Navigate to My Jobs tab after closing success modal
-          if (onJobPosted) {
-            onJobPosted();
-          }
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.successIconContainer}>
-              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
-            </View>
-            <Text style={styles.modalTitle}>{t('postJob.jobPostedSuccessfully')}</Text>
-            <Text style={styles.modalSubtitle}>
-              {t('postJob.jobPostedSuccessMessage')}
-            </Text>
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
-                onPress={() => {
-                  setSuccessModalVisible(false);
-                  // Clear form
-                  setFormData({
-                    title: '',
-                    category: '',
-                    address: '',
-                    pincode: '',
-                    jobLat: null,
-                    jobLng: null,
-                    deliveryFromAddress: '',
-                    deliveryFromPincode: '',
-                    deliveryToAddress: '',
-                    deliveryToPincode: '',
-                    budget: '',
-                    gender: '',
-                    description: '',
-                  });
-                  // Notify parent (ClientDashboard) to switch to My Jobs tab
-                  if (typeof onJobPosted === 'function') {
-                    onJobPosted();
-                  }
-                }}
-              >
-                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 };

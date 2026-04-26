@@ -11,7 +11,8 @@
  * `config` here is the flattened Expo config (not `{ expo: ... }`).
  */
 module.exports = ({ config }) => {
-  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const googleMapsApiKey =
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || config.extra?.googleMapsApiKey || '';
   const openaiApiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY || config.extra?.openaiApiKey || '';
   const msg91WidgetId =
     process.env.EXPO_PUBLIC_MSG91_WIDGET_ID || config.extra?.msg91WidgetId || '';
@@ -23,6 +24,7 @@ module.exports = ({ config }) => {
     extra: {
       ...(config.extra || {}),
       openaiApiKey,
+      ...(googleMapsApiKey ? { googleMapsApiKey } : {}),
       ...(msg91WidgetId ? { msg91WidgetId } : {}),
       ...(msg91AuthToken ? { msg91AuthToken } : {}),
     },
@@ -30,16 +32,20 @@ module.exports = ({ config }) => {
       ...config.android,
       config: {
         ...(config.android?.config || {}),
-        googleMaps: {
-          apiKey: googleMapsApiKey,
-        },
+        ...(googleMapsApiKey
+          ? {
+              googleMaps: {
+                apiKey: googleMapsApiKey,
+              },
+            }
+          : {}),
       },
     },
     ios: {
       ...config.ios,
       config: {
         ...(config.ios?.config || {}),
-        googleMapsApiKey: googleMapsApiKey,
+        ...(googleMapsApiKey ? { googleMapsApiKey: googleMapsApiKey } : {}),
       },
     },
   };

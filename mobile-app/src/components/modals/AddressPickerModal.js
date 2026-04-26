@@ -23,6 +23,7 @@ import {
   extractPincodeFromAddressComponents,
   placeDetails,
   placesAutocomplete,
+  hasGoogleMapsApiKey,
   reverseGeocode,
 } from '../../services/googlePlaces';
 import { defaultIndiaMapRegion, getApproximateLatLng, regionAround } from '../../services/approximateLocation';
@@ -161,6 +162,26 @@ function createStyles(colors, isDark) {
       color: colors.text.secondary,
       marginTop: 4,
     },
+    addressFields: {
+      marginTop: spacing.md,
+      gap: spacing.sm,
+    },
+    fieldLabel: {
+      ...typography.small,
+      color: colors.text.secondary,
+      fontWeight: '800',
+      marginBottom: 6,
+    },
+    fieldInput: {
+      minHeight: 46,
+      borderRadius: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBackground,
+      paddingHorizontal: spacing.md,
+      color: colors.text.primary,
+      ...typography.body,
+    },
     ctaRow: {
       flexDirection: 'row',
       gap: spacing.sm,
@@ -226,8 +247,10 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const insets = useSafeAreaInsets();
+  const mapsReady = hasGoogleMapsApiKey();
 
   const [tab, setTab] = useState('search'); // 'search' | 'map'
+  const [step, setStep] = useState('pick'); // 'pick' | 'details'
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   /** Blocks confirm / GPS / place details — never tied to search TextInput editable (avoids keyboard dismiss). */
@@ -238,6 +261,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
   const [resolvingAddress, setResolvingAddress] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [flatNo, setFlatNo] = useState('');
+  const [buildingName, setBuildingName] = useState('');
 
   const sessionTokenRef = useRef(randomToken());
   const debounceRef = useRef(null);
@@ -294,6 +319,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
     setSuggestions([]);
     setQuery('');
     setTab('search');
+    setStep('pick');
     sessionTokenRef.current = randomToken();
     coarseBiasRef.current = null;
 
@@ -342,7 +368,35 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
           }
         : null
     );
+    setFlatNo('');
+    setBuildingName('');
   }, [visible]);
+
+  // When user picks a new address, reset additional fields.
+  useEffect(() => {
+    if (!visible) return;
+    setFlatNo('');
+    setBuildingName('');
+  }, [visible, selected?.address]);
+
+  const goToDetails = () => {
+    if (!selected?.address) {
+      setError('Please select an address from the list or the map.');
+      return;
+    }
+    if (!selected?.pincode) {
+      setError('Pincode not found for this location. Please choose a more specific address.');
+      return;
+    }
+    setError('');
+    setStep('details');
+    requestAnimationFrame(() => Keyboard.dismiss());
+  };
+
+  const goBackToPick = () => {
+    setError('');
+    setStep('pick');
+  };
 
   /** Map pin tab: zoom to device GPS when permission + location services on (skip if editing saved coords). */
   useEffect(() => {
@@ -429,8 +483,21 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
       setError('Pincode not found for this location. Please choose a more specific address.');
       return false;
     }
+
+    const flat = String(flatNo || '').replace(/\D/g, '');
+    const building = String(buildingName || '').trim().slice(0, 30);
+    if (!flat) {
+      setError('Please enter Room/Flat No.');
+      return false;
+    }
+    if (!building) {
+      setError('Please enter House/Building Name.');
+      return false;
+    }
+
+    const composedAddress = `${flat}, ${building}, ${payload.address}`;
     onSelect?.({
-      address: payload.address,
+      address: composedAddress,
       pincode: payload.pincode,
       lat: payload.lat ?? null,
       lng: payload.lng ?? null,
@@ -472,7 +539,8 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
         setMarker({ latitude: Number(lat), longitude: Number(lng) });
       }
       Keyboard.dismiss();
-      applySelection(next);
+      // Move to step 2 where user enters flat/building.
+      setStep('details');
     } catch (e) {
       setError(e.message || 'Failed to fetch place details');
     } finally {
@@ -610,6 +678,16 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Select address</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
+              {step === 'details' ? (
+                <TouchableOpacity
+                  style={styles.headerBtn}
+                  onPress={goBackToPick}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="arrow-back" size={20} color={colors.text.primary} />
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={styles.headerBtn}
                 onPress={() => {
@@ -626,20 +704,32 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
             </View>
           </View>
 
-          <View style={styles.tabs}>
-            <TouchableOpacity
-              style={[styles.tab, tab === 'search' && styles.tabActive]}
-              onPress={() => setTab('search')}
-            >
-              <Text style={[styles.tabText, tab === 'search' && styles.tabTextActive]}>Search</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, tab === 'map' && styles.tabActive]}
-              onPress={() => setTab('map')}
-            >
-              <Text style={[styles.tabText, tab === 'map' && styles.tabTextActive]}>Map pin</Text>
-            </TouchableOpacity>
-          </View>
+          {step === 'pick' ? (
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                style={[styles.tab, tab === 'search' && styles.tabActive]}
+                onPress={() => setTab('search')}
+              >
+                <Text style={[styles.tabText, tab === 'search' && styles.tabTextActive]}>Search</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, tab === 'map' && styles.tabActive]}
+                onPress={() => {
+                  if (!mapsReady) {
+                    setError(
+                      'Google Maps API is not configured in this build. Please rebuild the app with a valid key.'
+                    );
+                    setTab('search');
+                    return;
+                  }
+                  setTab('map');
+                }}
+                disabled={!mapsReady}
+              >
+                <Text style={[styles.tabText, tab === 'map' && styles.tabTextActive]}>Map pin</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           <View style={styles.body}>
             {error ? (
@@ -648,7 +738,73 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               </Text>
             ) : null}
 
-            {tab === 'search' ? (
+            {step === 'details' ? (
+              <>
+                {selected?.address ? (
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewTitle} numberOfLines={3}>
+                      {selected.address}
+                    </Text>
+                    <Text style={styles.previewSub}>Pincode: {selected.pincode || '—'}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.addressFields}>
+                  <View>
+                    <Text style={styles.fieldLabel}>Room/Flat No</Text>
+                    <TextInput
+                      value={flatNo}
+                      onChangeText={(text) => {
+                        const digits = String(text || '').replace(/\D/g, '').slice(0, 8);
+                        setFlatNo(digits);
+                        setError('');
+                      }}
+                      placeholder="e.g. 1203"
+                      placeholderTextColor={colors.text.muted}
+                      keyboardType="number-pad"
+                      style={styles.fieldInput}
+                      maxLength={8}
+                      returnKeyType="done"
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={styles.fieldLabel}>House/Building Name</Text>
+                    <TextInput
+                      value={buildingName}
+                      onChangeText={(text) => {
+                        const next = String(text || '').slice(0, 30);
+                        setBuildingName(next);
+                        setError('');
+                      }}
+                      placeholder="e.g. Green Heights"
+                      placeholderTextColor={colors.text.muted}
+                      style={styles.fieldInput}
+                      maxLength={30}
+                      returnKeyType="done"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.ctaRow}>
+                  <TouchableOpacity style={styles.cta} onPress={goBackToPick} disabled={loading}>
+                    <Text style={styles.ctaText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.cta, styles.ctaPrimary]}
+                    onPress={confirmSelection}
+                    disabled={
+                      loading ||
+                      resolvingAddress ||
+                      !String(flatNo || '').replace(/\D/g, '').trim() ||
+                      !String(buildingName || '').trim()
+                    }
+                  >
+                    <Text style={[styles.ctaText, styles.ctaTextPrimary]}>Use this address</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : tab === 'search' ? (
               <>
                 <View style={styles.searchBox}>
                   <MaterialIcons name="search" size={20} color={colors.text.secondary} />
@@ -676,6 +832,10 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
                   style={{ marginTop: spacing.sm, maxHeight: 260 }}
                 />
               </>
+            ) : !mapsReady ? (
+              <Text style={styles.hint}>
+                Map is not available in this build. Configure Google Maps API key and rebuild the app.
+              </Text>
             ) : (
               <>
                 <View style={styles.mapWrap}>
@@ -714,7 +874,7 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               </>
             )}
 
-            {selected?.address ? (
+            {step === 'pick' && selected?.address ? (
               <View style={styles.previewCard}>
                 <Text style={styles.previewTitle} numberOfLines={3}>
                   {selected.address}
@@ -734,17 +894,17 @@ export default function AddressPickerModal({ visible, onClose, onSelect, initial
               </View>
             ) : null}
 
-            {tab === 'map' ? (
+            {step === 'pick' && selected?.address ? (
               <View style={styles.ctaRow}>
                 <TouchableOpacity style={styles.cta} onPress={onClose} disabled={loading}>
                   <Text style={styles.ctaText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.cta, styles.ctaPrimary]}
-                  onPress={confirmSelection}
-                  disabled={loading || resolvingAddress}
+                  onPress={goToDetails}
+                  disabled={loading || resolvingAddress || !selected?.address || !selected?.pincode}
                 >
-                  <Text style={[styles.ctaText, styles.ctaTextPrimary]}>Use this address</Text>
+                  <Text style={[styles.ctaText, styles.ctaTextPrimary]}>Next</Text>
                 </TouchableOpacity>
               </View>
             ) : null}

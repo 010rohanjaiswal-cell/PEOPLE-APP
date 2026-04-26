@@ -9,6 +9,10 @@ function getGoogleMapsApiKey() {
   );
 }
 
+export function hasGoogleMapsApiKey() {
+  return Boolean(getGoogleMapsApiKey());
+}
+
 function buildUrl(base, params) {
   const usp = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => {

@@ -3,11 +3,12 @@
  * Main entry point
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DigiLockerProvider } from '@cashfreepayments/react-native-digilocker';
+import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { SocketProvider } from './src/context/SocketContext';
 import { UserProvider } from './src/context/UserContext';
@@ -23,6 +24,9 @@ import {
   ensureNotificationChannelAsync,
   subscribeForegroundNotificationVibration,
 } from './src/utils/pushNotifications';
+
+// Keep native splash visible until RN is ready (prevents a blank flash on launch).
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function ThemedStatusBar() {
   const { isDark } = useTheme();
@@ -86,8 +90,22 @@ const AppContent = () => {
 };
 
 export default function App() {
+  const [appReady, setAppReady] = useState(false);
+
+  useEffect(() => {
+    // If you add async warmups (fonts, persisted state hydration, etc),
+    // do them here and only then mark app ready.
+    setAppReady(true);
+  }, []);
+
+  const onRootLayout = useCallback(() => {
+    if (appReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [appReady]);
+
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider onLayout={onRootLayout}>
       <DigiLockerProvider>
       <AuthProvider>
         <SocketProvider>

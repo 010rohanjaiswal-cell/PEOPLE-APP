@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Pressable,
+  Linking,
   ScrollView,
   Dimensions,
   Modal,
@@ -93,6 +95,14 @@ function createFreelancerMyJobsStyles(colors, isDark) {
     fontWeight: '600',
     color: colors.text.primary,
     flex: 1,
+  },
+  titleArrowInline: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.cardBackground,
+    paddingLeft: 6,
+    paddingTop: 2,
   },
   jobCategory: {
     ...typography.small,
@@ -190,6 +200,14 @@ function createFreelancerMyJobsStyles(colors, isDark) {
     ...typography.small,
     color: colors.text.secondary,
   },
+  jobDirectionsIconButton: {
+    borderWidth: 1.5,
+    borderColor: colors.primary.main,
+    borderRadius: spacing.sm,
+    padding: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   viewClientMeta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -250,8 +268,8 @@ function createFreelancerMyJobsStyles(colors, isDark) {
   workDoneButton: {
     borderColor: colors.success.main,
     backgroundColor: colors.success.main,
-    width: '96%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -261,8 +279,8 @@ function createFreelancerMyJobsStyles(colors, isDark) {
   completedButton: {
     borderColor: colors.primary.main,
     backgroundColor: colors.primary.main,
-    width: '98%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -277,8 +295,8 @@ function createFreelancerMyJobsStyles(colors, isDark) {
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    width: '96%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   waitingPaymentText: {
     ...typography.small,
@@ -393,6 +411,8 @@ const MyJobs = () => {
   const [jobToComplete, setJobToComplete] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
+  const [expandedTitleIds, setExpandedTitleIds] = useState({});
+  const [truncatedTitleIds, setTruncatedTitleIds] = useState({});
   const [translatedJobs, setTranslatedJobs] = useState({});
 
   const fetchInFlightRef = useRef(false);
@@ -569,6 +589,34 @@ const MyJobs = () => {
     setClientModalVisible(true);
   };
 
+  // Open Google Maps directions to the job location (origin defaults to current location).
+  const openDirectionsToJob = useCallback(
+    async (job) => {
+      const addrParts = [job?.address, job?.pincode].filter(Boolean);
+      const destQuery = addrParts.length ? `${addrParts.join(', ')}, India` : '';
+      let destParam = null;
+      if (job?.jobLat != null && job?.jobLng != null) {
+        const lat = Number(job.jobLat);
+        const lng = Number(job.jobLng);
+        if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+          destParam = `${lat},${lng}`;
+        }
+      }
+      if (!destParam && destQuery) destParam = destQuery;
+      if (!destParam) {
+        Alert.alert(t('common.error'), t('jobs.navigateNoOriginMessage'));
+        return;
+      }
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destParam)}&travelmode=bicycling`;
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert(t('common.error'), t('jobs.navigateOpenFailed'));
+      }
+    },
+    [t]
+  );
+
   const getStatusBadgeStyle = (status) => {
     switch (status) {
       case 'assigned':
@@ -589,11 +637,42 @@ const MyJobs = () => {
     const tr = locale === 'hi' && translatedJobs[jobId];
     const title = tr ? tr.title : item.title;
     const description = tr ? tr.description : (item.description || '');
+    const showLocationButton = !delivery && item?.status !== 'completed' && item?.freelancerCompleted !== true;
 
     return (
       <View style={styles.jobCard}>
         <View style={styles.jobHeader}>
-          <Text style={styles.jobTitle}>{title}</Text>
+          <View style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+            <Text
+              style={styles.jobTitle}
+              numberOfLines={expandedTitleIds[jobId] ? undefined : 1}
+              ellipsizeMode="tail"
+              onTextLayout={(e) => {
+                if (expandedTitleIds[jobId]) return;
+                const isTruncated = (e?.nativeEvent?.lines?.length || 0) > 1;
+                setTruncatedTitleIds((prev) => {
+                  if (prev?.[jobId] === isTruncated) return prev;
+                  return { ...(prev || {}), [jobId]: isTruncated };
+                });
+              }}
+            >
+              {title}
+            </Text>
+            {expandedTitleIds[jobId] || truncatedTitleIds[jobId] ? (
+              <TouchableOpacity
+                onPress={() => setExpandedTitleIds((prev) => ({ ...prev, [jobId]: !prev[jobId] }))}
+                hitSlop={8}
+                style={styles.titleArrowInline}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name={expandedTitleIds[jobId] ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                  size={22}
+                  color={colors.primary.main}
+                />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <View style={styles.jobHeaderRight}>
             <View style={styles.jobHeaderRightRow}>
               <View style={styles.budgetRow}>
@@ -624,9 +703,11 @@ const MyJobs = () => {
                 ]}
                 activeOpacity={0.7}
               >
-                <Text style={styles.viewMoreText}>
-                  {expandedDescriptionIds[jobId] ? t('jobs.viewLess') : t('jobs.viewMore')}
-                </Text>
+                <MaterialIcons
+                  name={expandedDescriptionIds[jobId] ? 'keyboard-arrow-up' : 'keyboard-arrow-down'}
+                  size={22}
+                  color={colors.primary.main}
+                />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -643,17 +724,25 @@ const MyJobs = () => {
               </View>
             ) : null}
           </View>
-          {(item.status === 'assigned' ||
-            item.status === 'work_done' ||
-            item.status === 'completed') && (
-            <TouchableOpacity
-              style={styles.viewClientMeta}
-              onPress={() => handleViewClient(item)}
-            >
-              <MaterialIcons name="person" size={16} color={colors.primary.main} />
-              <Text style={styles.viewClientMetaText}>{t('jobs.viewClient')}</Text>
-            </TouchableOpacity>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            {showLocationButton ? (
+              <Pressable
+                onPress={() => openDirectionsToJob(item)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.jobDirectionsIconButton, pressed && { opacity: 0.85 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('jobs.openDirectionsA11y')}
+              >
+                <MaterialIcons name="location-on" size={16} color={colors.primary.main} />
+              </Pressable>
+            ) : null}
+            {(item.status === 'assigned' || item.status === 'work_done' || item.status === 'completed') && (
+              <TouchableOpacity style={styles.viewClientMeta} onPress={() => handleViewClient(item)}>
+                <MaterialIcons name="person" size={16} color={colors.primary.main} />
+                <Text style={styles.viewClientMetaText}>{t('jobs.viewClient')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Status-based actions */}

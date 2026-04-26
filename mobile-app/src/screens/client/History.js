@@ -3,7 +3,7 @@
  * Display completed jobs for client
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,6 +14,9 @@ import { clientJobsAPI } from '../../api/clientJobs';
 import { useLanguage } from '../../context/LanguageContext';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock } from '../../components/job/JobLocationBlock';
+import { translateJobToHindi } from '../../utils/translate';
+import { useAuth } from '../../context/AuthContext';
+import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
 
 function createHistoryStyles(colors) {
   return StyleSheet.create({
@@ -154,15 +157,23 @@ function createHistoryStyles(colors) {
 }
 
 const History = () => {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { colors } = useTheme();
   const styles = useMemo(() => createHistoryStyles(colors), [colors]);
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [translatedJobs, setTranslatedJobs] = useState({});
+  const translatedJobsRef = useRef(translatedJobs);
   const itemsPerPage = 4;
+
+  // Keep a ref so async translation loop can read latest translations without adding translatedJobs to deps.
+  useEffect(() => {
+    translatedJobsRef.current = translatedJobs;
+  }, [translatedJobs]);
 
   const loadHistory = async () => {
     try {
@@ -171,8 +182,10 @@ const History = () => {
       const response = await clientJobsAPI.getJobHistory();
       if (response?.success && Array.isArray(response.jobs)) {
         setJobs(response.jobs);
+        void writeJobListCache({ user, scope: 'client:history', data: response.jobs });
       } else if (Array.isArray(response)) {
         setJobs(response);
+        void writeJobListCache({ user, scope: 'client:history', data: response });
       } else {
         setJobs([]);
       }
@@ -195,6 +208,59 @@ const History = () => {
     loadHistory();
   }, []);
 
+  // Fast paint from cache
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await readJobListCache({ user, scope: 'client:history', maxAgeMs: 30 * 60 * 1000 });
+      if (cancelled) return;
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setJobs(cached);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?._id]);
+
+  // Translate history jobs for Hindi locale
+  useEffect(() => {
+    if (locale !== 'hi' || !jobs.length) {
+      if (locale !== 'hi') {
+        setTranslatedJobs((prev) => {
+          // Avoid needless state updates.
+          return prev && Object.keys(prev).length > 0 ? {} : prev;
+        });
+      }
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      for (const job of jobs) {
+        if (cancelled) return;
+        const id = job?._id || job?.id;
+        if (!id) continue;
+        if (translatedJobsRef.current?.[id]) continue;
+        try {
+          const translated = await translateJobToHindi(job);
+          if (cancelled) return;
+          setTranslatedJobs((prev) => {
+            // Another async iteration may have already added it.
+            if (prev?.[id]) return prev;
+            return { ...prev, [id]: translated };
+          });
+        } catch {
+          // ignore
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, jobs]);
+
   // Paginate jobs
   const totalPages = Math.ceil(jobs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -210,11 +276,15 @@ const History = () => {
 
   const renderJobItem = ({ item }) => {
     const delivery = isDeliveryJob(item);
+    const jobId = item._id || item.id;
+    const tr = locale === 'hi' && translatedJobs[jobId];
+    const title = tr ? tr.title : item.title;
+    const description = tr ? tr.description : (item.description || '');
     return (
     <View style={styles.jobCard}>
         <View style={styles.jobHeader}>
           <Text style={styles.jobTitle} numberOfLines={1}>
-            {item.title}
+            {title}
           </Text>
           <View style={styles.statusBadge}>
             <MaterialIcons name="check-circle" size={16} color={colors.success.main} />
@@ -223,7 +293,7 @@ const History = () => {
         </View>
 
         <Text style={styles.jobCategory}>{item.category}</Text>
-        <JobLocationBlock job={item} t={t} />
+        <JobLocationBlock job={item} translated={tr} t={t} />
 
         <View style={styles.jobMetaRow}>
           <View style={styles.jobMeta}>
@@ -240,9 +310,9 @@ const History = () => {
           )}
         </View>
 
-        {!delivery && item.description ? (
+        {!delivery && description ? (
           <Text style={styles.jobDescription} numberOfLines={2}>
-            {item.description}
+            {description}
           </Text>
         ) : null}
       </View>

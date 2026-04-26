@@ -12,7 +12,7 @@ export const JOB_CATEGORIES = [
   'Driver',
   'Care taker',
   'Tailor',
-  'Barber',
+  'Salon',
   'Laundry',
   'Other',
 ];
@@ -28,7 +28,9 @@ export const JOB_CATEGORY_I18N_KEYS = {
   Driver: 'Driver',
   'Care taker': 'CareTaker',
   Tailor: 'Tailor',
-  Barber: 'Barber',
+  Salon: 'Salon',
+  // Back-compat for older jobs stored as "Barber" in DB
+  Barber: 'Salon',
   Laundry: 'Laundry',
   Other: 'Other',
 };
