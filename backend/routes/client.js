@@ -938,13 +938,36 @@ router.post('/jobs/:id/accept-offer', authenticate, async (req, res) => {
 
     // Acquire freelancer bucket lock (atomic) before assigning.
     if (freelancerOid) {
-      const lock = await User.findOneAndUpdate(
-        { _id: freelancerOid, role: 'freelancer', activeAssignedJob: null },
-        { $set: { activeAssignedJob: job._id, activeAssignedAt: new Date() } },
-        { new: true }
-      )
-        .select('_id activeAssignedJob')
-        .lean();
+      const tryLock = async () =>
+        User.findOneAndUpdate(
+          { _id: freelancerOid, role: 'freelancer', activeAssignedJob: null },
+          { $set: { activeAssignedJob: job._id, activeAssignedAt: new Date() } },
+          { new: true }
+        )
+          .select('_id activeAssignedJob')
+          .lean();
+
+      let lock = await tryLock();
+      if (!lock) {
+        // Stale-lock self-heal: if lock points to a missing/terminal/unassigned job, clear and retry once.
+        const u = await User.findById(freelancerOid).select('activeAssignedJob').lean();
+        const lockedJobId = u?.activeAssignedJob;
+        if (lockedJobId) {
+          const lockedJob = await Job.findById(lockedJobId).select('status assignedFreelancer').lean();
+          const assignedMatches =
+            lockedJob?.assignedFreelancer && String(lockedJob.assignedFreelancer) === String(freelancerOid);
+          const isTerminal = lockedJob && (lockedJob.status === 'completed' || lockedJob.status === 'cancelled');
+          const isMissing = !lockedJob;
+          const isNotActuallyAssigned = !assignedMatches;
+          if (isMissing || isTerminal || isNotActuallyAssigned) {
+            await User.updateOne(
+              { _id: freelancerOid, activeAssignedJob: lockedJobId },
+              { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+            );
+            lock = await tryLock();
+          }
+        }
+      }
 
       if (!lock) {
         return res.status(409).json({

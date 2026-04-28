@@ -20,6 +20,59 @@ const AUTO_PICK_DELAY_MS = 30 * 60 * 1000;
 /** jobId -> NodeJS timer id */
 const delayedAutoPickTimers = new Map();
 
+/**
+ * Bucket lock can get stale if some legacy/uncovered code-path assigned/unassigned/completed a job
+ * without clearing User.activeAssignedJob. Before blocking an accept, try to self-heal:
+ * - If lock points to a job that is missing, completed/cancelled, or no longer assigned to this freelancer → clear it.
+ * Then retry lock acquisition once.
+ */
+async function acquireFreelancerBucketLockOrThrow({ freelancerOid, jobId }) {
+  const tryLock = async () =>
+    User.findOneAndUpdate(
+      { _id: freelancerOid, role: 'freelancer', activeAssignedJob: null },
+      { $set: { activeAssignedJob: jobId, activeAssignedAt: new Date() } },
+      { new: true }
+    )
+      .select('_id activeAssignedJob')
+      .lean();
+
+  const locked = await tryLock();
+  if (locked) return;
+
+  const u = await User.findById(freelancerOid).select('activeAssignedJob').lean();
+  const lockedJobId = u?.activeAssignedJob;
+  if (!lockedJobId) {
+    const err = new Error('Freelancer already picked another job');
+    err.statusCode = 409;
+    err.code = 'FREELANCER_ALREADY_ASSIGNED';
+    throw err;
+  }
+
+  const lockedJob = await Job.findById(lockedJobId).select('status assignedFreelancer').lean();
+  const assignedMatches =
+    lockedJob?.assignedFreelancer &&
+    String(lockedJob.assignedFreelancer) === String(freelancerOid);
+
+  const isTerminal = lockedJob && (lockedJob.status === 'completed' || lockedJob.status === 'cancelled');
+  const isMissing = !lockedJob;
+  const isNotActuallyAssigned = !assignedMatches;
+
+  if (isMissing || isTerminal || isNotActuallyAssigned) {
+    await User.updateOne(
+      { _id: freelancerOid, activeAssignedJob: lockedJobId },
+      { $set: { activeAssignedJob: null, activeAssignedAt: null } }
+    );
+
+    const relocked = await tryLock();
+    if (relocked) return;
+  }
+
+  const err = new Error('Freelancer already picked another job');
+  err.statusCode = 409;
+  err.code = 'FREELANCER_ALREADY_ASSIGNED';
+  throw err;
+}
+
 function clearAutoPickTimer(jobId) {
   const key = jobId.toString();
   const tid = delayedAutoPickTimers.get(key);
@@ -106,22 +159,10 @@ async function acceptApplicationCore({ jobId, applicationId, clientUserId, isAut
 
   if (freelancerObjectIdForCheck) {
     lockedFreelancerOid = freelancerObjectIdForCheck;
-    // Strong guarantee: acquire freelancer "bucket lock" (atomic).
-    // If they already have an activeAssignedJob, no one can assign them again.
-    const lock = await User.findOneAndUpdate(
-      { _id: freelancerObjectIdForCheck, role: 'freelancer', activeAssignedJob: null },
-      { $set: { activeAssignedJob: job._id, activeAssignedAt: new Date() } },
-      { new: true }
-    )
-      .select('_id activeAssignedJob')
-      .lean();
-
-    if (!lock) {
-      const err = new Error('Freelancer already picked another job');
-      err.statusCode = 409;
-      err.code = 'FREELANCER_ALREADY_ASSIGNED';
-      throw err;
-    }
+    await acquireFreelancerBucketLockOrThrow({
+      freelancerOid: freelancerObjectIdForCheck,
+      jobId: job._id,
+    });
     lockAcquired = true;
   }
 
