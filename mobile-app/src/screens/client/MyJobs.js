@@ -665,6 +665,8 @@ const MyJobs = ({
   const canEditOrDelete = (job) => {
     // Only allow edit/delete if job is open and no offers accepted
     if (job.status !== 'open') return false;
+    // If nobody is assigned, allow delete/edit even if stale accepted offers/applications exist.
+    if (!job.assignedFreelancer) return true;
     const hasAcceptedOffers =
       job.offers && job.offers.some((offer) => offer.status === 'accepted');
     const hasAcceptedApplications =

@@ -809,6 +809,15 @@ router.delete('/jobs/:id', authenticate, async (req, res) => {
       });
     }
 
+    // If no freelancer is currently assigned, allow deletion even if stale accepted offers/applications exist.
+    if (!job.assignedFreelancer) {
+      await job.deleteOne();
+      return res.json({
+        success: true,
+        message: 'Job deleted successfully',
+      });
+    }
+
     const hasAcceptedOffers = job.offers && job.offers.some((offer) => offer.status === 'accepted');
     const hasAcceptedApplications =
       job.applications && job.applications.some((a) => a.status === 'accepted');

@@ -395,11 +395,15 @@ const ClientDashboard = () => {
     if (!pa) return;
     setDrawerScreenStack([]);
     if (pa.tab === 'MyJobs') {
+      syncSwipeToTab('MyJobs');
       setActiveTab('MyJobs');
       setPendingOpenApplicationsJobId(pa.openApplicationsJobId ?? null);
+    } else if (pa.tab === 'PostJob') {
+      syncSwipeToTab('PostJob');
+      setActiveTab('PostJob');
     }
     navigation.setParams({ pushAction: undefined });
-  }, [route.params?.pushAction, navigation]);
+  }, [route.params?.pushAction, navigation, syncSwipeToTab]);
 
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
@@ -409,6 +413,18 @@ const ClientDashboard = () => {
   const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
   const swipeAnimInFlightRef = useRef(false);
   const swipeStartXRef = useRef(0);
+
+  const syncSwipeToTab = useCallback(
+    (tabKey) => {
+      const targetX = tabKey === 'MyJobs' ? -SCREEN_WIDTH : 0;
+      // Never allow tab label and content to go out of sync (e.g. push navigation).
+      swipeAnimInFlightRef.current = false;
+      swipeX.stopAnimation(() => {
+        swipeX.setValue(targetX);
+      });
+    },
+    [swipeX]
+  );
 
   const animateToTab = useCallback(
     (nextTab, onDone) => {
