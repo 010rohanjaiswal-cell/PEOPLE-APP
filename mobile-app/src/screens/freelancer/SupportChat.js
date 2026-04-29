@@ -16,6 +16,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -528,7 +529,21 @@ export default function SupportChat({ onBack, bootstrapTicketRef }) {
     try {
       await supportAPI.append(ticketId, { userTextKey: opt.labelKey });
       const resp = await supportAPI.cancelOrderAction(ticketId);
-      if (resp?.success && resp.ticket) {
+      if (!resp?.success) {
+        throw new Error(resp?.error || t('common.error'));
+      }
+      if (resp?.ticket) {
+        // Ensure cooldown banner updates instantly across devices by syncing auth user state
+        // from the action response (instead of waiting for a later profile refresh).
+        if (typeof mergeUser === 'function') {
+          if (resp.pickupBlockedUntil) {
+            mergeUser({ freelancerPickupBlockedUntil: resp.pickupBlockedUntil });
+          } else if (resp.unassigned === false) {
+            // "No assigned job found" path should not leave a stale cooldown in UI.
+            mergeUser({ freelancerPickupBlockedUntil: null });
+          }
+        }
+
         setNodeId(resp.ticket.currentNodeId || 'end_ready');
         setTicketStatus(resp.ticket.status || 'open');
         const msgs = ticketMessagesForDisplay(resp.ticket).map((m) => ({
@@ -541,16 +556,13 @@ export default function SupportChat({ onBack, bootstrapTicketRef }) {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
         return;
       }
-    } catch (_) {}
-    const botTextKey = (FLOW[opt.next] || FLOW.root).botTextKey;
-    setNodeId(opt.next);
-    setTimeout(() => {
-      pushBotNode(opt.next);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
-    }, 250);
-    try {
-      await supportAPI.append(ticketId, { userTextKey: opt.labelKey, botTextKey, nextNodeId: opt.next });
-    } catch (_) {}
+      throw new Error(t('common.error'));
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || t('common.error');
+      Alert.alert(t('common.error'), msg);
+      // Do not fake a "successful" bot flow when the backend action failed.
+      // Keep the user on the current node so they can retry.
+    }
   };
 
   const closeCancelModal = () => {
@@ -569,7 +581,7 @@ export default function SupportChat({ onBack, bootstrapTicketRef }) {
     if (!opt) return;
     const label = t(opt.labelKey);
 
-    // Destructive support action: must confirm before unassign + 8h pickup/apply block
+    // Destructive support action: must confirm before unassign + pickup/apply block
     if (opt.id === 'orders_cancel') {
       if (!ticketId) {
         const userMsg = {

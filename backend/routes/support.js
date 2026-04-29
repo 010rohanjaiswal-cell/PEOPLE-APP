@@ -278,8 +278,8 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
 
     ticket.effects.unassignedJobId = unassignedJobId;
     if (unassignedJobId) {
-      // For testing/flow validation we block pickup/apply/offer for only 1 minute.
-      const blockedUntil = minutesFromNow(1);
+      // Cooldown after freelancer self-unassign via Support (production default): 6 hours.
+      const blockedUntil = hoursFromNow(6);
       await User.updateOne(
         { _id: freelancerId },
         { $set: { freelancerPickupBlockedUntil: blockedUntil } }
@@ -294,7 +294,7 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
       ticket.messages.push({
         sender: 'bot',
         textKey: 'supportTicket.bot.blocked8hAndEnd',
-        params: { minutes: 1 },
+        params: { hours: 6 },
         createdAt: now(),
       });
       ticket.currentNodeId = 'end_ready';
