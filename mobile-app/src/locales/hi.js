@@ -190,9 +190,9 @@ export default {
     pickupApplyBlockedDetail:
       'पिकअप, आवेदन और ऑफर तब तक रुके: {time} (सपोर्ट से अनअसाइन के बाद)।\n\nगलत लगे तो सपोर्ट से संपर्क करें।',
     workCooldownBanner: 'आप दोबारा काम शुरू कर सकते हैं:',
-    workCooldownShort: '8 घंटे प्रतीक्षा',
+    workCooldownShort: '1 मिनट प्रतीक्षा',
     workCooldownBlocked:
-      'सपोर्ट से अनअसाइन के बाद 8 घंटे तक पिकअप, आवेदन और ऑफर बंद रहते हैं।',
+      'सपोर्ट से अनअसाइन के बाद 1 मिनट तक पिकअप, आवेदन और ऑफर बंद रहते हैं।',
     appliedSuccessfully: 'सफलतापूर्वक आवेदन किया गया',
     viewApplications: 'आवेदन देखें',
     openDirectionsA11y: 'Google Maps में दिशा-निर्देश — नौकरी स्थल से आपके स्थान तक, साइकिल मोड',
@@ -576,7 +576,7 @@ export default {
       customerAskingCancel: 'कस्टमर ऑर्डर कैंसल करने को कह रहा है',
       cancelConfirmTitle: 'ऑर्डर कैंसल?',
       cancelConfirmBody:
-        'अगर आप नौकरी अनअसाइन करते हैं, तो अगले 8 घंटे तक आप किसी भी नौकरी पर आवेदन या ऑफर नहीं कर पाएंगे।',
+        'अगर आप नौकरी अनअसाइन करते हैं, तो अगले 1 मिनट तक आप किसी भी नौकरी पर आवेदन या ऑफर नहीं कर पाएंगे।',
       cancelConfirmContinue: 'जारी रखें',
     },
     wallet: {
@@ -671,7 +671,7 @@ export default {
     },
     bot: {
       blocked8hAndEnd:
-        'अनअसाइन के बाद लगभग {hours} घंटे तक पिकअप, आवेदन और ऑफर नहीं कर सकते। हो जाए तो End chat पर टैप करें।',
+        'अनअसाइन के बाद लगभग {minutes} मिनट तक पिकअप, आवेदन और ऑफर नहीं कर सकते। हो जाए तो End chat पर टैप करें।',
     },
   },
   legalAcceptance: {

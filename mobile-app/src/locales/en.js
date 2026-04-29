@@ -189,9 +189,9 @@ export default {
     pickupApplyBlockedDetail:
       'Pickup, apply, and offers are paused until: {time} (after Support unassigned your job).\n\nIf this is wrong, contact support.',
     workCooldownBanner: 'You can start working again after:',
-    workCooldownShort: '8h wait',
+    workCooldownShort: '1m wait',
     workCooldownBlocked:
-      'You cannot pick up jobs, apply, or make offers during the 8-hour period after unassigning via Support.',
+      'You cannot pick up jobs, apply, or make offers during the 1-minute period after unassigning via Support.',
     appliedSuccessfully: 'Applied Successfully',
     viewApplications: 'View Applications',
     openDirectionsA11y: 'Open directions in Google Maps from job location to your location, bicycle mode',
@@ -575,7 +575,7 @@ export default {
       customerAskingCancel: 'Customer is asking to cancel the order',
       cancelConfirmTitle: 'Cancel the order?',
       cancelConfirmBody:
-        'If you unassign the job, you will not be able to apply or make offer to any job for the next 8 hours.',
+        'If you unassign the job, you will not be able to apply or make offer to any job for the next 1 minute.',
       cancelConfirmContinue: 'Continue',
     },
     wallet: {
@@ -672,7 +672,7 @@ export default {
     },
     bot: {
       blocked8hAndEnd:
-        'For about {hours} hours you cannot pick up jobs, apply, or make offers after this unassign. Tap End chat when you are done.',
+        'For about {minutes} minutes you cannot pick up jobs, apply, or make offers after this unassign. Tap End chat when you are done.',
     },
   },
   legalAcceptance: {

@@ -21,6 +21,10 @@ function hoursFromNow(h) {
   return new Date(Date.now() + h * 60 * 60 * 1000);
 }
 
+function minutesFromNow(m) {
+  return new Date(Date.now() + m * 60 * 1000);
+}
+
 /** Freelancer-only: cancel-order / unassign-from-freelancer side of support. */
 function requireFreelancer(req, res) {
   const user = req.user;
@@ -274,7 +278,8 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
 
     ticket.effects.unassignedJobId = unassignedJobId;
     if (unassignedJobId) {
-      const blockedUntil = hoursFromNow(8);
+      // For testing/flow validation we block pickup/apply/offer for only 1 minute.
+      const blockedUntil = minutesFromNow(1);
       await User.updateOne(
         { _id: freelancerId },
         { $set: { freelancerPickupBlockedUntil: blockedUntil } }
@@ -289,7 +294,7 @@ router.post('/tickets/:id/actions/cancel-order', authenticate, async (req, res) 
       ticket.messages.push({
         sender: 'bot',
         textKey: 'supportTicket.bot.blocked8hAndEnd',
-        params: { hours: 8 },
+        params: { minutes: 1 },
         createdAt: now(),
       });
       ticket.currentNodeId = 'end_ready';

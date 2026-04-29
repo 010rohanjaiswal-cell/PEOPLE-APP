@@ -19,8 +19,8 @@ const {
 // User request: trigger at 1 pending app (instead of waiting for 5).
 const AUTO_PICK_MIN = 1;
 const AUTO_PICK_INSTANT = 10;
-// User request: reduce delay from 30 minutes to 1 minute.
-const AUTO_PICK_DELAY_MS = 60 * 1000;
+// User request (updated): delay from 1 minute to 20 minutes.
+const AUTO_PICK_DELAY_MS = 20 * 60 * 1000;
 
 /** jobId -> NodeJS timer id */
 const delayedAutoPickTimers = new Map();
