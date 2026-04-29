@@ -1,6 +1,8 @@
 /**
  * Auto pick: when enabled, selects best pending applicant by ratingCount (priority), then averageRating.
- * Triggers: (1) ≥10 pending → immediate; (2) ≥5 pending and 30+ minutes since 5th application.
+ * Triggers:
+ * - (1) ≥10 pending → immediate
+ * - (2) ≥AUTO_PICK_MIN pending and AUTO_PICK_DELAY_MS since the AUTO_PICK_MIN-th application
  */
 
 const mongoose = require('mongoose');
@@ -13,9 +15,12 @@ const {
   notifyAutoPickClient,
 } = require('./notificationService');
 
-const AUTO_PICK_MIN = 5;
+// When pending applicants reach this number, we schedule a delayed auto-pick.
+// User request: trigger at 1 pending app (instead of waiting for 5).
+const AUTO_PICK_MIN = 1;
 const AUTO_PICK_INSTANT = 10;
-const AUTO_PICK_DELAY_MS = 30 * 60 * 1000;
+// User request: reduce delay from 30 minutes to 1 minute.
+const AUTO_PICK_DELAY_MS = 60 * 1000;
 
 /** jobId -> NodeJS timer id */
 const delayedAutoPickTimers = new Map();
@@ -298,10 +303,12 @@ async function evaluateAutoPick(jobId) {
     shouldPick = true;
   } else {
     const sortedByTime = [...pending].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    const fifth = sortedByTime[4];
+    // Generalize "5th application" logic so changing AUTO_PICK_MIN works.
+    const minIndex = Math.max(0, AUTO_PICK_MIN - 1);
+    const minApp = sortedByTime[minIndex];
     if (
-      fifth &&
-      Date.now() - new Date(fifth.createdAt).getTime() >= AUTO_PICK_DELAY_MS
+      minApp &&
+      Date.now() - new Date(minApp.createdAt).getTime() >= AUTO_PICK_DELAY_MS
     ) {
       shouldPick = true;
     }
@@ -323,6 +330,69 @@ async function evaluateAutoPick(jobId) {
   });
 
   return { ran: true };
+}
+
+/**
+ * Background runner: check for open jobs whose auto-pick delay threshold has passed.
+ * This makes auto-pick resilient to process restarts / in-memory timer loss.
+ */
+async function checkAutoPickDueJobs({ maxJobsToCheck = 30, concurrency = 3 } = {}) {
+  const candidates = await Job.find({
+    status: 'open',
+    assignedFreelancer: null,
+    autoPickEnabled: { $ne: false },
+    'applications.status': 'pending',
+  })
+    .select('_id applications')
+    .limit(maxJobsToCheck)
+    .lean();
+
+  const now = Date.now();
+
+  // Filter in-process to avoid unnecessary evaluateAutoPick() calls.
+  const dueJobIds = [];
+  for (const job of candidates) {
+    const pending = (job.applications || []).filter((a) => a.status === 'pending');
+    if (pending.length < AUTO_PICK_MIN) continue;
+
+    let shouldPick = false;
+    if (pending.length >= AUTO_PICK_INSTANT) {
+      shouldPick = true;
+    } else {
+      const sortedByTime = [...pending].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      const minIndex = Math.max(0, AUTO_PICK_MIN - 1);
+      const minApp = sortedByTime[minIndex];
+      if (minApp?.createdAt) {
+        const createdMs = new Date(minApp.createdAt).getTime();
+        if (!Number.isNaN(createdMs) && now - createdMs >= AUTO_PICK_DELAY_MS) {
+          shouldPick = true;
+        }
+      }
+    }
+
+    if (shouldPick) dueJobIds.push(job._id);
+  }
+
+  if (!dueJobIds.length) return { checked: candidates.length, due: 0 };
+
+  // Evaluate with a small concurrency cap to reduce DB load.
+  let evaluated = 0;
+  for (let i = 0; i < dueJobIds.length; i += concurrency) {
+    const chunk = dueJobIds.slice(i, i + concurrency);
+    await Promise.all(
+      chunk.map(async (jid) => {
+        try {
+          evaluated += 1;
+          await evaluateAutoPick(jid);
+        } catch (e) {
+          // Avoid crashing background runner if auto-pick races with manual accept/unassign.
+          console.error('Auto-pick due-job evaluation failed:', e?.message || e);
+        }
+      })
+    );
+  }
+
+  return { checked: candidates.length, due: dueJobIds.length, evaluated };
 }
 
 /**
@@ -352,4 +422,5 @@ module.exports = {
   afterApplicationSubmitted,
   clearAutoPickTimer,
   rankPendingApplications,
+  checkAutoPickDueJobs,
 };

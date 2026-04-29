@@ -115,6 +115,23 @@ async function startServer() {
     }
     console.log('✅ notificationService.createChatMessageNotification OK');
 
+    // Auto-pick resilience runner:
+    // The core auto-pick logic uses in-memory timers, which can be lost on process restarts.
+    // This background checker re-evaluates due jobs periodically so auto-pick still works
+    // even if the server missed the original setTimeout.
+    const autoPickRunnerEnabled = process.env.AUTO_PICK_BACKGROUND_RUNNER !== '0';
+    if (autoPickRunnerEnabled) {
+      const { checkAutoPickDueJobs } = require('./services/autoPickApplications');
+      const intervalMs = Number(process.env.AUTO_PICK_BACKGROUND_INTERVAL_MS || '5000');
+      const id = setInterval(() => {
+        void checkAutoPickDueJobs().catch((e) => {
+          console.error('AUTO_PICK background runner error:', e?.message || e);
+        });
+      }, intervalMs);
+      if (typeof id.unref === 'function') id.unref();
+      console.log(`🔁 Auto-pick background runner enabled (intervalMs=${intervalMs})`);
+    }
+
     // Start HTTP server
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
