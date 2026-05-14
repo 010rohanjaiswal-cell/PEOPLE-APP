@@ -37,7 +37,7 @@ import { useNotifications } from '../../context/NotificationContext';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /** Poll active jobs while this tab is focused so status changes (e.g. work_done → Pay) show without manual refresh */
-const MY_JOBS_POLL_MS = 5000;
+const MY_JOBS_POLL_MS = 2000;
 
 function createClientMyJobsStyles(colors) {
   return StyleSheet.create({
@@ -356,6 +356,7 @@ function createClientMyJobsStyles(colors) {
 const MyJobs = ({
   openApplicationsJobId = null,
   onConsumeOpenApplicationsJobId,
+  onBecameEmpty,
 }) => {
   const { t, locale } = useLanguage();
   const { colors } = useTheme();
@@ -377,8 +378,15 @@ const MyJobs = ({
   const [deleting, setDeleting] = useState(false);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [translatedJobs, setTranslatedJobs] = useState({});
+  const translatedJobsRef = useRef(translatedJobs);
 
   const fetchInFlightRef = useRef(false);
+
+  useEffect(() => {
+    translatedJobsRef.current = translatedJobs;
+  }, [translatedJobs]);
+  const isFocusedRef = useRef(false);
+  const prevJobsLenRef = useRef(0);
 
   const loadJobs = useCallback(
     async (opts = {}) => {
@@ -439,12 +447,26 @@ const MyJobs = ({
 
   useFocusEffect(
     useCallback(() => {
+      isFocusedRef.current = true;
       const id = setInterval(() => {
         loadJobs({ silent: true });
       }, MY_JOBS_POLL_MS);
-      return () => clearInterval(id);
+      return () => {
+        isFocusedRef.current = false;
+        clearInterval(id);
+      };
     }, [loadJobs])
   );
+
+  // If jobs become empty while focused (e.g. job deleted/completed), notify parent once.
+  useEffect(() => {
+    const prev = prevJobsLenRef.current;
+    prevJobsLenRef.current = jobs.length;
+    if (!isFocusedRef.current) return;
+    if (prev > 0 && jobs.length === 0) {
+      onBecameEmpty?.();
+    }
+  }, [jobs.length, onBecameEmpty]);
 
   useEffect(() => {
     if (!openApplicationsJobId) return;
@@ -468,33 +490,53 @@ const MyJobs = ({
     }
     let cancelled = false;
     const run = async () => {
-      for (const job of jobs) {
-        const id = job._id || job.id;
-        if (!id) continue;
-        try {
-          const translated = await translateJobToHindi(job);
-          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
-        } catch (e) {
-          if (!cancelled) {
-            setTranslatedJobs((prev) => ({
-              ...prev,
-              [id]: {
-                title: job.title,
-                description: job.description || '',
-                address: job.address || '',
-                pincode: job.pincode || '',
-                deliveryFromAddress: job.deliveryFromAddress || '',
-                deliveryFromPincode: job.deliveryFromPincode || '',
-                deliveryToAddress: job.deliveryToAddress || '',
-                deliveryToPincode: job.deliveryToPincode || '',
-              },
-            }));
+      const queue = jobs
+        .map((j) => ({ job: j, id: j?._id || j?.id }))
+        .filter(({ id }) => Boolean(id))
+        .filter(({ id }) => !translatedJobsRef.current?.[id]);
+
+      const CONCURRENCY = 3;
+      const worker = async () => {
+        while (!cancelled) {
+          const next = queue.shift();
+          if (!next) return;
+          const { job, id } = next;
+          try {
+            const translated = await translateJobToHindi(job);
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return { ...(prev || {}), [id]: translated };
+            });
+          } catch (e) {
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return {
+                ...(prev || {}),
+                [id]: {
+                  title: job.title,
+                  description: job.description || '',
+                  address: job.address || '',
+                  pincode: job.pincode || '',
+                  deliveryFromAddress: job.deliveryFromAddress || '',
+                  deliveryFromPincode: job.deliveryFromPincode || '',
+                  deliveryToAddress: job.deliveryToAddress || '',
+                  deliveryToPincode: job.deliveryToPincode || '',
+                },
+              };
+            });
           }
         }
-      }
+      };
+
+      await Promise.all(new Array(Math.min(CONCURRENCY, queue.length)).fill(0).map(() => worker()));
     };
-    run();
-    return () => { cancelled = true; };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [locale, jobs]);
 
   const onRefresh = () => {

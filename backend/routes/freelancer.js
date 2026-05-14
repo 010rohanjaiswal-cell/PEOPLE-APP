@@ -17,8 +17,11 @@ const multer = require('multer');
 const streamifier = require('streamifier');
 const cloudinary = require('../config/cloudinary');
 const axios = require('axios');
-const FormData = require('form-data');
 const crypto = require('crypto');
+const {
+  cashfreeVerificationRequest,
+  cashfreeVerificationMultipartPost,
+} = require('../services/cashfreeVerificationHttp');
 const {
   notifyOfferReceived,
   notifyJobAssigned,
@@ -117,30 +120,6 @@ async function uploadToCloudinary(buffer, folder) {
 async function fetchImageBuffer(url) {
   const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 20000 });
   return Buffer.from(resp.data);
-}
-
-function getCashfreeVerificationBaseUrl() {
-  const env = (process.env.CASHFREE_ENV || process.env.CASHFREE_VRS_ENV || '').toLowerCase();
-  return env === 'sandbox' || env === 'test'
-    ? 'https://sandbox.cashfree.com/verification'
-    : 'https://api.cashfree.com/verification';
-}
-
-function getCashfreeVrsHeaders(extra = {}) {
-  const clientId = process.env.CASHFREE_CLIENT_ID;
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
-  const apiVersion = process.env.CASHFREE_VRS_API_VERSION || '2023-12-18';
-  if (!clientId || !clientSecret) {
-    throw new Error('Cashfree SecureID credentials not configured');
-  }
-  return {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    'x-client-id': clientId,
-    'x-client-secret': clientSecret,
-    'x-api-version': apiVersion,
-    ...extra,
-  };
 }
 
 function digitsOnly(value) {
@@ -409,7 +388,6 @@ router.post('/verification/digilocker/initiate', authenticate, async (req, res) 
 
     const { userFlow } = req.body || {};
     const verificationId = `DL_${user._id.toString()}_${Date.now()}`.slice(0, 50);
-    const baseUrl = getCashfreeVerificationBaseUrl();
 
     // Must be https. Use BACKEND_URL if configured; otherwise fall back to Cashfree docs suggestion.
     const redirectUrl =
@@ -424,8 +402,10 @@ router.post('/verification/digilocker/initiate', authenticate, async (req, res) 
       user_flow: userFlow === 'signin' ? 'signin' : 'signup',
     };
 
-    const resp = await axios.post(`${baseUrl}/digilocker`, payload, {
-      headers: getCashfreeVrsHeaders(),
+    const resp = await cashfreeVerificationRequest({
+      method: 'POST',
+      path: '/digilocker',
+      data: payload,
       timeout: 15000,
     });
 
@@ -483,9 +463,9 @@ router.get('/verification/digilocker/status', authenticate, async (req, res) => 
       return res.status(400).json({ success: false, error: 'verificationId is required' });
     }
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
-    const resp = await axios.get(`${baseUrl}/digilocker`, {
-      headers: getCashfreeVrsHeaders(),
+    const resp = await cashfreeVerificationRequest({
+      method: 'GET',
+      path: '/digilocker',
       params: { verification_id: verificationId },
       timeout: 15000,
     });
@@ -518,11 +498,10 @@ router.post('/verification/digilocker/fetch', authenticate, async (req, res) => 
     const vId = String(verificationId || '').trim();
     if (!vId) return res.status(400).json({ success: false, error: 'verificationId is required' });
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
-
     // 1) Ensure AUTHENTICATED
-    const statusResp = await axios.get(`${baseUrl}/digilocker`, {
-      headers: getCashfreeVrsHeaders(),
+    const statusResp = await cashfreeVerificationRequest({
+      method: 'GET',
+      path: '/digilocker',
       params: { verification_id: vId },
       timeout: 15000,
     });
@@ -538,13 +517,15 @@ router.post('/verification/digilocker/fetch', authenticate, async (req, res) => 
 
     // 2) Fetch Aadhaar and PAN docs
     const [aadhaarResp, panResp] = await Promise.all([
-      axios.get(`${baseUrl}/digilocker/document/AADHAAR`, {
-        headers: getCashfreeVrsHeaders(),
+      cashfreeVerificationRequest({
+        method: 'GET',
+        path: '/digilocker/document/AADHAAR',
         params: { verification_id: vId },
         timeout: 20000,
       }),
-      axios.get(`${baseUrl}/digilocker/document/PAN`, {
-        headers: getCashfreeVrsHeaders(),
+      cashfreeVerificationRequest({
+        method: 'GET',
+        path: '/digilocker/document/PAN',
         params: { verification_id: vId },
         timeout: 20000,
       }),
@@ -665,12 +646,12 @@ router.post('/verification/aadhaar/otp', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Enter a valid 12-digit Aadhaar number.' });
     }
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
-    const resp = await axios.post(
-      `${baseUrl}/offline-aadhaar/otp`,
-      { aadhaar_number: aadhaarNumber },
-      { headers: getCashfreeVrsHeaders(), timeout: 15000 }
-    );
+    const resp = await cashfreeVerificationRequest({
+      method: 'POST',
+      path: '/offline-aadhaar/otp',
+      data: { aadhaar_number: aadhaarNumber },
+      timeout: 15000,
+    });
 
     const data = resp.data || {};
     const refId = data.ref_id != null ? String(data.ref_id) : null;
@@ -736,12 +717,12 @@ router.post('/verification/aadhaar/verify', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Aadhaar OTP session expired. Please request OTP again.' });
     }
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
-    const resp = await axios.post(
-      `${baseUrl}/offline-aadhaar/verify`,
-      { otp, ref_id: refId },
-      { headers: getCashfreeVrsHeaders(), timeout: 35000 }
-    );
+    const resp = await cashfreeVerificationRequest({
+      method: 'POST',
+      path: '/offline-aadhaar/verify',
+      data: { otp, ref_id: refId },
+      timeout: 35000,
+    });
 
     const data = resp.data || {};
     const status = data.status || data?.qr_details?.status || null;
@@ -907,24 +888,25 @@ router.post('/verification/face-match', authenticate, upload.single('image'), as
     const aadhaarBuf = await fetchImageBuffer(verification.aadhaarFaceImageUrl);
     const selfieBuf = req.file.buffer;
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
     const verificationId = `FM_${user._id.toString()}_${Date.now()}`.slice(0, 50);
     const threshold = 0.65;
 
-    const form = new FormData();
-    form.append('verification_id', verificationId);
-    form.append('first_image', aadhaarBuf, { filename: 'aadhaar.jpg', contentType: 'image/jpeg' });
-    form.append('second_image', selfieBuf, { filename: 'selfie.jpg', contentType: req.file.mimetype || 'image/jpeg' });
-    form.append('threshold', String(threshold));
-
-    const resp = await axios.post(`${baseUrl}/face-match`, form, {
-      headers: {
-        ...getCashfreeVrsHeaders(),
-        ...form.getHeaders(),
+    const resp = await cashfreeVerificationMultipartPost({
+      path: '/face-match',
+      fields: {
+        verification_id: verificationId,
+        threshold: String(threshold),
       },
+      files: [
+        { name: 'first_image', filename: 'aadhaar.jpg', contentType: 'image/jpeg', buffer: aadhaarBuf },
+        {
+          name: 'second_image',
+          filename: 'selfie.jpg',
+          contentType: req.file.mimetype || 'image/jpeg',
+          buffer: selfieBuf,
+        },
+      ],
       timeout: 25000,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
     });
 
     const data = resp.data || {};
@@ -1083,12 +1065,12 @@ router.post('/verification/pan/verify', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Enter a valid PAN number.' });
     }
 
-    const baseUrl = getCashfreeVerificationBaseUrl();
-    const resp = await axios.post(
-      `${baseUrl}/pan`,
-      { pan, name: user.fullName || undefined },
-      { headers: getCashfreeVrsHeaders(), timeout: 15000 }
-    );
+    const resp = await cashfreeVerificationRequest({
+      method: 'POST',
+      path: '/pan',
+      data: { pan, name: user.fullName || undefined },
+      timeout: 15000,
+    });
     const data = resp.data || {};
     if (data.valid !== true) {
       return res.status(400).json({ success: false, error: data.message || 'PAN verification failed', details: data });

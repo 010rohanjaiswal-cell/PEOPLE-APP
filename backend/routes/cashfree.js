@@ -1,7 +1,8 @@
 const express = require('express');
 const crypto = require('crypto');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { createPaymentsClient, createPayoutsClient, createVerificationClient } = require('../config/cashfree');
+const { createPaymentsClient, createPayoutsClient } = require('../config/cashfree');
+const { cashfreeVerificationRequest } = require('../services/cashfreeVerificationHttp');
 
 const Job = require('../models/Job');
 const User = require('../models/User');
@@ -106,15 +107,18 @@ function httpStatusForCashfreeUpstreamError(err) {
 }
 
 async function verifyBankWithVrs({ bankAccount, ifsc, fullName, phone }) {
-  const vrs = createVerificationClient();
   const phone10 = String(phone || '').replace(/\D/g, '').slice(-10) || '9999999999';
   const name = String(fullName || '').trim() || 'Account Holder';
 
-  const syncResp = await vrs.post('/bank-account/sync', {
-    bank_account: String(bankAccount).replace(/\s/g, ''),
-    ifsc: String(ifsc).toUpperCase().trim(),
-    name,
-    phone: phone10,
+  const syncResp = await cashfreeVerificationRequest({
+    method: 'POST',
+    path: '/bank-account/sync',
+    data: {
+      bank_account: String(bankAccount).replace(/\s/g, ''),
+      ifsc: String(ifsc).toUpperCase().trim(),
+      name,
+      phone: phone10,
+    },
   });
 
   const body = unwrapVerificationBody(syncResp?.data);

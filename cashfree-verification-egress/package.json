@@ -1,0 +1,19 @@
+{
+  "name": "cashfree-verification-egress",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny proxy: stable egress IP → Cashfree Verification API (SecureID / VRS). Deploy behind AWS NAT + Elastic IP; point Render backend here via CASHFREE_EGRESS_SERVICE_URL.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "form-data": "^4.0.0"
+  }
+}

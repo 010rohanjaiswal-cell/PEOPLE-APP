@@ -42,6 +42,7 @@ import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
 import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
 import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
+import { useNotifications } from '../../context/NotificationContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const TOAST_DURATION_MS = 4500;
@@ -443,8 +444,8 @@ function createAvailableJobsStyles(colors, isDark, toastTop) {
     paddingVertical: 8,
   },
   pickupButton: {
-    backgroundColor: colors.success.main,
-    borderColor: colors.success.main,
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   applyButton: {
     backgroundColor: colors.primary.main,
@@ -877,11 +878,13 @@ function createAvailableJobsStyles(colors, isDark, toastTop) {
 
 const AvailableJobs = ({
   onJobPickedUp,
+  showToast: showToastProp,
   workCooldownRemainMs = 0,
   hasActiveAssignedJob = false,
   onActiveJobStatusChange,
 }) => {
   const { user } = useAuth();
+  const { notifications } = useNotifications();
   const { t, locale } = useLanguage();
   const { gpsEnabled, gpsDenied, getCurrentCoords, requestPermission } = useLocation();
   const { colors, isDark } = useTheme();
@@ -895,7 +898,7 @@ const AvailableJobs = ({
   const [toastMsg, setToastMsg] = useState('');
   const [keyboardPad, setKeyboardPad] = useState(0);
 
-  const showToast = useCallback(
+  const showToastLocal = useCallback(
     (msg) => {
       if (!msg) return;
       setToastMsg(String(msg));
@@ -914,6 +917,14 @@ const AvailableJobs = ({
       }, TOAST_DURATION_MS);
     },
     [toastAnim]
+  );
+
+  const showToast = useCallback(
+    (msg) => {
+      if (typeof showToastProp === 'function') return showToastProp(msg);
+      return showToastLocal(msg);
+    },
+    [showToastProp, showToastLocal]
   );
 
   useEffect(() => {
@@ -954,7 +965,7 @@ const AvailableJobs = ({
   const [pickupModalVisible, setPickupModalVisible] = useState(false);
   const [pickupJob, setPickupJob] = useState(null);
   const [pickingUp, setPickingUp] = useState(false);
-  const [pickupSuccessModalVisible, setPickupSuccessModalVisible] = useState(false);
+  // Pickup success uses top toast (no blocking modal)
   const [applyingJobId, setApplyingJobId] = useState(null);
   const [applySuccessBannerVisible, setApplySuccessBannerVisible] = useState(false);
   const applySuccessBannerTimerRef = useRef(null);
@@ -974,9 +985,18 @@ const AvailableJobs = ({
   const [refreshing, setRefreshing] = useState(false);
   // When locale is Hindi, cache translated title/description/address/pincode per job
   const [translatedJobs, setTranslatedJobs] = useState({});
+  const translatedJobsRef = useRef(translatedJobs);
+  // Optimistic apply: show "Waiting to accept" after Apply succeeds (paired with success banner).
+  const [optimisticPendingApplyByJobId, setOptimisticPendingApplyByJobId] = useState({});
+  // Apply success marker: wire "Waiting" to the same event as the success banner.
+  const [appliedSuccessByJobId, setAppliedSuccessByJobId] = useState({});
   const [expandedDescriptionIds, setExpandedDescriptionIds] = useState({});
   const [expandedTitleIds, setExpandedTitleIds] = useState({});
   const [truncatedTitleIds, setTruncatedTitleIds] = useState({});
+
+  useEffect(() => {
+    translatedJobsRef.current = translatedJobs;
+  }, [translatedJobs]);
 
   const fetchInFlightRef = useRef(false);
   const activeJobCheckInFlightRef = useRef(false);
@@ -1042,6 +1062,67 @@ const AvailableJobs = ({
       fetchInFlightRef.current = false;
     }
   }, [gpsEnabled, getCurrentCoords, refreshing, selectedFilter, t]);
+
+  // Reconcile optimistic apply state once backend confirms a non-pending status.
+  useEffect(() => {
+    const keys = Object.keys(optimisticPendingApplyByJobId || {});
+    if (!keys.length) return;
+    setOptimisticPendingApplyByJobId((prev) => {
+      let changed = false;
+      const next = { ...(prev || {}) };
+      for (const job of jobs || []) {
+        const id = String(job?._id || job?.id || job?.jobId || '');
+        if (!id || next[id] !== true) continue;
+        const st = job?.myApplication?.status;
+        if (st && st !== 'pending') {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [jobs, optimisticPendingApplyByJobId]);
+
+  // Clear "applied success" flag once backend reflects any application status for that job.
+  useEffect(() => {
+    const keys = Object.keys(appliedSuccessByJobId || {});
+    if (!keys.length) return;
+    setAppliedSuccessByJobId((prev) => {
+      let changed = false;
+      const next = { ...(prev || {}) };
+      for (const job of jobs || []) {
+        const id = String(job?._id || job?.id || job?.jobId || '');
+        if (!id || next[id] !== true) continue;
+        const st = job?.myApplication?.status;
+        if (st) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [jobs, appliedSuccessByJobId]);
+
+  // Instant refresh when a job-related notification arrives (no need to wait for poll interval).
+  const lastNotifIdRef = useRef(null);
+  const lastNotifRefreshAtRef = useRef(0);
+  useEffect(() => {
+    const list = Array.isArray(notifications) ? notifications : [];
+    const newest = list[0];
+    const nid = newest?._id || newest?.id || null;
+    if (!nid || nid === lastNotifIdRef.current) return;
+    lastNotifIdRef.current = nid;
+
+    const jobId = newest?.data?.jobId ? String(newest.data.jobId) : null;
+    if (!jobId) return;
+
+    const now = Date.now();
+    if (now - lastNotifRefreshAtRef.current < 800) return;
+    lastNotifRefreshAtRef.current = now;
+
+    loadJobs({ silent: true });
+    checkActiveJob({ silent: true });
+  }, [notifications, loadJobs, checkActiveJob]);
 
   // Fast paint from cache (stale-while-revalidate)
   useEffect(() => {
@@ -1176,7 +1257,7 @@ const AvailableJobs = ({
       const id = setInterval(() => {
         void loadJobs({ silent: true });
         void checkActiveJob({ silent: true });
-      }, 5000);
+      }, 2000);
       return () => clearInterval(id);
     }, [gpsEnabled, loadJobs, checkActiveJob])
   );
@@ -1215,33 +1296,53 @@ const AvailableJobs = ({
     }
     let cancelled = false;
     const run = async () => {
-      for (const job of jobs) {
-        const id = job._id || job.id;
-        if (!id) continue;
-        try {
-          const translated = await translateJobToHindi(job);
-          if (!cancelled) setTranslatedJobs((prev) => ({ ...prev, [id]: translated }));
-        } catch (e) {
-          if (!cancelled) {
-            setTranslatedJobs((prev) => ({
-              ...prev,
-              [id]: {
-                title: job.title,
-                description: job.description || '',
-                address: job.address || '',
-                pincode: job.pincode || '',
-                deliveryFromAddress: job.deliveryFromAddress || '',
-                deliveryFromPincode: job.deliveryFromPincode || '',
-                deliveryToAddress: job.deliveryToAddress || '',
-                deliveryToPincode: job.deliveryToPincode || '',
-              },
-            }));
+      const queue = jobs
+        .map((j) => ({ job: j, id: j?._id || j?.id }))
+        .filter(({ id }) => Boolean(id))
+        .filter(({ id }) => !translatedJobsRef.current?.[id]);
+
+      const CONCURRENCY = 3;
+      const worker = async () => {
+        while (!cancelled) {
+          const next = queue.shift();
+          if (!next) return;
+          const { job, id } = next;
+          try {
+            const translated = await translateJobToHindi(job);
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return { ...(prev || {}), [id]: translated };
+            });
+          } catch (e) {
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return {
+                ...(prev || {}),
+                [id]: {
+                  title: job.title,
+                  description: job.description || '',
+                  address: job.address || '',
+                  pincode: job.pincode || '',
+                  deliveryFromAddress: job.deliveryFromAddress || '',
+                  deliveryFromPincode: job.deliveryFromPincode || '',
+                  deliveryToAddress: job.deliveryToAddress || '',
+                  deliveryToPincode: job.deliveryToPincode || '',
+                },
+              };
+            });
           }
         }
-      }
+      };
+
+      await Promise.all(new Array(Math.min(CONCURRENCY, queue.length)).fill(0).map(() => worker()));
     };
-    run();
-    return () => { cancelled = true; };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [locale, jobs]);
 
   const handlePickupJob = async (job) => {
@@ -1264,14 +1365,41 @@ const AvailableJobs = ({
   };
 
   const submitApply = async (job) => {
-    const jid = job._id || job.id;
+    const jidRaw = job?._id || job?.id || job?.jobId;
+    const jid = jidRaw != null ? String(jidRaw) : null;
+    if (!jid) return;
     try {
+      // Phase 1: show spinner immediately.
       setApplyingJobId(jid);
-      const response = await freelancerJobsAPI.applyJob(jid);
+      const response = await freelancerJobsAPI.applyJob(jidRaw);
       if (response.success) {
+        // Phase 2: when "Applied successfully" banner appears, show "Waiting to accept".
+        setOptimisticPendingApplyByJobId((prev) => ({ ...(prev || {}), [jid]: true }));
+        setAppliedSuccessByJobId((prev) => ({ ...(prev || {}), [jid]: true }));
+        // Ensure button text updates immediately even if the next loadJobs() response is delayed.
+        setJobs((prev) =>
+          (prev || []).map((j) => {
+            const id = String(j?._id || j?.id || j?.jobId || '');
+            if (!id || id !== jid) return j;
+            return {
+              ...j,
+              myApplication: {
+                ...(j.myApplication || {}),
+                status: 'pending',
+              },
+            };
+          })
+        );
         loadJobs();
         showApplySuccessBanner();
       } else {
+        // Revert optimistic waiting if backend rejects.
+        setOptimisticPendingApplyByJobId((prev) => {
+          if (!prev?.[jid]) return prev;
+          const next = { ...(prev || {}) };
+          delete next[jid];
+          return next;
+        });
         Alert.alert(
           t('common.error'),
           messageForFreelancerPickupBlocked(t, response) || response.error || t('jobs.failedApply')
@@ -1280,6 +1408,13 @@ const AvailableJobs = ({
     } catch (err) {
       console.error('Error applying to job:', err);
       const data = err.response?.data;
+      // Revert optimistic waiting on network/server error.
+      setOptimisticPendingApplyByJobId((prev) => {
+        if (!prev?.[jid]) return prev;
+        const next = { ...(prev || {}) };
+        delete next[jid];
+        return next;
+      });
       Alert.alert(
         t('common.error'),
         messageForFreelancerPickupBlocked(t, data) || data?.error || err.message || t('jobs.failedApply')
@@ -1317,7 +1452,8 @@ const AvailableJobs = ({
       if (response.success) {
         setPickupModalVisible(false);
         setPickupJob(null);
-        setPickupSuccessModalVisible(true);
+        showToast(t('jobs.jobPickedUpSuccessMsg'));
+        if (onJobPickedUp) onJobPickedUp();
         loadJobs();
         checkActiveJob(); // Update active job status
       } else {
@@ -1589,9 +1725,35 @@ const AvailableJobs = ({
     }
   };
 
-  /** Google Maps: origin = job (client), destination = freelancer; travelmode bicycling. */
+  /** Google Maps:
+   * - Non-delivery: origin = job (client), destination = freelancer; travelmode bicycling
+   * - Delivery: route = pickup (from) -> drop (to); travelmode driving
+   */
   const openDirectionsFromJob = useCallback(
     async (job) => {
+      const delivery = isDeliveryJob(job);
+      if (delivery) {
+        const fromParts = [job.deliveryFromAddress, job.deliveryFromPincode].filter(Boolean);
+        const toParts = [job.deliveryToAddress, job.deliveryToPincode].filter(Boolean);
+        const originQuery = fromParts.length ? `${fromParts.join(', ')}, India` : '';
+        const destQuery = toParts.length ? `${toParts.join(', ')}, India` : '';
+        const url = buildGoogleMapsBikeDirectionsUrl({
+          originQuery: originQuery || null,
+          destQuery: destQuery || null,
+          travelmode: 'driving',
+        });
+        if (!url) {
+          Alert.alert(t('jobs.navigateNoOriginTitle'), t('jobs.navigateNoOriginMessage'));
+          return;
+        }
+        try {
+          await Linking.openURL(url);
+        } catch {
+          Alert.alert(t('common.error'), t('jobs.navigateOpenFailed'));
+        }
+        return;
+      }
+
       let dest = await getCurrentCoords();
       if (!dest) {
         const servicesOk = await requestPermission();
@@ -1640,7 +1802,8 @@ const AvailableJobs = ({
     const workCooldownActive = workCooldownRemainMs > 0;
     const canPickup = canWork === true && !isPickedUp && !effectiveHasActiveJob && !workCooldownActive;
 
-    const jobId = item._id || item.id;
+    const jobId = item?._id || item?.id || item?.jobId;
+    const jobIdStr = jobId != null ? String(jobId) : '';
     const tr = locale === 'hi' && translatedJobs[jobId];
     const title = tr ? tr.title : item.title;
     const delivery = isDeliveryJob(item);
@@ -1669,7 +1832,9 @@ const AvailableJobs = ({
     }
     const myApp = item.myApplication;
     const appStatus = myApp?.status;
-    const isWaitingApp = !delivery && appStatus === 'pending';
+    const optimisticPending = optimisticPendingApplyByJobId?.[jobIdStr] === true;
+    const justAppliedOk = appliedSuccessByJobId?.[jobIdStr] === true;
+    const isWaitingApp = !delivery && (appStatus === 'pending' || optimisticPending || justAppliedOk);
     // Same rules as backend myApplication: only null or rejected allows a new apply/offer on non-delivery jobs
     const applicationAllowsNewApply =
       myApp == null || appStatus === 'rejected';
@@ -1688,7 +1853,7 @@ const AvailableJobs = ({
       !effectiveHasActiveJob &&
       !workCooldownActive &&
       (delivery || appStatus !== 'accepted');
-    const applyingThis = applyingJobId === jobId;
+    const applyingThis = applyingJobId === jobIdStr;
     const activeJobBlockedLabel = effectiveHasActiveJob === true;
     const hideActionIconForLabel = activeJobBlockedLabel && locale === 'hi';
     const tightBlockedBtn = activeJobBlockedLabel && locale === 'hi';
@@ -1780,35 +1945,31 @@ const AvailableJobs = ({
             </View>
           ) : null}
         </View>
-        {!delivery || item.distanceKm != null ? (
-          <View style={styles.jobMetaDistance}>
-            {!delivery ? (
-              <Pressable
-                onPress={isAssignedToMe ? () => openDirectionsFromJob(item) : undefined}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.jobDirectionsIconButton,
-                  !isAssignedToMe && styles.jobDirectionsIconButtonDisabled,
-                  pressed && { opacity: 0.85 },
-                ]}
-                disabled={!isAssignedToMe}
-                accessibilityRole="button"
-                accessibilityLabel={t('jobs.openDirectionsA11y')}
-              >
-                <MaterialIcons
-                  name="location-on"
-                  size={16}
-                  color={isAssignedToMe ? colors.primary.main : colors.text.muted}
-                />
-              </Pressable>
-            ) : null}
-            {item.distanceKm != null ? (
-              <Text style={styles.jobMetaText}>
-                {item.distanceKm} {t('jobs.kmAway')}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.jobMetaDistance}>
+          <Pressable
+            onPress={isAssignedToMe ? () => openDirectionsFromJob(item) : undefined}
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.jobDirectionsIconButton,
+              !isAssignedToMe && styles.jobDirectionsIconButtonDisabled,
+              pressed && { opacity: 0.85 },
+            ]}
+            disabled={!isAssignedToMe}
+            accessibilityRole="button"
+            accessibilityLabel={t('jobs.openDirectionsA11y')}
+          >
+            <MaterialIcons
+              name="location-on"
+              size={16}
+              color={isAssignedToMe ? colors.primary.main : colors.text.muted}
+            />
+          </Pressable>
+          {item.distanceKm != null ? (
+            <Text style={styles.jobMetaText}>
+              {item.distanceKm} {t('jobs.kmAway')}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.actionsRow}>
@@ -1866,46 +2027,43 @@ const AvailableJobs = ({
           onPress={() => handleApplyJob(item)}
           disabled={!canApply || isPickedUp || applyingThis}
         >
-          {applyingThis ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              {!hideActionIconForLabel ? (
-                <MaterialIcons
-                  name="assignment"
-                  size={18}
-                  color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
-                />
-              ) : null}
-              <Text
-                style={[
-                  styles.actionButtonText,
-                  styles.applyButtonText,
-                  activeJobBlockedLabel && styles.activeJobBlockedButtonText,
-                  { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
-                ]}
-                numberOfLines={activeJobBlockedLabel ? 2 : 1}
-                adjustsFontSizeToFit={tightBlockedBtn}
-                minimumFontScale={0.85}
-              >
-                {effectiveHasActiveJob
-                  ? t('jobs.completeAssigned')
-                  : !canWorkKnown
-                  ? (t('common.loading') || 'Loading...')
-                  : !canWork
-                  ? t('jobs.payDues')
-                  : workCooldownActive
-                  ? t('jobs.workCooldownShort')
-                  : isPickedUp
-                  ? t('jobs.completeAssigned')
-                  : isWaitingApp
-                  ? t('jobs.waitingForClient')
-                  : appStatus === 'accepted'
-                  ? t('jobs.applicationAcceptedShort')
-                  : t('jobs.apply')}
-              </Text>
-            </>
-          )}
+          <>
+            {applyingThis ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+            {!hideActionIconForLabel ? (
+              <MaterialIcons
+                name="assignment"
+                size={18}
+                color={canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted}
+              />
+            ) : null}
+            <Text
+              style={[
+                styles.actionButtonText,
+                styles.applyButtonText,
+                activeJobBlockedLabel && styles.activeJobBlockedButtonText,
+                { color: canApply && !isPickedUp ? '#FFFFFF' : colors.text.muted },
+              ]}
+              numberOfLines={activeJobBlockedLabel ? 2 : 1}
+              adjustsFontSizeToFit={tightBlockedBtn}
+              minimumFontScale={0.85}
+            >
+              {effectiveHasActiveJob
+                ? t('jobs.completeAssigned')
+                : !canWorkKnown
+                ? (t('common.loading') || 'Loading...')
+                : !canWork
+                ? t('jobs.payDues')
+                : workCooldownActive
+                ? t('jobs.workCooldownShort')
+                : isPickedUp
+                ? t('jobs.completeAssigned')
+                : isWaitingApp
+                ? t('jobs.waitingForClient')
+                : appStatus === 'accepted'
+                ? t('jobs.applicationAcceptedShort')
+                : t('jobs.apply')}
+            </Text>
+          </>
         </TouchableOpacity>
         )}
 
@@ -1995,27 +2153,56 @@ const AvailableJobs = ({
 
   return (
     <View style={styles.container}>
-      <Modal visible={Boolean(toastMsg)} transparent animationType="none">
-        <Animated.View
-          style={[
-            styles.toast,
-            {
-              opacity: toastAnim,
-              transform: [
+      {Boolean(toastMsg) ? (
+        offerModalVisible ? (
+          // When Offer modal is open, render toast inside a Modal so it can appear above the modal.
+          // NOTE: Modal blocks touches behind it, so we only do this when the modal is already blocking.
+          <Modal visible transparent animationType="none">
+            <Animated.View
+              style={[
+                styles.toast,
                 {
-                  translateY: toastAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-12, 0],
-                  }),
+                  opacity: toastAnim,
+                  transform: [
+                    {
+                      translateY: toastAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-12, 0],
+                      }),
+                    },
+                  ],
                 },
-              ],
-            },
-          ]}
-          pointerEvents="none"
-        >
-          <Text style={styles.toastText}>{toastMsg}</Text>
-        </Animated.View>
-      </Modal>
+              ]}
+              pointerEvents="none"
+            >
+              <Text style={styles.toastText}>{toastMsg}</Text>
+            </Animated.View>
+          </Modal>
+        ) : (
+          // Default: non-blocking overlay toast (does NOT freeze dashboard touches).
+          <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+            <Animated.View
+              style={[
+                styles.toast,
+                {
+                  opacity: toastAnim,
+                  transform: [
+                    {
+                      translateY: toastAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-12, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <Text style={styles.toastText}>{toastMsg}</Text>
+            </Animated.View>
+          </View>
+        )
+      ) : null}
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -2147,8 +2334,17 @@ const AvailableJobs = ({
 
       <FlatList
         data={filteredJobs}
-        keyExtractor={(item) => item._id || item.id}
+        keyExtractor={(item) => String(item?._id || item?.id || item?.jobId || '')}
         renderItem={renderJobItem}
+        extraData={{
+          applyingJobId,
+          optimisticPendingApplyByJobId,
+          appliedSuccessByJobId,
+          canWork,
+          effectiveHasActiveJob,
+          workCooldownRemainMs,
+          locale,
+        }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           jobs.length > 0 ? (
@@ -2483,46 +2679,6 @@ const AvailableJobs = ({
                 ) : (
                   <Text style={styles.modalSubmitText}>{t('jobs.submitOffer')}</Text>
                 )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Pickup Job Success Modal */}
-      <Modal
-        visible={pickupSuccessModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setPickupSuccessModalVisible(false);
-          // Navigate to My Jobs tab after closing success modal
-          if (onJobPickedUp) {
-            onJobPickedUp();
-          }
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.successIconContainer}>
-              <MaterialIcons name="check-circle" size={64} color={colors.success.main} />
-            </View>
-            <Text style={styles.modalTitle}>{t('jobs.jobPickedUpSuccess')}</Text>
-            <Text style={styles.modalSubtitle}>
-              {t('jobs.jobPickedUpSuccessMsg')}
-            </Text>
-            <View style={[styles.modalActions, styles.modalActionsCentered]}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmitButton, styles.successModalButton]}
-                onPress={() => {
-                  setPickupSuccessModalVisible(false);
-                  // Navigate to My Jobs tab after closing success modal
-                  if (onJobPickedUp) {
-                    onJobPickedUp();
-                  }
-                }}
-              >
-                <Text style={styles.modalSubmitText}>{t('common.ok')}</Text>
               </TouchableOpacity>
             </View>
           </View>

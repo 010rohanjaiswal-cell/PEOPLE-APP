@@ -30,6 +30,7 @@ import UserDetailsModal from '../../components/modals/UserDetailsModal';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 import { translateJobToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
+import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 import { useAuth } from '../../context/AuthContext';
 import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
@@ -37,7 +38,7 @@ import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /** Poll assigned jobs while this tab is focused so status changes sync without manual refresh */
-const MY_JOBS_POLL_MS = 5000;
+const MY_JOBS_POLL_MS = 2000;
 
 function createFreelancerMyJobsStyles(colors, isDark) {
   return StyleSheet.create({
@@ -414,8 +415,13 @@ const MyJobs = () => {
   const [expandedTitleIds, setExpandedTitleIds] = useState({});
   const [truncatedTitleIds, setTruncatedTitleIds] = useState({});
   const [translatedJobs, setTranslatedJobs] = useState({});
+  const translatedJobsRef = useRef(translatedJobs);
 
   const fetchInFlightRef = useRef(false);
+
+  useEffect(() => {
+    translatedJobsRef.current = translatedJobs;
+  }, [translatedJobs]);
 
   const loadJobs = useCallback(
     async (opts = {}) => {
@@ -484,23 +490,34 @@ const MyJobs = () => {
     }
     let cancelled = false;
     const run = async () => {
-      for (const job of jobs) {
-        if (cancelled) return;
-        const id = job?._id || job?.id;
-        if (!id) continue;
-        try {
-          const translated = await translateJobToHindi(job);
-          if (cancelled) return;
-          setTranslatedJobs((prev) => {
-            if (prev && prev[id]) return prev;
-            return { ...(prev || {}), [id]: translated };
-          });
-        } catch {
-          // ignore
+      const queue = jobs
+        .map((j) => ({ job: j, id: j?._id || j?.id }))
+        .filter(({ id }) => Boolean(id))
+        .filter(({ id }) => !translatedJobsRef.current?.[id]);
+
+      const CONCURRENCY = 3;
+      const worker = async () => {
+        while (!cancelled) {
+          const next = queue.shift();
+          if (!next) return;
+          const { job, id } = next;
+          try {
+            const translated = await translateJobToHindi(job);
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return { ...(prev || {}), [id]: translated };
+            });
+          } catch {
+            // ignore
+          }
         }
-      }
+      };
+
+      await Promise.all(new Array(Math.min(CONCURRENCY, queue.length)).fill(0).map(() => worker()));
     };
-    run();
+
+    void run();
     return () => {
       cancelled = true;
     };
@@ -589,9 +606,33 @@ const MyJobs = () => {
     setClientModalVisible(true);
   };
 
-  // Open Google Maps directions to the job location (origin defaults to current location).
+  // Open Google Maps directions:
+  // - Non-delivery: current location -> job location (bicycling)
+  // - Delivery: pickup (from) -> drop (to) (driving)
   const openDirectionsToJob = useCallback(
     async (job) => {
+      if (isDeliveryJob(job)) {
+        const fromParts = [job?.deliveryFromAddress, job?.deliveryFromPincode].filter(Boolean);
+        const toParts = [job?.deliveryToAddress, job?.deliveryToPincode].filter(Boolean);
+        const originQuery = fromParts.length ? `${fromParts.join(', ')}, India` : '';
+        const destQuery = toParts.length ? `${toParts.join(', ')}, India` : '';
+        const url = buildGoogleMapsBikeDirectionsUrl({
+          originQuery: originQuery || null,
+          destQuery: destQuery || null,
+          travelmode: 'driving',
+        });
+        if (!url) {
+          Alert.alert(t('common.error'), t('jobs.navigateNoOriginMessage'));
+          return;
+        }
+        try {
+          await Linking.openURL(url);
+        } catch {
+          Alert.alert(t('common.error'), t('jobs.navigateOpenFailed'));
+        }
+        return;
+      }
+
       const addrParts = [job?.address, job?.pincode].filter(Boolean);
       const destQuery = addrParts.length ? `${addrParts.join(', ')}, India` : '';
       let destParam = null;
@@ -637,7 +678,7 @@ const MyJobs = () => {
     const tr = locale === 'hi' && translatedJobs[jobId];
     const title = tr ? tr.title : item.title;
     const description = tr ? tr.description : (item.description || '');
-    const showLocationButton = !delivery && item?.status !== 'completed' && item?.freelancerCompleted !== true;
+    const showLocationButton = item?.status !== 'completed' && item?.freelancerCompleted !== true;
 
     return (
       <View style={styles.jobCard}>

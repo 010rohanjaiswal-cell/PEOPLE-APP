@@ -237,23 +237,31 @@ const History = () => {
     }
     let cancelled = false;
     const run = async () => {
-      for (const job of jobs) {
-        if (cancelled) return;
-        const id = job?._id || job?.id;
-        if (!id) continue;
-        if (translatedJobsRef.current?.[id]) continue;
-        try {
-          const translated = await translateJobToHindi(job);
-          if (cancelled) return;
-          setTranslatedJobs((prev) => {
-            // Another async iteration may have already added it.
-            if (prev?.[id]) return prev;
-            return { ...prev, [id]: translated };
-          });
-        } catch {
-          // ignore
+      const queue = jobs
+        .map((j) => ({ job: j, id: j?._id || j?.id }))
+        .filter(({ id }) => Boolean(id))
+        .filter(({ id }) => !translatedJobsRef.current?.[id]);
+
+      const CONCURRENCY = 3;
+      const worker = async () => {
+        while (!cancelled) {
+          const next = queue.shift();
+          if (!next) return;
+          const { job, id } = next;
+          try {
+            const translated = await translateJobToHindi(job);
+            if (cancelled) return;
+            setTranslatedJobs((prev) => {
+              if (prev?.[id]) return prev;
+              return { ...prev, [id]: translated };
+            });
+          } catch {
+            // ignore
+          }
         }
-      }
+      };
+
+      await Promise.all(new Array(Math.min(CONCURRENCY, queue.length)).fill(0).map(() => worker()));
     };
     run();
     return () => {

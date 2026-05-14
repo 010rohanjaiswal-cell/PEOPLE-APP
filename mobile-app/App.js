@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DigiLockerProvider } from '@cashfreepayments/react-native-digilocker';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -27,6 +28,28 @@ import {
 
 // Keep native splash visible until RN is ready (prevents a blank flash on launch).
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Dev-only: surface stack trace for a noisy RN error that sometimes lacks one in Metro logs.
+if (__DEV__) {
+  const _origConsoleError = console.error;
+  // Avoid double-wrapping on Fast Refresh.
+  if (!_origConsoleError.__peopleAppWrapped) {
+    const wrapped = (...args) => {
+      try {
+        const first = args?.[0];
+        const msg = typeof first === 'string' ? first : '';
+        if (msg.includes('Did not expect event target to be a number')) {
+          _origConsoleError('PeopleApp debug stack for event-target error:\n' + new Error().stack);
+        }
+      } catch {
+        // ignore
+      }
+      return _origConsoleError(...args);
+    };
+    wrapped.__peopleAppWrapped = true;
+    console.error = wrapped;
+  }
+}
 
 function ThemedStatusBar() {
   const { isDark } = useTheme();
@@ -105,25 +128,27 @@ export default function App() {
   }, [appReady]);
 
   return (
-    <SafeAreaProvider onLayout={onRootLayout}>
-      <DigiLockerProvider>
-      <AuthProvider>
-        <SocketProvider>
-        <LanguageProvider>
-          <ThemeProvider>
-            <UserProvider>
-              <NotificationProvider>
-                <LocationProvider>
-                  <ThemedStatusBar />
-                  <AppContent />
-                </LocationProvider>
-              </NotificationProvider>
-            </UserProvider>
-          </ThemeProvider>
-        </LanguageProvider>
-        </SocketProvider>
-      </AuthProvider>
-      </DigiLockerProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider onLayout={onRootLayout}>
+        <DigiLockerProvider>
+          <AuthProvider>
+            <SocketProvider>
+              <LanguageProvider>
+                <ThemeProvider>
+                  <UserProvider>
+                    <NotificationProvider>
+                      <LocationProvider>
+                        <ThemedStatusBar />
+                        <AppContent />
+                      </LocationProvider>
+                    </NotificationProvider>
+                  </UserProvider>
+                </ThemeProvider>
+              </LanguageProvider>
+            </SocketProvider>
+          </AuthProvider>
+        </DigiLockerProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

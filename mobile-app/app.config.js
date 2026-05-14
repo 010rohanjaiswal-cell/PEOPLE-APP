@@ -19,8 +19,12 @@ module.exports = ({ config }) => {
   const msg91AuthToken =
     process.env.EXPO_PUBLIC_MSG91_AUTH_TOKEN || config.extra?.msg91AuthToken || '';
 
+  const plugins = Array.isArray(config.plugins) ? config.plugins.slice() : [];
+  if (!plugins.includes('expo-web-browser')) plugins.push('expo-web-browser');
+
   return {
     ...config,
+    plugins,
     extra: {
       ...(config.extra || {}),
       openaiApiKey,

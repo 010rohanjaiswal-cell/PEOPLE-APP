@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 
 function safeT(t) {
@@ -66,9 +67,11 @@ function createStyles(colors, compact) {
 
 export const JobLocationBlock = memo(
   ({ job, translated, t, compact = false, hideLeadingIcon = false }) => {
+    const { t: tCtx } = useLanguage();
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors, compact), [colors, compact]);
-    const tt = safeT(t);
+    const tt = typeof t === 'function' ? t : safeT(tCtx);
+    const rowGap = compact ? spacing.xs : spacing.sm;
 
     const delivery = isDeliveryJob(job);
 

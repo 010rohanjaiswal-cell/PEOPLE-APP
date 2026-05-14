@@ -506,14 +506,23 @@ const ClientDashboard = () => {
   // Stable elements to avoid re-render churn during tab commits.
   const onJobPosted = useCallback(() => setActiveTab('MyJobs'), []);
   const postJobElement = useMemo(() => <PostJobScreen onJobPosted={onJobPosted} />, [onJobPosted]);
+
+  const handleMyJobsBecameEmpty = useCallback(() => {
+    if (activeDrawerScreen) return;
+    if (activeTab !== 'MyJobs') return;
+    syncSwipeToTab('PostJob');
+    setActiveTab('PostJob');
+  }, [activeDrawerScreen, activeTab, syncSwipeToTab]);
+
   const myJobsElement = useMemo(
     () => (
       <MyJobsScreen
         openApplicationsJobId={pendingOpenApplicationsJobId}
         onConsumeOpenApplicationsJobId={clearPendingOpenApplications}
+        onBecameEmpty={handleMyJobsBecameEmpty}
       />
     ),
-    [pendingOpenApplicationsJobId, clearPendingOpenApplications]
+    [pendingOpenApplicationsJobId, clearPendingOpenApplications, handleMyJobsBecameEmpty]
   );
 
   const toggleDrawer = () => {
@@ -612,6 +621,9 @@ const ClientDashboard = () => {
       return () => sub.remove();
     }, [goToMainTabPreferringMyJobs])
   );
+
+  // Note: We intentionally do NOT auto-redirect on focus when My Jobs is empty.
+  // We only redirect when the My Jobs list *becomes empty* while focused (e.g., job deleted/completed).
 
   const handleLogout = () => {
     closeDrawer();

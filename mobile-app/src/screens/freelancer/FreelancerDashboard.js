@@ -19,7 +19,7 @@ import {
   Platform,
   PanResponder,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
@@ -38,6 +38,7 @@ import { hasSeenIntro } from '../../utils/introSeen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
+const TOAST_DURATION_MS = 4500;
 
 function parseAssignedJobsResponse(response) {
   if (response?.success && Array.isArray(response.jobs)) return response.jobs;
@@ -347,6 +348,25 @@ function createFreelancerDashboardStyles(colors) {
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
+  toast: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.md,
+    backgroundColor: 'rgba(10, 20, 35, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(80, 160, 255, 0.35)',
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  toastText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
 });
 }
 
@@ -378,8 +398,10 @@ const FreelancerDashboard = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const introCheckedRef = useRef(false);
+  const dashboardFocusedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('AvailableJobs');
   const [hasActiveAssignedJobState, setHasActiveAssignedJobState] = useState(false);
+  const prevHasActiveAssignedJobRef = useRef(false);
   // Smooth swipe: keep both tabs mounted and slide between them.
   const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
   const swipeAnimInFlightRef = useRef(false);
@@ -433,11 +455,15 @@ const FreelancerDashboard = () => {
   // This does NOT switch tabs; it only updates button gating in AvailableJobs.
   useFocusEffect(
     useCallback(() => {
+      dashboardFocusedRef.current = true;
       refreshHasActiveAssignedJob();
       const id = setInterval(() => {
         refreshHasActiveAssignedJob();
-      }, 5000);
-      return () => clearInterval(id);
+      }, 2000);
+      return () => {
+        dashboardFocusedRef.current = false;
+        clearInterval(id);
+      };
     }, [refreshHasActiveAssignedJob])
   );
 
@@ -471,6 +497,11 @@ const FreelancerDashboard = () => {
   const [drawerAnimation] = useState(new Animated.Value(-DRAWER_WIDTH));
   const [verification, setVerification] = useState(null);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const insets = useSafeAreaInsets();
+  const toastTop = Math.max(24, (insets?.top ?? 0) + 24);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimerRef = useRef(null);
+  const [toastMsg, setToastMsg] = useState('');
 
   // Push notification tap: My Jobs vs main dashboard tab (same as drawer "Dashboard")
   useEffect(() => {
@@ -488,6 +519,33 @@ const FreelancerDashboard = () => {
     }
     navigation.setParams({ pushAction: undefined });
   }, [route.params?.pushAction, goToMainTabPreferringMyJobs, navigation]);
+
+  const showGlobalToast = useCallback(
+    (msg) => {
+      if (!msg) return;
+      setToastMsg(String(msg));
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      Animated.timing(toastAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      toastTimerRef.current = setTimeout(() => {
+        Animated.timing(toastAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(() => setToastMsg(''));
+      }, TOAST_DURATION_MS);
+    },
+    [toastAnim]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const formatRatingCount = (rawCount) => {
     const count = Number(rawCount || 0);
@@ -710,6 +768,31 @@ const FreelancerDashboard = () => {
     animateToTab(activeTab);
   }, [activeTab, activeDrawerScreen, animateToTab]);
 
+  // Live auto-redirect based on assignment transitions while dashboard is focused:
+  // - AvailableJobs -> MyJobs when an active assigned job appears
+  // - MyJobs -> AvailableJobs when the active assigned job disappears (unassign/completed)
+  useEffect(() => {
+    const prev = prevHasActiveAssignedJobRef.current;
+    const next = Boolean(hasActiveAssignedJobState);
+    prevHasActiveAssignedJobRef.current = next;
+
+    if (!dashboardFocusedRef.current) return;
+    if (activeDrawerScreen) return;
+    if (activeTab !== 'AvailableJobs' && activeTab !== 'MyJobs') return;
+    if (swipeAnimInFlightRef.current) return;
+
+    // Became assigned while user is looking at Available Jobs -> jump to My Jobs.
+    if (prev === false && next === true && activeTab === 'AvailableJobs') {
+      animateToTab('MyJobs', () => setActiveTab('MyJobs'));
+      return;
+    }
+
+    // Became unassigned/completed while user is on My Jobs -> jump back to Available Jobs.
+    if (prev === true && next === false && activeTab === 'MyJobs') {
+      animateToTab('AvailableJobs', () => setActiveTab('AvailableJobs'));
+    }
+  }, [hasActiveAssignedJobState, activeTab, activeDrawerScreen, animateToTab]);
+
   const panResponder = useMemo(() => {
     return PanResponder.create({
       onMoveShouldSetPanResponder: (_evt, gesture) => {
@@ -764,12 +847,13 @@ const FreelancerDashboard = () => {
     () => (
       <AvailableJobsScreen
         onJobPickedUp={onJobPickedUp}
+        showToast={showGlobalToast}
         workCooldownRemainMs={workCooldownRemainMs}
         hasActiveAssignedJob={hasActiveAssignedJobState}
         onActiveJobStatusChange={(active) => setHasActiveAssignedJobState(Boolean(active))}
       />
     ),
-    [onJobPickedUp, workCooldownRemainMs, hasActiveAssignedJobState]
+    [onJobPickedUp, showGlobalToast, workCooldownRemainMs, hasActiveAssignedJobState]
   );
 
   const myJobsElement = useMemo(() => <MyJobsScreen />, []);
@@ -780,6 +864,30 @@ const FreelancerDashboard = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {Boolean(toastMsg) ? (
+        <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.toast,
+              {
+                top: toastTop,
+                opacity: toastAnim,
+                transform: [
+                  {
+                    translateY: toastAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-12, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </Animated.View>
+        </View>
+      ) : null}
       {/* Top Navigation Bar */}
       <View style={styles.topNav}>
         <View style={styles.leftSection}>
