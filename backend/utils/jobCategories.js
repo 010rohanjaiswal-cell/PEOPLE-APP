@@ -61,6 +61,16 @@ function isMechanicSubcategory(category) {
   return MECHANIC_SUB_SET.has(String(category || '').trim().toLowerCase());
 }
 
+function isValidMainCategory(category) {
+  return MAIN_CATEGORIES.includes(String(category || '').trim());
+}
+
+function preferenceDisplayName(category) {
+  const s = String(category || '').trim();
+  if (!s) return 'jobs';
+  return s.toLowerCase();
+}
+
 function isValidPreferenceCategory(category) {
   const s = String(category || '').trim();
   if (!s) return false;
