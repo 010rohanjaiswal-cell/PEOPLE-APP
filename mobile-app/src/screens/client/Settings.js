@@ -15,6 +15,7 @@ import TermsAndConditions from '../common/TermsAndConditions';
 import About from '../common/About';
 import RefundPolicy from '../common/RefundPolicy';
 import HelpAndSupport from '../common/HelpAndSupport';
+import { APP_VERSION_DISPLAY } from '../../constants/appVersion';
 
 function buildSettingsStyles(colors) {
   return StyleSheet.create({
@@ -184,7 +185,7 @@ const Settings = ({ onNavigate }) => {
       <Card style={styles.card}>
         <CardContent>
           <Text style={styles.sectionTitle}>{t('settings.appVersion')}</Text>
-          <Text style={styles.versionText}>13.1.0</Text>
+          <Text style={styles.versionText}>{APP_VERSION_DISPLAY}</Text>
         </CardContent>
       </Card>
     </ScrollView>

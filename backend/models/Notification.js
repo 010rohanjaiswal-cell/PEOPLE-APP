@@ -31,6 +31,7 @@ const notificationSchema = new mongoose.Schema({
       'chat_message',
       'profile_verified',
       'system',
+      'job_preference_alert',
     ],
     required: true,
   },

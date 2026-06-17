@@ -2,10 +2,10 @@
  * Helpers for job display (Delivery vs standard jobs).
  */
 
+import { isDeliverySubcategory } from '../constants/categorySubcategories';
+
 export function isDeliveryCategory(category) {
-  return String(category || '')
-    .trim()
-    .toLowerCase() === 'delivery';
+  return isDeliverySubcategory(category);
 }
 
 /**

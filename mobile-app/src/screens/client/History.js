@@ -355,7 +355,7 @@ const History = () => {
         <>
           <FlatList
             data={paginatedJobs}
-            keyExtractor={(item) => item._id || item.id}
+            keyExtractor={(item, index) => String(item?._id ?? item?.id ?? `job-${index}`)}
             renderItem={renderJobItem}
             contentContainerStyle={styles.listContent}
             refreshControl={

@@ -2,15 +2,15 @@
   "expo": {
     "name": "People",
     "slug": "mobile-app",
-    "version": "13.1.0",
+    "version": "13.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4583e8"
+      "backgroundColor": "#0066FA"
     },
     "ios": {
       "supportsTablet": true,
@@ -30,10 +30,10 @@
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.company.people",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 14,
+      "versionCode": 15,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4583e8"
+        "backgroundColor": "#0066FA"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [

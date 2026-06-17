@@ -18,6 +18,7 @@ import {
   BackHandler,
   Platform,
   PanResponder,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
@@ -34,8 +35,6 @@ import GpsBanner from '../../components/common/GpsBanner';
 import NotificationPermissionBanner from '../../components/common/NotificationPermissionBanner';
 import { useLocation } from '../../context/LocationContext';
 import { userAPI, verificationAPI, freelancerJobsAPI } from '../../api';
-import { hasSeenIntro } from '../../utils/introSeen';
-
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
 const TOAST_DURATION_MS = 4500;
@@ -397,7 +396,6 @@ const FreelancerDashboard = () => {
   const { requestPermission, checkPermission } = useLocation();
   const route = useRoute();
   const navigation = useNavigation();
-  const introCheckedRef = useRef(false);
   const dashboardFocusedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('AvailableJobs');
   const [hasActiveAssignedJobState, setHasActiveAssignedJobState] = useState(false);
@@ -467,25 +465,23 @@ const FreelancerDashboard = () => {
     }, [refreshHasActiveAssignedJob])
   );
 
-  // First visit: show freelancer intro once per user.
-  useEffect(() => {
-    if (introCheckedRef.current) return;
-    introCheckedRef.current = true;
-    (async () => {
-      const seen = await hasSeenIntro(user, 'freelancer');
-      if (!seen) {
-        navigation.reset({ index: 0, routes: [{ name: 'FreelancerIntro' }] });
-      }
-    })();
-  }, [navigation, user]);
-
-  // Ask for GPS when user lands on freelancer dashboard (ensures dialog shows at right time)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      requestPermission();
-    }, 600);
-    return () => clearTimeout(t);
-  }, [requestPermission]);
+  // GPS after screen is focused and transitions settle (avoids clash with post-login navigation).
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      let timer;
+      const interaction = InteractionManager.runAfterInteractions(() => {
+        timer = setTimeout(() => {
+          if (!cancelled) requestPermission();
+        }, 500);
+      });
+      return () => {
+        cancelled = true;
+        interaction.cancel?.();
+        if (timer) clearTimeout(timer);
+      };
+    }, [requestPermission])
+  );
 
   // Stack of drawer screens so back follows history: e.g. Dashboard -> Wallet -> Profile -> Settings -> Orders; back -> Orders -> Settings -> Profile -> Wallet -> Dashboard
   const [drawerScreenStack, setDrawerScreenStack] = useState([]);

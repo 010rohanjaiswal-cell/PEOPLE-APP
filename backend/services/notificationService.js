@@ -377,6 +377,24 @@ async function notifyAutoPickClient(clientId, freelancerName, jobTitle, ratingLa
   });
 }
 
+/**
+ * Freelancer: batch of new jobs in their preferred category (every 3 uploads).
+ */
+async function notifyPreferredCategoryJobs(freelancerId, categoryLabel) {
+  const cat = String(categoryLabel || '').trim() || 'job';
+  const catLower = cat.toLowerCase();
+  return createNotification({
+    userId: freelancerId,
+    type: 'job_preference_alert',
+    title: 'New jobs on your feed',
+    message: `New ${catLower} jobs just posted on your feed`,
+    data: {
+      category: cat,
+      tab: 'Dashboard',
+    },
+  });
+}
+
 /** Chat between users (REST + socket) — single export for message notifications */
 async function createChatMessageNotification(recipientId, senderName, messagePreview, senderId) {
   const rid = toUserIdString(recipientId);
@@ -412,5 +430,6 @@ module.exports = {
   notifyApplicationReceived,
   notifyApplicationRejected,
   notifyAutoPickClient,
+  notifyPreferredCategoryJobs,
 };
 

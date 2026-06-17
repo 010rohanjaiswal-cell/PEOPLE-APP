@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Animated, Dimensions, PanResponder, BackHandler, Platform, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,7 +19,6 @@ import NotificationModal from '../../components/modals/NotificationModal';
 import GpsBanner from '../../components/common/GpsBanner';
 import { useLocation } from '../../context/LocationContext';
 import { clientJobsAPI } from '../../api/clientJobs';
-import { hasSeenIntro } from '../../utils/introSeen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75; // 75% of screen width
@@ -306,7 +305,6 @@ const ClientDashboard = () => {
   const { requestPermission } = useLocation();
   const route = useRoute();
   const navigation = useNavigation();
-  const introCheckedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('PostJob');
   const [pendingOpenApplicationsJobId, setPendingOpenApplicationsJobId] = useState(null);
   // Stack of drawer screens so back goes through history: e.g. [Wallet, Profile, Settings] -> back -> [Wallet, Profile] -> back -> [Wallet] -> back -> []
@@ -362,13 +360,23 @@ const ClientDashboard = () => {
     });
   };
 
-  // Ask for GPS when user lands on client dashboard (ensures dialog shows at right time)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      requestPermission();
-    }, 600);
-    return () => clearTimeout(t);
-  }, [requestPermission]);
+  // GPS after screen is focused and transitions settle (avoids clash with post-login navigation).
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      let timer;
+      const interaction = InteractionManager.runAfterInteractions(() => {
+        timer = setTimeout(() => {
+          if (!cancelled) requestPermission();
+        }, 500);
+      });
+      return () => {
+        cancelled = true;
+        interaction.cancel?.();
+        if (timer) clearTimeout(timer);
+      };
+    }, [requestPermission])
+  );
 
   // Only prefer My Jobs once when the dashboard first mounts. Running this on every focus
   // (useFocusEffect) fires again after native overlays (map, location sheets) and yanks the user
@@ -377,17 +385,23 @@ const ClientDashboard = () => {
     switchToMyJobsIfActiveJobs();
   }, [switchToMyJobsIfActiveJobs]);
 
-  // First visit: show client intro once per user.
-  useEffect(() => {
-    if (introCheckedRef.current) return;
-    introCheckedRef.current = true;
-    (async () => {
-      const seen = await hasSeenIntro(user, 'client');
-      if (!seen) {
-        navigation.reset({ index: 0, routes: [{ name: 'ClientIntro' }] });
-      }
-    })();
-  }, [navigation, user]);
+  // Swipe gesture to switch between Post Job and My Jobs (with slide animation)
+  // Keep both screens mounted and slide between them to avoid jank from mounting PostJob/MyJobs mid-swipe.
+  const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
+  const swipeAnimInFlightRef = useRef(false);
+  const swipeStartXRef = useRef(0);
+
+  const syncSwipeToTab = useCallback(
+    (tabKey) => {
+      const targetX = tabKey === 'MyJobs' ? -SCREEN_WIDTH : 0;
+      // Never allow tab label and content to go out of sync (e.g. push navigation).
+      swipeAnimInFlightRef.current = false;
+      swipeX.stopAnimation(() => {
+        swipeX.setValue(targetX);
+      });
+    },
+    [swipeX]
+  );
 
   // Push notification tap: switch tab / open applications modal (params from AppNavigator)
   useEffect(() => {
@@ -407,24 +421,6 @@ const ClientDashboard = () => {
 
   // Do not switch tabs on every AppState "active" — the location permission dialog (and other
   // system sheets) triggers that and would jump to My Jobs while posting a job.
-
-  // Swipe gesture to switch between Post Job and My Jobs (with slide animation)
-  // Keep both screens mounted and slide between them to avoid jank from mounting PostJob/MyJobs mid-swipe.
-  const swipeX = useRef(new Animated.Value(activeTab === 'MyJobs' ? -SCREEN_WIDTH : 0)).current;
-  const swipeAnimInFlightRef = useRef(false);
-  const swipeStartXRef = useRef(0);
-
-  const syncSwipeToTab = useCallback(
-    (tabKey) => {
-      const targetX = tabKey === 'MyJobs' ? -SCREEN_WIDTH : 0;
-      // Never allow tab label and content to go out of sync (e.g. push navigation).
-      swipeAnimInFlightRef.current = false;
-      swipeX.stopAnimation(() => {
-        swipeX.setValue(targetX);
-      });
-    },
-    [swipeX]
-  );
 
   const animateToTab = useCallback(
     (nextTab, onDone) => {
@@ -505,7 +501,10 @@ const ClientDashboard = () => {
 
   // Stable elements to avoid re-render churn during tab commits.
   const onJobPosted = useCallback(() => setActiveTab('MyJobs'), []);
-  const postJobElement = useMemo(() => <PostJobScreen onJobPosted={onJobPosted} />, [onJobPosted]);
+  const postJobElement = useMemo(
+    () => <PostJobScreen onJobPosted={onJobPosted} isScreenActive={activeTab === 'PostJob'} />,
+    [onJobPosted, activeTab]
+  );
 
   const handleMyJobsBecameEmpty = useCallback(() => {
     if (activeDrawerScreen) return;
@@ -668,7 +667,7 @@ const ClientDashboard = () => {
         </View>
       </View>
 
-      <GpsBanner />
+      <GpsBanner variant="client" />
 
         {/* Error Message */}
         {logoutError ? (

@@ -1,11 +1,7 @@
 {
-  "dependencies": {
-    "axios": "^1.13.2",
-    "expo": "^55.0.15",
-    "react": "19.2.0",
-    "react-native": "0.83.4"
-  },
   "name": "people-app",
   "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo root — the Expo app lives in mobile-app/. Do not add react-native/expo here; it caused Android release to resolve RN 0.83 native while the JS bundle used mobile-app (RN 0.81) and crash on launch.",
   "scripts": {}
 }

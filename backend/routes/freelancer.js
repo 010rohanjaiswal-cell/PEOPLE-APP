@@ -2242,5 +2242,62 @@ router.post('/pay-dues', authenticate, async (req, res) => {
  * For PhonePe integration, use /api/payment/create-dues-order instead.
  */
 
+const { MAIN_CATEGORIES, isValidPreferenceCategory } = require('../utils/jobCategories');
+
+/**
+ * GET /api/freelancer/preferences/job-category
+ */
+router.get('/preferences/job-category', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id || req.user._id).select('role jobCategoryPreference').lean();
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'Only freelancers can access job preferences' });
+    }
+    return res.json({
+      success: true,
+      category: user.jobCategoryPreference || null,
+      categories: MAIN_CATEGORIES,
+    });
+  } catch (error) {
+    console.error('Error getting job category preference:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to get preference' });
+  }
+});
+
+/**
+ * PUT /api/freelancer/preferences/job-category
+ * Body: { category: string | null } — null or "" clears preference
+ */
+router.put('/preferences/job-category', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id || req.user._id);
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({ success: false, error: 'Only freelancers can set job preferences' });
+    }
+
+    let category = req.body?.category;
+    if (category === '' || category === undefined) category = null;
+    if (category != null) {
+      category = String(category).trim();
+      if (!isValidPreferenceCategory(category)) {
+        return res.status(400).json({ success: false, error: 'Invalid job category' });
+      }
+    }
+
+    user.jobCategoryPreference = category;
+    user.jobPreferencePostedCount = 0;
+    user.updatedAt = new Date();
+    await user.save();
+
+    return res.json({
+      success: true,
+      category: user.jobCategoryPreference,
+    });
+  } catch (error) {
+    console.error('Error updating job category preference:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to update preference' });
+  }
+});
+
 module.exports = router;
 

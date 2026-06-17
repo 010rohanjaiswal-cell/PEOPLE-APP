@@ -35,6 +35,7 @@ const { assertJobTitleAllowed, assertJobDescriptionAllowed } = require('../utils
 const { isJobTextBlockedByWords } = require('../utils/jobBlockedWords');
 const { moderateJobText } = require('../services/openAiModerationService');
 const { safetyGateJobText } = require('../services/openAiJobSafetyGate');
+const { onJobPosted } = require('../services/jobPreferenceNotifications');
 
 function isDeliveryCategory(category) {
   return String(category || '')
@@ -269,6 +270,8 @@ router.post('/jobs', authenticate, async (req, res) => {
       ...deliveryFields,
       status: 'open',
     });
+
+    void onJobPosted(job);
 
     res.status(201).json({
       success: true,

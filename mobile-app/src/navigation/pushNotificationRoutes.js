@@ -44,6 +44,9 @@ export function resolvePushActionFromNotificationData(normalizedData, userRole) 
     if (type === 'offer_rejected' || type === 'application_rejected') {
       return { tab: 'Dashboard' };
     }
+    if (type === 'job_preference_alert') {
+      return { tab: 'Dashboard' };
+    }
     return null;
   }
 

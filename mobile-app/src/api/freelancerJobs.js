@@ -91,6 +91,16 @@ export const freelancerJobsAPI = {
     const response = await apiClient.get('/api/freelancer/orders');
     return response.data;
   },
+
+  getJobCategoryPreference: async () => {
+    const response = await apiClient.get('/api/freelancer/preferences/job-category');
+    return response.data;
+  },
+
+  setJobCategoryPreference: async (category) => {
+    const response = await apiClient.put('/api/freelancer/preferences/job-category', { category });
+    return response.data;
+  },
 };
 
 export default freelancerJobsAPI;

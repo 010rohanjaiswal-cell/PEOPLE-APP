@@ -40,168 +40,19 @@ import { translateToHindi } from '../../utils/translate';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
-import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
+import { JOB_CATEGORIES } from '../../constants/jobCategories';
+import {
+  categoryMatchesFilter,
+  getSubcategoriesForParent,
+  isSubcategoryFilterActive,
+  labelForJobCategory,
+} from '../../constants/categorySubcategories';
 import { readJobListCache, writeJobListCache } from '../../utils/jobListCache';
 import { useNotifications } from '../../context/NotificationContext';
+import { OTHER_WORK_OPTIONS } from '../../constants/otherWorkOptions';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const TOAST_DURATION_MS = 4500;
-
-function normalizeOtherOption(s) {
-  return String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[.]/g, '')
-    .replace(/[()]/g, '')
-    .replace(/[/]/g, ' ')
-    .replace(/[-–—]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Same list as client "Other" picker; "Others" first.
-const OTHER_WORK_OPTIONS_RAW = [
-  'Others',
-  'Interior decorator',
-  'Carpenter / furniture maker',
-  'Floor tiler (tiles, marble, granite)',
-  'Painter (wall, texture, spray)',
-  'Plumber',
-  'Electrician',
-  'POP (Plaster of Paris) worker',
-  'False ceiling installer',
-  'Welder',
-  'Mason (brick/block work)',
-  'Glass & window installer (aluminum/uPVC)',
-  'Cabinet maker',
-  'Wood polisher / finisher',
-  'Sofa maker / upholsterer',
-  'Modular kitchen installer',
-  'Door & window fabricator',
-  'Bamboo craftsman',
-  'Gardener / landscaper',
-  'Nursery plant caretaker',
-  'Irrigation system installer',
-  'Lawn maintenance worker',
-  'Tree trimmer / cutter',
-  'Potter (clay items)',
-  'Sculptor',
-  'Handicraft maker',
-  'Textile weaver',
-  'Embroidery worker',
-  'Leather goods maker',
-  'Candle / soap maker',
-  'Pest control technician',
-  'Housekeeping staff',
-  'Waste management worker',
-  'Mobile repair technician',
-  'HVAC (AC) technician',
-  'Refrigeration mechanic',
-  'AC & refrigerator mechanic',
-  'TV / appliance repair technician',
-  'Bike mechanic',
-  'Car mechanic',
-  'Generator technician',
-  'Generator repair technician',
-  'CCTV installation technician',
-  'Warehouse handler',
-  'Packing & moving labor',
-  'Heavy equipment operator (JCB, crane, etc.)',
-  'Makeup artist',
-  'Mehndi artist',
-  'Fitness trainer (skill-based)',
-  'Solar panel installer',
-  'Solar maintenance technician',
-  'Wind turbine technician',
-  'Transformer repair technician',
-  'Electrical panel board fabricator',
-  'Cable tray installer',
-  'Lightning protection system installer',
-  'Duct fabrication specialist',
-  'Ventilation system installer',
-  'Boiler operator',
-  'Chiller plant technician',
-  'Cooling tower technician',
-  'Gas pipeline installer',
-  'Compressed air system technician',
-  'Elevator (lift) technician',
-  'MIG/TIG welder',
-  'CNC machine operator',
-  'Lathe machine operator',
-  'Sheet metal fabricator',
-  'Aluminum fabricator',
-  'Steel structure fabricator',
-  'Pipe fitter',
-  'Industrial rigging specialist',
-  'Blacksmith',
-  'Tool and die maker',
-  'Industrial plumber',
-  'Pipeline welder',
-  'Drainage system specialist',
-  'Fire sprinkler system installer',
-  'Water treatment plant technician',
-  'Borewell drilling technician',
-  'Sewage treatment plant operator',
-  'Irrigation system technician',
-  'Scaffolding specialist',
-  'Formwork (shuttering) carpenter',
-  'Steel fixer (rebar worker)',
-  'Concrete pump operator',
-  'Tower crane operator',
-  'Excavator / JCB operator',
-  'Road roller operator',
-  'Asphalt paving specialist',
-  'Waterproofing technician',
-  'Basement sealing expert',
-  'High-voltage line technician',
-  'Industrial electrician',
-  'Electrical panel board fabricator',
-  'Cable tray installer',
-  'Lightning protection system installer',
-  'HVAC (AC) technician',
-  'Refrigeration mechanic',
-  'Duct fabrication specialist',
-  'Ventilation system installer',
-  'Boiler operator',
-  'Chiller plant technician',
-  'Cooling tower technician',
-  'Gas pipeline installer',
-  'Compressed air system technician',
-  'Elevator (lift) technician',
-  'Fire alarm system technician',
-  'Fire extinguisher technician',
-  'Access control system installer',
-  'Security system integrator',
-  'Smoke detector installer',
-  'False ceiling specialist',
-  'Glass façade installer',
-  'uPVC window fabricator',
-  'Stone (granite/marble) polisher',
-  'Epoxy flooring specialist',
-  'Wooden flooring installer',
-  'Acoustic panel installer',
-  'Rainwater harvesting technician',
-  'Waste recycling plant operator',
-  'Biogas plant technician',
-  'EV (electric vehicle) charging station installer',
-  'Smart home automation technician',
-  'Drone surveying operator',
-  'Fiber optic cable technician',
-  'Data cabling technician',
-];
-
-const OTHER_WORK_OPTIONS = (() => {
-  const seen = new Set();
-  const out = [];
-  for (const opt of OTHER_WORK_OPTIONS_RAW) {
-    const key = normalizeOtherOption(opt);
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(opt.trim());
-  }
-  return out;
-})();
 
 /** Backend returns code + blockedUntil when support unassign cooldown is active */
 function messageForFreelancerPickupBlocked(t, payload) {
@@ -818,18 +669,30 @@ function createAvailableJobsStyles(colors, isDark, toastTop) {
   },
   categoryModalCell: {
     flex: 1,
-    minHeight: 68,
-    paddingVertical: spacing.md,
+    minHeight: 72,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     paddingHorizontal: 6,
     borderRadius: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
-  categoryModalCellIcon: {
-    marginBottom: 6,
+  categoryModalCellIconWrap: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  categoryModalSubTitle: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontWeight: '700',
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   categoryModalCellActive: {
     borderColor: colors.primary.main,
@@ -839,6 +702,7 @@ function createAvailableJobsStyles(colors, isDark, toastTop) {
     ...typography.small,
     fontSize: 12,
     lineHeight: 16,
+    minHeight: 32,
     color: colors.text.primary,
     fontWeight: '600',
     textAlign: 'center',
@@ -976,7 +840,7 @@ const AvailableJobs = ({
   const [categoryFilters, setCategoryFilters] = useState([]);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const categoryModalShift = useRef(new Animated.Value(0)).current; // 0 = main categories, 1 = Other list
-  const [categoryModalPage, setCategoryModalPage] = useState('grid'); // 'grid' | 'other'
+  const [categoryModalPage, setCategoryModalPage] = useState('grid'); // 'grid' | 'other' | 'delivery' | 'mechanic'
   const [otherQuery, setOtherQuery] = useState('');
   const [otherTranslated, setOtherTranslated] = useState({});
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -1103,6 +967,46 @@ const AvailableJobs = ({
     });
   }, [jobs, appliedSuccessByJobId]);
 
+  const checkActiveJob = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true;
+    if (activeJobCheckInFlightRef.current) return;
+    activeJobCheckInFlightRef.current = true;
+    try {
+      // Guard: this endpoint can be slow during assignment; do not block UI.
+      const response = await withTimeout(
+        freelancerJobsAPI.getAssignedJobs(),
+        15000,
+        'getAssignedJobs'
+      );
+      if (response?.success && Array.isArray(response.jobs)) {
+        // Check if there's any active job (not fully completed)
+        const activeJobs = response.jobs.filter(
+          job => job.freelancerCompleted !== true && 
+          job.status !== 'cancelled'
+        );
+        const active = activeJobs.length > 0;
+        setHasActiveJob(active);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
+      } else if (Array.isArray(response)) {
+        const activeJobs = response.filter(
+          job => job.freelancerCompleted !== true && 
+          job.status !== 'cancelled'
+        );
+        const active = activeJobs.length > 0;
+        setHasActiveJob(active);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
+      } else {
+        setHasActiveJob(false);
+        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(false);
+      }
+    } catch (err) {
+      console.error('Error checking active jobs:', err);
+      if (!silent) setHasActiveJob(false);
+    } finally {
+      activeJobCheckInFlightRef.current = false;
+    }
+  }, [withTimeout, onActiveJobStatusChange]);
+
   // Instant refresh when a job-related notification arrives (no need to wait for poll interval).
   const lastNotifIdRef = useRef(null);
   const lastNotifRefreshAtRef = useRef(0);
@@ -1185,46 +1089,6 @@ const AvailableJobs = ({
       setCanWork(false);
     }
   };
-
-  const checkActiveJob = useCallback(async (opts = {}) => {
-    const silent = opts.silent === true;
-    if (activeJobCheckInFlightRef.current) return;
-    activeJobCheckInFlightRef.current = true;
-    try {
-      // Guard: this endpoint can be slow during assignment; do not block UI.
-      const response = await withTimeout(
-        freelancerJobsAPI.getAssignedJobs(),
-        15000,
-        'getAssignedJobs'
-      );
-      if (response?.success && Array.isArray(response.jobs)) {
-        // Check if there's any active job (not fully completed)
-        const activeJobs = response.jobs.filter(
-          job => job.freelancerCompleted !== true && 
-          job.status !== 'cancelled'
-        );
-        const active = activeJobs.length > 0;
-        setHasActiveJob(active);
-        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
-      } else if (Array.isArray(response)) {
-        const activeJobs = response.filter(
-          job => job.freelancerCompleted !== true && 
-          job.status !== 'cancelled'
-        );
-        const active = activeJobs.length > 0;
-        setHasActiveJob(active);
-        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(active);
-      } else {
-        setHasActiveJob(false);
-        if (typeof onActiveJobStatusChange === 'function') onActiveJobStatusChange(false);
-      }
-    } catch (err) {
-      console.error('Error checking active jobs:', err);
-      if (!silent) setHasActiveJob(false);
-    } finally {
-      activeJobCheckInFlightRef.current = false;
-    }
-  }, [withTimeout, onActiveJobStatusChange]);
 
   useEffect(() => {
     let mounted = true;
@@ -1478,10 +1342,7 @@ const AvailableJobs = ({
     if (cats == null) return true;
     const list = Array.isArray(cats) ? cats : [cats];
     if (list.length === 0) return true;
-    const a = String(job?.category || '')
-      .trim()
-      .toLowerCase();
-    return list.some((cat) => a === String(cat).trim().toLowerCase());
+    return list.some((cat) => categoryMatchesFilter(job?.category, cat));
   };
 
   const applyFilter = (jobList) => {
@@ -1525,14 +1386,7 @@ const AvailableJobs = ({
     }
   };
 
-  const categoryLabel = (cat) => {
-    const s = String(cat || '').trim();
-    if (!s) return '';
-    const keySuffix = JOB_CATEGORY_I18N_KEYS?.[s];
-    if (keySuffix) return t('postJob.category' + keySuffix);
-    // Custom categories (e.g. "Interior decorator") should show as-is
-    return s;
-  };
+  const categoryLabel = (cat) => labelForJobCategory(t, cat);
 
   const categoryIconName = (cat) => {
     const s = String(cat || '').trim();
@@ -1555,6 +1409,23 @@ const AvailableJobs = ({
     return 'work-outline';
   };
 
+  const subcategoryIconName = (sub) => {
+    const s = String(sub || '').trim();
+    if (s === 'Two Wheeler' || s === 'Bike') return 'two-wheeler';
+    if (s === 'Three Wheeler' || s === 'Three Wheeler Mechanic') return 'electric-rickshaw';
+    if (s === 'Four Wheeler' || s === 'Car') return 'directions-car';
+    if (s === 'Heavy Commercial Trucks') return 'local-shipping';
+    if (s === 'Trucks') return 'fire-truck';
+    return 'work-outline';
+  };
+
+  const subcategoryIconStyle = (iconName) => {
+    if (iconName === 'electric-rickshaw') {
+      return { transform: [{ translateY: -1 }, { translateX: 1 }] };
+    }
+    return null;
+  };
+
   const filteredOtherOptions = useMemo(() => {
     const q = String(otherQuery || '').trim().toLowerCase();
     if (!q) return OTHER_WORK_OPTIONS;
@@ -1567,7 +1438,64 @@ const AvailableJobs = ({
 
   // Grid page: keep tighter so we don't show large empty space below 12 tiles.
   // Other page: taller to show more subcategories.
-  const modalHeightPct = categoryModalPage === 'other' ? '84%' : '46%';
+  const modalHeightPct =
+    categoryModalPage === 'other' ? '84%' : categoryModalPage === 'grid' ? '46%' : '52%';
+
+  const openSubcategoryPage = (page) => {
+    setCategoryModalPage(page);
+    Animated.timing(categoryModalShift, {
+      toValue: 1,
+      duration: 260,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const openOtherSubcategoryPage = () => {
+    openSubcategoryPage('other');
+  };
+
+  const backToCategoryGrid = () => {
+    setCategoryModalPage('grid');
+    Animated.timing(categoryModalShift, {
+      toValue: 0,
+      duration: 260,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeCategoryModal = useCallback(() => {
+    setCategoryModalVisible(false);
+    categoryModalShift.setValue(0);
+    setOtherQuery('');
+    setMultiSelectMode(false);
+    setCategoryModalPage('grid');
+  }, [categoryModalShift]);
+
+  const isCategoryModalSubPage = categoryModalPage !== 'grid';
+
+  const subcategoryModalParent =
+    categoryModalPage === 'delivery'
+      ? 'Delivery'
+      : categoryModalPage === 'mechanic'
+        ? 'Mechanic'
+        : null;
+
+  const parentSubcategories = subcategoryModalParent
+    ? getSubcategoriesForParent(subcategoryModalParent)
+    : [];
+
+  const handleParentSubcategorySelect = (sub) => {
+    if (!multiSelectMode) {
+      setCategoryFilters([sub]);
+      setCategoryModalVisible(false);
+      categoryModalShift.setValue(0);
+      setCategoryModalPage('grid');
+      return;
+    }
+    setCategoryFilters((prev) =>
+      prev.includes(sub) ? prev.filter((x) => x !== sub) : [...prev, sub]
+    );
+  };
 
   const unselectCategory = (cat) => {
     setCategoryFilters((prev) => prev.filter((x) => x !== cat));
@@ -1608,25 +1536,15 @@ const AvailableJobs = ({
   useEffect(() => {
     if (!categoryModalVisible) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (categoryModalPage === 'other') {
-        setCategoryModalPage('grid');
-        Animated.timing(categoryModalShift, {
-          toValue: 0,
-          duration: 260,
-          useNativeDriver: true,
-        }).start();
+      if (isCategoryModalSubPage) {
+        backToCategoryGrid();
         return true;
       }
-      // On grid page: close modal
-      setCategoryModalVisible(false);
-      categoryModalShift.setValue(0);
-      setOtherQuery('');
-      setMultiSelectMode(false);
-      setCategoryModalPage('grid');
+      closeCategoryModal();
       return true;
     });
     return () => sub.remove();
-  }, [categoryModalVisible, categoryModalPage, categoryModalShift]);
+  }, [categoryModalVisible, categoryModalPage, categoryModalShift, isCategoryModalSubPage, closeCategoryModal]);
 
   const openOfferModal = (job) => {
     if (workCooldownRemainMs > 0) {
@@ -2370,34 +2288,25 @@ const AvailableJobs = ({
         animationType="fade"
         onRequestClose={() => {
           // Android hardware back triggers onRequestClose.
-          // If we're on the Other/Subcategories page, go back to grid instead of closing.
-          if (categoryModalPage === 'other') {
-            setCategoryModalPage('grid');
-            Animated.timing(categoryModalShift, {
-              toValue: 0,
-              duration: 260,
-              useNativeDriver: true,
-            }).start();
+          // If we're on a subcategory page, go back to grid instead of closing.
+          if (isCategoryModalSubPage) {
+            backToCategoryGrid();
             return;
           }
-          setCategoryModalVisible(false);
-          categoryModalShift.setValue(0);
-          setOtherQuery('');
-          setMultiSelectMode(false);
-          setCategoryModalPage('grid');
+          closeCategoryModal();
         }}
       >
         <View style={styles.categoryModalWrap}>
           <Pressable
             style={styles.categoryModalBackdrop}
-            onPress={() => setCategoryModalVisible(false)}
+            onPress={closeCategoryModal}
             accessibilityLabel={t('common.cancel')}
           />
           <View style={[styles.categoryModalContent, { height: modalHeightPct, maxHeight: modalHeightPct }]}>
             <View style={styles.categoryModalHeader}>
               <Text style={styles.categoryModalTitle}>{t('jobs.chooseCategoryTitle')}</Text>
               <TouchableOpacity
-                onPress={() => setCategoryModalVisible(false)}
+                onPress={closeCategoryModal}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 accessibilityRole="button"
               >
@@ -2426,19 +2335,27 @@ const AvailableJobs = ({
                     {Array.from({ length: Math.ceil(JOB_CATEGORIES.length / 3) }, (_, rowIndex) => (
                       <View key={rowIndex} style={styles.categoryModalRowWrap}>
                         {JOB_CATEGORIES.slice(rowIndex * 3, rowIndex * 3 + 3).map((cat) => {
-                          const active = categoryFilters.includes(cat);
+                          const active =
+                            cat === 'Delivery'
+                              ? isSubcategoryFilterActive(categoryFilters, 'Delivery')
+                              : cat === 'Mechanic'
+                                ? isSubcategoryFilterActive(categoryFilters, 'Mechanic')
+                                : categoryFilters.includes(cat);
                           return (
                             <TouchableOpacity
                               key={cat}
                               style={[styles.categoryModalCell, active && styles.categoryModalCellActive]}
                               onPress={() => {
                                 if (cat === 'Other') {
-                                  setCategoryModalPage('other');
-                                  Animated.timing(categoryModalShift, {
-                                    toValue: 1,
-                                    duration: 260,
-                                    useNativeDriver: true,
-                                  }).start();
+                                  openOtherSubcategoryPage();
+                                  return;
+                                }
+                                if (cat === 'Delivery') {
+                                  openSubcategoryPage('delivery');
+                                  return;
+                                }
+                                if (cat === 'Mechanic') {
+                                  openSubcategoryPage('mechanic');
                                   return;
                                 }
                                 if (!multiSelectMode) {
@@ -2462,12 +2379,13 @@ const AvailableJobs = ({
                               }}
                               activeOpacity={0.7}
                             >
-                              <MaterialIcons
-                                name={categoryIconName(cat)}
-                                size={22}
-                                color={active ? '#FFFFFF' : colors.primary.main}
-                                style={styles.categoryModalCellIcon}
-                              />
+                              <View style={styles.categoryModalCellIconWrap}>
+                                <MaterialIcons
+                                  name={categoryIconName(cat)}
+                                  size={22}
+                                  color={active ? '#FFFFFF' : colors.primary.main}
+                                />
+                              </View>
                               <Text
                                 style={[
                                   styles.categoryModalCellText,
@@ -2485,93 +2403,169 @@ const AvailableJobs = ({
                   </View>
                 </View>
 
-                {/* Page 1: Other/subcategories (multi-select) */}
+                {/* Page 1: Delivery / Mechanic / Other subcategories */}
                 <View style={styles.categoryModalPage}>
                   <View style={styles.categoryModalPageInner}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setCategoryModalPage('grid');
-                        Animated.timing(categoryModalShift, {
-                          toValue: 0,
-                          duration: 260,
-                          useNativeDriver: true,
-                        }).start();
-                      }}
-                      style={{ paddingVertical: 6 }}
-                    >
+                    <TouchableOpacity onPress={backToCategoryGrid} style={{ paddingVertical: 6 }}>
                       <Text style={{ color: colors.primary.main, fontWeight: '800' }}>
                         {t('common.back') || 'Back'}
                       </Text>
                     </TouchableOpacity>
 
-                    <TextInput
-                      value={otherQuery}
-                      onChangeText={setOtherQuery}
-                      placeholder={t('postJob.searchOther')}
-                      placeholderTextColor={colors.text.muted}
-                      style={styles.otherSearchInput}
-                    />
+                    {subcategoryModalParent ? (
+                      <View style={{ flex: 1 }}>
+                        <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+                          <Text style={styles.categoryModalSubTitle} numberOfLines={2}>
+                            {subcategoryModalParent === 'Delivery'
+                              ? t('postJob.selectDeliveryType')
+                              : t('postJob.selectMechanicType')}
+                          </Text>
 
-                    <ScrollView
-                      style={{ flex: 1 }}
-                      contentContainerStyle={{ paddingBottom: spacing.lg }}
-                      showsVerticalScrollIndicator={false}
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {multiSelectMode && categoryFilters.length > 0 ? (
-                        <View style={styles.selectedChipsWrap}>
-                          {categoryFilters.map((cat) => (
-                            <TouchableOpacity
-                              key={cat}
-                              onPress={() => unselectCategory(cat)}
-                              activeOpacity={0.85}
-                              style={styles.selectedChip}
-                            >
-                              <Text style={styles.selectedChipText} numberOfLines={1}>
-                                {labelForSelectedChip(cat)}
-                              </Text>
-                              <MaterialIcons name="close" size={16} color={colors.text.secondary} />
-                            </TouchableOpacity>
-                          ))}
+                          {multiSelectMode && categoryFilters.length > 0 ? (
+                            <View style={[styles.selectedChipsWrap, { marginTop: spacing.sm }]}>
+                              {categoryFilters.map((cat) => (
+                                <TouchableOpacity
+                                  key={cat}
+                                  onPress={() => unselectCategory(cat)}
+                                  activeOpacity={0.85}
+                                  style={styles.selectedChip}
+                                >
+                                  <Text style={styles.selectedChipText} numberOfLines={1}>
+                                    {labelForSelectedChip(cat)}
+                                  </Text>
+                                  <MaterialIcons name="close" size={16} color={colors.text.secondary} />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          ) : null}
                         </View>
-                      ) : null}
 
-                      {filteredOtherOptions.map((opt) => {
-                        const active = categoryFilters.includes(opt) || (opt === 'Others' && categoryFilters.includes('Other'));
-                        const displayText = locale === 'hi' ? otherTranslated[opt] || opt : opt;
-                        return (
-                          <TouchableOpacity
-                            key={opt}
-                            activeOpacity={0.75}
-                            style={[styles.otherWorkItem, active && styles.otherWorkItemActive]}
-                            onPress={() => {
-                              // "Others" means generic Other category.
-                              const value = opt === 'Others' ? 'Other' : opt;
-                              if (!multiSelectMode) {
-                                setCategoryFilters([value]);
-                                setCategoryModalVisible(false);
-                                categoryModalShift.setValue(0);
-                                setOtherQuery('');
-                                setCategoryModalPage('grid');
-                                return;
-                              }
-                              setCategoryFilters((prev) =>
-                                prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
-                              );
-                            }}
-                            onLongPress={() => {
-                              const value = opt === 'Others' ? 'Other' : opt;
-                              if (!multiSelectMode) setMultiSelectMode(true);
-                              setCategoryFilters((prev) =>
-                                prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
-                              );
-                            }}
-                          >
-                            <Text style={styles.otherWorkItemText}>{displayText}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
+                        <View style={styles.categoryModalGrid}>
+                          {Array.from(
+                            { length: Math.ceil(parentSubcategories.length / 3) },
+                            (_, rowIndex) => (
+                              <View key={rowIndex} style={styles.categoryModalRowWrap}>
+                                {parentSubcategories
+                                  .slice(rowIndex * 3, rowIndex * 3 + 3)
+                                  .map((sub) => {
+                                    const active = categoryFilters.includes(sub);
+                                    const iconName = subcategoryIconName(sub);
+                                    return (
+                                      <TouchableOpacity
+                                        key={sub}
+                                        style={[
+                                          styles.categoryModalCell,
+                                          active && styles.categoryModalCellActive,
+                                        ]}
+                                        onPress={() => handleParentSubcategorySelect(sub)}
+                                        onLongPress={() => {
+                                          if (!multiSelectMode) setMultiSelectMode(true);
+                                          setCategoryFilters((prev) =>
+                                            prev.includes(sub)
+                                              ? prev.filter((x) => x !== sub)
+                                              : [...prev, sub]
+                                          );
+                                        }}
+                                        activeOpacity={0.7}
+                                      >
+                                        <View style={styles.categoryModalCellIconWrap}>
+                                          <MaterialIcons
+                                            name={iconName}
+                                            size={22}
+                                            color={active ? '#FFFFFF' : colors.primary.main}
+                                            style={subcategoryIconStyle(iconName)}
+                                          />
+                                        </View>
+                                        <Text
+                                          style={[
+                                            styles.categoryModalCellText,
+                                            active && styles.categoryModalCellTextActive,
+                                          ]}
+                                          numberOfLines={2}
+                                        >
+                                          {categoryLabel(sub)}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                              </View>
+                            )
+                          )}
+                        </View>
+                      </View>
+                    ) : categoryModalPage === 'other' ? (
+                      <>
+                        <TextInput
+                          value={otherQuery}
+                          onChangeText={setOtherQuery}
+                          placeholder={t('postJob.searchOther')}
+                          placeholderTextColor={colors.text.muted}
+                          style={styles.otherSearchInput}
+                        />
+
+                        <ScrollView
+                          style={{ flex: 1 }}
+                          contentContainerStyle={{ paddingBottom: spacing.lg }}
+                          showsVerticalScrollIndicator={false}
+                          keyboardShouldPersistTaps="handled"
+                        >
+                          {multiSelectMode && categoryFilters.length > 0 ? (
+                            <View style={styles.selectedChipsWrap}>
+                              {categoryFilters.map((cat) => (
+                                <TouchableOpacity
+                                  key={cat}
+                                  onPress={() => unselectCategory(cat)}
+                                  activeOpacity={0.85}
+                                  style={styles.selectedChip}
+                                >
+                                  <Text style={styles.selectedChipText} numberOfLines={1}>
+                                    {labelForSelectedChip(cat)}
+                                  </Text>
+                                  <MaterialIcons name="close" size={16} color={colors.text.secondary} />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          ) : null}
+
+                          {filteredOtherOptions.map((opt) => {
+                            const active =
+                              categoryFilters.includes(opt) ||
+                              (opt === 'Others' && categoryFilters.includes('Other'));
+                            const displayText = locale === 'hi' ? otherTranslated[opt] || opt : opt;
+                            return (
+                              <TouchableOpacity
+                                key={opt}
+                                activeOpacity={0.75}
+                                style={[styles.otherWorkItem, active && styles.otherWorkItemActive]}
+                                onPress={() => {
+                                  const value = opt === 'Others' ? 'Other' : opt;
+                                  if (!multiSelectMode) {
+                                    setCategoryFilters([value]);
+                                    setCategoryModalVisible(false);
+                                    categoryModalShift.setValue(0);
+                                    setOtherQuery('');
+                                    setCategoryModalPage('grid');
+                                    return;
+                                  }
+                                  setCategoryFilters((prev) =>
+                                    prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                                  );
+                                }}
+                                onLongPress={() => {
+                                  const value = opt === 'Others' ? 'Other' : opt;
+                                  if (!multiSelectMode) setMultiSelectMode(true);
+                                  setCategoryFilters((prev) =>
+                                    prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+                                  );
+                                }}
+                              >
+                                <Text style={styles.otherWorkItemText}>{displayText}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </>
+                    ) : null}
                   </View>
                 </View>
               </Animated.View>

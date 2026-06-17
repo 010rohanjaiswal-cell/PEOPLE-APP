@@ -35,10 +35,10 @@
     "production": {
       "distribution": "internal",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
-      "credentialsSource": "local"
-      ,
+      "credentialsSource": "local",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://freelancing-platform-backend-backup.onrender.com",
         "EXPO_PUBLIC_MSG91_WIDGET_ID": "36646669686c363139313834",

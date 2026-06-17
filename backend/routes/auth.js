@@ -130,7 +130,10 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
       email: user.email || null,
       verificationStatus: user.verificationStatus || null,
       ...(user.role === 'freelancer'
-        ? { freelancerPickupBlockedUntil: user.freelancerPickupBlockedUntil || null }
+        ? {
+            freelancerPickupBlockedUntil: user.freelancerPickupBlockedUntil || null,
+            jobCategoryPreference: user.jobCategoryPreference || null,
+          }
         : {}),
     },
   };

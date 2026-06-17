@@ -585,7 +585,7 @@ const MyJobs = ({
 
     try {
       setDeleting(true);
-      const response = await clientJobsAPI.deleteJob(deleteJob._id);
+      const response = await clientJobsAPI.deleteJob(deleteJob._id || deleteJob.id);
       if (response.success) {
         setDeleteModalVisible(false);
         setDeleteJob(null);
@@ -710,9 +710,9 @@ const MyJobs = ({
     // If nobody is assigned, allow delete/edit even if stale accepted offers/applications exist.
     if (!job.assignedFreelancer) return true;
     const hasAcceptedOffers =
-      job.offers && job.offers.some((offer) => offer.status === 'accepted');
+      Array.isArray(job.offers) && job.offers.some((offer) => offer.status === 'accepted');
     const hasAcceptedApplications =
-      job.applications && job.applications.some((a) => a.status === 'accepted');
+      Array.isArray(job.applications) && job.applications.some((a) => a.status === 'accepted');
     return !hasAcceptedOffers && !hasAcceptedApplications;
   };
 
@@ -933,7 +933,7 @@ const MyJobs = ({
       ) : (
         <FlatList
           data={sortedJobs}
-          keyExtractor={(item) => item._id || item.id}
+          keyExtractor={(item, index) => String(item?._id ?? item?.id ?? `job-${index}`)}
           renderItem={renderJobItem}
           contentContainerStyle={styles.listContent}
           refreshControl={

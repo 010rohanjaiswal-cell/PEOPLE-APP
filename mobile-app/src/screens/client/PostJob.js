@@ -27,6 +27,7 @@ import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Input, Card, CardContent } from '../../components/common';
 import AddressPickerModal from '../../components/modals/AddressPickerModal';
+import MainCategorySubcategoryModal from '../../components/category/MainCategorySubcategoryModal';
 import { validateRequired, validatePincode } from '../../utils/validation';
 import {
   sanitizeJobTextInput,
@@ -40,167 +41,27 @@ import { isJobTextBlockedByWords } from '../../utils/jobBlockedWords';
 import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { JOB_CATEGORIES, JOB_CATEGORY_I18N_KEYS } from '../../constants/jobCategories';
+import {
+  getSubcategoryParent,
+  iconForSubcategory,
+  isParentCategoryWithSubs,
+  labelForJobCategory,
+} from '../../constants/categorySubcategories';
+import { isDeliveryCategory } from '../../utils/jobDisplay';
+import {
+  CATEGORY_PICKER_TILES,
+  CATEGORY_PICKER_LAST_ROW_TILES,
+  LAST_ROW_ROTATION_START_DELAYS_MS,
+  ROTATION_HOLD_MS,
+} from '../../constants/categoryPickerTiles';
+import RotatingSubcategoryTile, { shuffleSubcategories } from '../../components/client/RotatingSubcategoryTile';
+import { iconForOtherSubcategory } from '../../constants/otherSubcategoryIcons';
+import { OTHER_WORK_OPTIONS, OTHER_SUBCATEGORIES } from '../../constants/otherWorkOptions';
 import { translateToHindi } from '../../utils/translate';
 
 const { height: SCREEN_H, width: SCREEN_W } = require('react-native').Dimensions.get('window');
 const PAGE_W = SCREEN_W;
-
-function normalizeOtherOption(s) {
-  return String(s || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[.]/g, '')
-    .replace(/[()]/g, '')
-    .replace(/[/]/g, ' ')
-    .replace(/[-–—]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-const OTHER_WORK_OPTIONS_RAW = [
-  // Keep first: "Others" should appear at the top in UI.
-  'Others',
-
-  // Existing options
-  'Interior decorator',
-  'Carpenter / furniture maker',
-  'Floor tiler (tiles, marble, granite)',
-  'Painter (wall, texture, spray)',
-  'Plumber',
-  'Electrician',
-  'POP (Plaster of Paris) worker',
-  'False ceiling installer',
-  'Welder',
-  'Mason (brick/block work)',
-  'Glass & window installer (aluminum/uPVC)',
-  'Cabinet maker',
-  'Wood polisher / finisher',
-  'Sofa maker / upholsterer',
-  'Modular kitchen installer',
-  'Door & window fabricator',
-  'Bamboo craftsman',
-  'Gardener / landscaper',
-  'Nursery plant caretaker',
-  'Irrigation system installer',
-  'Lawn maintenance worker',
-  'Tree trimmer / cutter',
-  'Potter (clay items)',
-  'Sculptor',
-  'Handicraft maker',
-  'Textile weaver',
-  'Embroidery worker',
-  'Leather goods maker',
-  'Candle / soap maker',
-  'Pest control technician',
-  'Housekeeping staff',
-  'Waste management worker',
-  'Mobile repair technician',
-  'HVAC (AC) technician',
-  'Refrigeration mechanic',
-  'AC & refrigerator mechanic',
-  'TV / appliance repair technician',
-  'Bike mechanic',
-  'Car mechanic',
-  'Generator technician',
-  'Generator repair technician',
-  'CCTV installation technician',
-  'Warehouse handler',
-  'Packing & moving labor',
-  'Heavy equipment operator (JCB, crane, etc.)',
-  'Makeup artist',
-  'Mehndi artist',
-  'Fitness trainer (skill-based)',
-  'Solar panel installer',
-  'Solar maintenance technician',
-  'Elevator (lift) technician',
-  'Lift (elevator) technician',
-  'Fire safety equipment installer',
-  'Waterproofing specialist',
-  'Roofing worker',
-  'Drone operator',
-  'Photographer / videographer',
-  'Video editor (skill > degree)',
-  'Social media content creator',
-  'Freelance graphic designer',
-
-  // Newly added options (deduped by normalizeOtherOption)
-  'Scaffolding specialist',
-  'Formwork (shuttering) carpenter',
-  'Steel fixer (rebar worker)',
-  'Concrete pump operator',
-  'Tower crane operator',
-  'Excavator / JCB operator',
-  'Road roller operator',
-  'Asphalt paving specialist',
-  'Waterproofing technician',
-  'Basement sealing expert',
-  'High-voltage line technician',
-  'Industrial electrician',
-  'Wind turbine technician',
-  'Transformer repair technician',
-  'Electrical panel board fabricator',
-  'Cable tray installer',
-  'Lightning protection system installer',
-  'Duct fabrication specialist',
-  'Ventilation system installer',
-  'Boiler operator',
-  'Chiller plant technician',
-  'Cooling tower technician',
-  'Gas pipeline installer',
-  'Compressed air system technician',
-  'MIG/TIG welder',
-  'CNC machine operator',
-  'Lathe machine operator',
-  'Sheet metal fabricator',
-  'Aluminum fabricator',
-  'Steel structure fabricator',
-  'Pipe fitter',
-  'Industrial rigging specialist',
-  'Blacksmith',
-  'Tool and die maker',
-  'Industrial plumber',
-  'Pipeline welder',
-  'Drainage system specialist',
-  'Fire sprinkler system installer',
-  'Water treatment plant technician',
-  'Borewell drilling technician',
-  'Sewage treatment plant operator',
-  'Irrigation system technician',
-  'Fire alarm system technician',
-  'Fire extinguisher technician',
-  'Access control system installer',
-  'Security system integrator',
-  'Smoke detector installer',
-  'False ceiling specialist',
-  'Glass façade installer',
-  'uPVC window fabricator',
-  'Stone (granite/marble) polisher',
-  'Epoxy flooring specialist',
-  'Wooden flooring installer',
-  'Acoustic panel installer',
-  'Rainwater harvesting technician',
-  'Waste recycling plant operator',
-  'Biogas plant technician',
-  'EV (electric vehicle) charging station installer',
-  'Smart home automation technician',
-  'Drone surveying operator',
-  'Fiber optic cable technician',
-  'Data cabling technician',
-];
-
-const OTHER_WORK_OPTIONS = (() => {
-  const seen = new Set();
-  const out = [];
-  for (const opt of OTHER_WORK_OPTIONS_RAW) {
-    const key = normalizeOtherOption(opt);
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(opt.trim());
-  }
-  return out;
-})();
+const POST_JOB_PAGE_COUNT = 3;
 
 const CATEGORY_ICON_BY_LABEL = {
   Delivery: require('../../../assets/category-icons/delivery-29f0ecd4-7672-42da-8428-99aba3ef41a2.png'),
@@ -220,19 +81,21 @@ const CATEGORY_ICON_BY_LABEL = {
 };
 
 function labelForCategory(t, cat) {
-  const s = String(cat || '').trim();
-  if (!s) return '';
-  const keySuffix = JOB_CATEGORY_I18N_KEYS?.[s];
-  if (keySuffix) return t('postJob.category' + keySuffix);
-  return s;
+  return labelForJobCategory(t, cat);
 }
 
 function iconForCategory(cat) {
   const s = String(cat || '').trim();
+  if (iconForSubcategory(s)) return iconForSubcategory(s);
   if (CATEGORY_ICON_BY_LABEL[s]) return CATEGORY_ICON_BY_LABEL[s];
-  // If user picked a custom "Other" work, show the Other icon.
-  if (OTHER_WORK_OPTIONS.includes(s)) return CATEGORY_ICON_BY_LABEL.Other;
+  if (OTHER_WORK_OPTIONS.includes(s)) return iconForOtherSubcategory(s);
   return null;
+}
+
+function getCategoryPickerStep(category) {
+  const s = String(category || '').trim();
+  if (OTHER_WORK_OPTIONS.includes(s) || s === 'Other') return 'other';
+  return 'categories';
 }
 
 /**
@@ -349,6 +212,27 @@ function createPostJobStyles(colors, isDark) {
     color: colors.text.primary,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  rotatingTileInner: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  rotatingTileContentLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+  rotatingTileOriginalLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
   otherHeaderRow: {
     flexDirection: 'row',
@@ -761,7 +645,7 @@ function createPostJobStyles(colors, isDark) {
 });
 }
 
-const PostJob = ({ onJobPosted }) => {
+const PostJob = ({ onJobPosted, isScreenActive = true }) => {
   const { t, locale } = useLanguage();
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => createPostJobStyles(colors, isDark), [colors, isDark]);
@@ -783,10 +667,17 @@ const PostJob = ({ onJobPosted }) => {
   const [toastMsg, setToastMsg] = useState('');
 
   const [postJobStep, setPostJobStep] = useState('categories'); // 'categories' | 'other' | 'form'
-  const shiftAnim = useRef(new Animated.Value(0)).current; // 0 = categories, 1 = other, 2 = form
+  const shiftAnim = useRef(new Animated.Value(0)).current;
   const stepTransitioningRef = useRef(false);
+  const [subcategoryModalVisible, setSubcategoryModalVisible] = useState(false);
+  const [subcategoryModalParent, setSubcategoryModalParent] = useState(null); // 'Delivery' | 'Mechanic'
   const [otherQuery, setOtherQuery] = useState('');
   const [otherTranslated, setOtherTranslated] = useState({});
+  const [activeRotationSlots, setActiveRotationSlots] = useState([false, false, false]);
+  const [rotatingSubcategories, setRotatingSubcategories] = useState([]);
+  const rotationSlotTimersRef = useRef([]);
+  const postJobScreenEnteredAtRef = useRef(null);
+  const shuffledSubcategoriesRef = useRef(null);
 
   /** Android: KAV offset. iOS: rely on ScrollView automaticallyAdjustKeyboardInsets + measure scroll. */
   const keyboardVerticalOffset =
@@ -830,6 +721,59 @@ const PostJob = ({ onJobPosted }) => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    rotationSlotTimersRef.current.forEach((id) => clearTimeout(id));
+    rotationSlotTimersRef.current = [];
+
+    if (!isScreenActive) {
+      postJobScreenEnteredAtRef.current = null;
+      shuffledSubcategoriesRef.current = null;
+      setActiveRotationSlots([false, false, false]);
+      setRotatingSubcategories([]);
+      return undefined;
+    }
+
+    if (!postJobScreenEnteredAtRef.current) {
+      postJobScreenEnteredAtRef.current = Date.now();
+    }
+
+    if (!shuffledSubcategoriesRef.current?.length) {
+      shuffledSubcategoriesRef.current = shuffleSubcategories(OTHER_SUBCATEGORIES);
+      setRotatingSubcategories(shuffledSubcategoriesRef.current);
+    }
+
+    const enteredAt = postJobScreenEnteredAtRef.current;
+    const elapsed = Date.now() - enteredAt;
+
+    LAST_ROW_ROTATION_START_DELAYS_MS.forEach((delayMs, slot) => {
+      const remaining = Math.max(0, delayMs - elapsed);
+
+      const activateSlot = () => {
+        setActiveRotationSlots((prev) => {
+          if (prev[slot]) return prev;
+          const next = [...prev];
+          next[slot] = true;
+          return next;
+        });
+      };
+
+      if (remaining === 0) {
+        activateSlot();
+      } else {
+        const timerId = setTimeout(activateSlot, remaining);
+        rotationSlotTimersRef.current.push(timerId);
+      }
+    });
+
+    return () => {
+      rotationSlotTimersRef.current.forEach((id) => clearTimeout(id));
+      rotationSlotTimersRef.current = [];
+    };
+  }, [isScreenActive]);
+
+  const lastRowRotationActive =
+    isScreenActive && postJobStep === 'categories' && rotatingSubcategories.length > 0;
 
   const focusScrollToField = (ref) => scrollFieldIntoView(ref);
   const [formData, setFormData] = useState({
@@ -933,7 +877,12 @@ const PostJob = ({ onJobPosted }) => {
     };
   }, [postJobStep, locale, filteredOtherOptions, otherTranslated]);
 
-  const stepIndex = (step) => (step === 'categories' ? 0 : step === 'other' ? 1 : 2);
+  const stepIndex = (step) => {
+    if (step === 'categories') return 0;
+    if (step === 'other') return 1;
+    if (step === 'form') return 2;
+    return 0;
+  };
 
   const animateToStep = (nextStep) => {
     if (stepTransitioningRef.current) return;
@@ -970,7 +919,29 @@ const PostJob = ({ onJobPosted }) => {
       animateToStep('other');
       return;
     }
+    if (isParentCategoryWithSubs(cat)) {
+      setSubcategoryModalParent(cat);
+      setSubcategoryModalVisible(true);
+      return;
+    }
     selectCategoryAndOpenForm(cat);
+  };
+
+  const selectSubcategoryAndOpenForm = (subcategory) => {
+    setSubcategoryModalVisible(false);
+    handleChange('category', subcategory);
+    animateToStep('form');
+  };
+
+  const openCategoryPickerForCurrent = () => {
+    const cat = String(formData.category || '').trim();
+    const parent = getSubcategoryParent(cat);
+    if (parent) {
+      setSubcategoryModalParent(parent);
+      setSubcategoryModalVisible(true);
+      return;
+    }
+    animateToStep(getCategoryPickerStep(cat));
   };
 
   const selectOtherWorkAndOpenForm = (work) => {
@@ -980,10 +951,19 @@ const PostJob = ({ onJobPosted }) => {
   };
 
   useEffect(() => {
-    // Android hardware back: move within PostJob flow instead of exiting screen
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (subcategoryModalVisible) {
+        setSubcategoryModalVisible(false);
+        return true;
+      }
       if (postJobStep === 'form') {
         const cat = String(formData.category || '').trim();
+        const parent = getSubcategoryParent(cat);
+        if (parent) {
+          setSubcategoryModalParent(parent);
+          setSubcategoryModalVisible(true);
+          return true;
+        }
         const shouldGoOther = OTHER_WORK_OPTIONS.includes(cat) || cat === 'Other';
         animateToStep(shouldGoOther ? 'other' : 'categories');
         return true;
@@ -992,10 +972,10 @@ const PostJob = ({ onJobPosted }) => {
         animateToStep('categories');
         return true;
       }
-      return false; // allow default behavior (exit/back)
+      return false;
     });
     return () => sub.remove();
-  }, [postJobStep, formData.category]);
+  }, [postJobStep, formData.category, subcategoryModalVisible]);
 
   const openAddressPicker = (target) => {
     setAddressPickerTarget(target);
@@ -1082,7 +1062,7 @@ const PostJob = ({ onJobPosted }) => {
     setTimeout(() => runShakeAnimation(shakeX[fieldKey]), delay);
   };
 
-  const isDelivery = String(formData.category || '').trim().toLowerCase() === 'delivery';
+  const isDelivery = isDeliveryCategory(formData.category);
 
   const handleSubmit = async () => {
     if (gpsDenied || !gpsEnabled) {
@@ -1267,6 +1247,34 @@ const PostJob = ({ onJobPosted }) => {
 
   const contentPaddingBottom = (spacing.xxl || 120) + keyboardPad + (Platform.OS === 'android' ? insets.bottom : 0);
 
+  const renderMainCategoryTile = (cat, wrapStyle, keySuffix = '') => {
+    const iconSrc = iconForCategory(cat);
+    const active = formData.category === cat;
+    return (
+      <View key={`${cat}${keySuffix}`} style={wrapStyle || styles.categoryTileWrap}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[styles.categoryTile, active && styles.categoryTileSelected]}
+          onPress={() => selectMainCategory(cat)}
+        >
+          {iconSrc ? (
+            <Image source={iconSrc} style={styles.categoryTileIconImage} resizeMode="contain" />
+          ) : (
+            <MaterialIcons
+              name="category"
+              size={52}
+              color={colors.primary.main}
+              style={styles.categoryTileIcon}
+            />
+          )}
+          <Text style={styles.categoryTileLabel} numberOfLines={2}>
+            {labelForCategory(t, cat)}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -1301,12 +1309,12 @@ const PostJob = ({ onJobPosted }) => {
           style={{
             flex: 1,
             flexDirection: 'row',
-            width: PAGE_W * 3,
+            width: PAGE_W * POST_JOB_PAGE_COUNT,
             transform: [
               {
                 translateX: shiftAnim.interpolate({
-                  inputRange: [0, 2],
-                  outputRange: [0, -PAGE_W * 2],
+                  inputRange: [0, 1, 2],
+                  outputRange: [0, -PAGE_W, -PAGE_W * 2],
                 }),
               },
             ],
@@ -1324,32 +1332,31 @@ const PostJob = ({ onJobPosted }) => {
               <Text style={styles.stageSubTitle}>{t('postJob.selectCategoryToContinue')}</Text>
 
               <View style={styles.categoryTilesGrid}>
-                {JOB_CATEGORIES.map((cat) => {
-                  const iconSrc = iconForCategory(cat);
-                  const active = formData.category === cat;
-                  return (
-                    <View key={cat} style={styles.categoryTileWrap}>
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        style={[styles.categoryTile, active && styles.categoryTileSelected]}
-                        onPress={() => selectMainCategory(cat)}
-                      >
-                        {iconSrc ? (
-                          <Image source={iconSrc} style={styles.categoryTileIconImage} resizeMode="contain" />
-                        ) : (
-                          <MaterialIcons
-                            name="category"
-                            size={52}
-                            color={colors.primary.main}
-                            style={styles.categoryTileIcon}
-                          />
-                        )}
-                        <Text style={styles.categoryTileLabel} numberOfLines={2}>
-                          {labelForCategory(t, cat)}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
+                {CATEGORY_PICKER_TILES.map((tile) =>
+                  renderMainCategoryTile(tile.key, styles.categoryTileWrap)
+                )}
+                {CATEGORY_PICKER_LAST_ROW_TILES.map((tile) => {
+                  if (tile.type === 'rotating') {
+                    const originalCat = tile.originalCategory;
+                    return (
+                      <RotatingSubcategoryTile
+                        key={`last-row-rotating-${tile.slot}`}
+                        categories={rotatingSubcategories}
+                        slotIndex={tile.slot}
+                        active={lastRowRotationActive && activeRotationSlots[tile.slot]}
+                        holdMs={ROTATION_HOLD_MS}
+                        originalCategory={originalCat}
+                        originalLabel={labelForCategory(t, originalCat)}
+                        originalIconSrc={iconForCategory(originalCat)}
+                        selectedLabel={formData.category}
+                        onSelect={selectOtherWorkAndOpenForm}
+                        onSelectOriginal={selectMainCategory}
+                        styles={styles}
+                      />
+                    );
+                  }
+
+                  return renderMainCategoryTile(tile.key, styles.categoryTileWrap);
                 })}
               </View>
             </View>
@@ -1465,7 +1472,7 @@ const PostJob = ({ onJobPosted }) => {
                 </View>
                 <TouchableOpacity
                   style={styles.changeCategoryBtn}
-                  onPress={() => animateToStep(OTHER_WORK_OPTIONS.includes(String(formData.category || '').trim()) || String(formData.category) === 'Other' ? 'other' : 'categories')}
+                  onPress={openCategoryPickerForCurrent}
                   accessibilityRole="button"
                   accessibilityLabel={t('postJob.changeCategory')}
                 >
@@ -1735,6 +1742,13 @@ const PostJob = ({ onJobPosted }) => {
           </View>
         </View>
       </Modal>
+
+      <MainCategorySubcategoryModal
+        visible={subcategoryModalVisible}
+        parentCategory={subcategoryModalParent}
+        onSelect={selectSubcategoryAndOpenForm}
+        onClose={() => setSubcategoryModalVisible(false)}
+      />
 
       <AddressPickerModal
         visible={addressPickerVisible}

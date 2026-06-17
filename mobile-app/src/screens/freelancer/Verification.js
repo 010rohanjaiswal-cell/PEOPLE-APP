@@ -3,7 +3,7 @@
  * Freelancers must complete verification before accessing dashboard
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,10 +15,18 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
+import {
+  ACCENT_BLUE,
+  authScreenStyles as auth,
+} from '../../theme/authScreen';
 import { Button } from '../../components/common';
 import { verificationAPI, userAPI } from '../../api';
 import { VERIFICATION_STATUS } from '../../constants';
@@ -26,132 +34,172 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const OTP_SLIDE_LAYOUT = {
+  duration: 420,
+  create: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+  update: {
+    type: LayoutAnimation.Types.spring,
+    springDamping: 0.82,
+  },
+};
+
+const AutoDismissSuccessMessage = ({ message, onDismiss }) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!message) return;
+
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 250,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+
+    const fadeOutTimer = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) onDismissRef.current();
+      });
+    }, 3000);
+
+    return () => {
+      clearTimeout(fadeOutTimer);
+      fadeAnim.stopAnimation();
+    };
+  }, [message, fadeAnim]);
+
+  if (!message) return null;
+
+  return (
+    <Animated.View style={[styles.successContainer, { opacity: fadeAnim }]}>
+      <MaterialIcons name="check-circle" size={20} color={colors.success.main} />
+      <Text style={styles.successText}>{message}</Text>
+    </Animated.View>
+  );
+};
+
+const AadhaarOtpVerifyBlock = ({
+  revealKey,
+  aadhaarOtp,
+  setAadhaarOtp,
+  aadhaarVerified,
+  submitting,
+  canVerifyOtp,
+  canContinue,
+  isVerifyingAadhaar,
+  onVerify,
+  onContinue,
+}) => {
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const [focusOtpInput, setFocusOtpInput] = useState(false);
+
+  useEffect(() => {
+    slideAnim.setValue(0);
+    setFocusOtpInput(false);
+    const animTimer = setTimeout(() => {
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }, 40);
+    const focusTimer = setTimeout(() => setFocusOtpInput(true), 440);
+    return () => {
+      clearTimeout(animTimer);
+      clearTimeout(focusTimer);
+    };
+  }, [revealKey, slideAnim]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.stepBlock,
+        styles.otpSlideContainer,
+        {
+          opacity: slideAnim,
+          transform: [
+            {
+              translateY: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [36, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <Text style={auth.fieldLabel}>Aadhaar OTP</Text>
+      <TextInput
+        value={aadhaarOtp}
+        onChangeText={(v) => setAadhaarOtp(String(v || '').replace(/\D/g, '').slice(0, 6))}
+        placeholder="6-digit OTP"
+        placeholderTextColor={colors.text.muted}
+        keyboardType="number-pad"
+        editable={!aadhaarVerified && !submitting}
+        autoFocus={focusOtpInput}
+        style={[
+          auth.textInput,
+          styles.compactInput,
+          aadhaarVerified && auth.textInputDisabled,
+        ]}
+      />
+      <View style={[auth.inputLine, aadhaarVerified && auth.inputLineDisabled]} />
+      <TouchableOpacity
+        onPress={onVerify}
+        disabled={!canVerifyOtp}
+        style={[
+          auth.outlineButton,
+          auth.outlineButtonCenter,
+          !canVerifyOtp && auth.outlineButtonDisabled,
+        ]}
+        activeOpacity={0.85}
+      >
+        {aadhaarVerified ? (
+          <View style={styles.inlineButtonContent}>
+            <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
+            <Text style={[auth.outlineButtonText, { color: colors.success.main }]}>Verified</Text>
+          </View>
+        ) : isVerifyingAadhaar ? (
+          <ActivityIndicator color={ACCENT_BLUE} size="small" />
+        ) : (
+          <Text style={[auth.outlineButtonText, !canVerifyOtp && auth.outlineButtonTextDisabled]}>
+            Verify Aadhaar
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={onContinue}
+        disabled={!canContinue || submitting}
+        style={[
+          auth.primaryButton,
+          (!canContinue || submitting) && auth.primaryButtonDisabled,
+        ]}
+        activeOpacity={0.9}
+      >
+        <Text style={auth.primaryButtonText}>Continue</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-    zIndex: 1,
-  },
-  screenRoot: {
-    flex: 1,
-    backgroundColor: '#EEF3FA',
-    overflow: 'hidden',
-  },
-  colorWash: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
-  },
-  blobBlue: {
-    position: 'absolute',
-    top: -72,
-    right: -48,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
-  },
-  blobGreen: {
-    position: 'absolute',
-    bottom: '12%',
-    left: -56,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(22, 163, 74, 0.1)',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  page: {
-    maxWidth: 400,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  backToLoginRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    alignSelf: 'flex-start',
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  backToLoginText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary.main,
-  },
-  brandBlock: {
-    marginBottom: spacing.lg,
-  },
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text.primary,
-    letterSpacing: -0.3,
-  },
-  brandAccent: {
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-    gap: 6,
-  },
-  brandAccentBlue: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary.main,
-  },
-  brandAccentGreen: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.success.main,
-  },
-  brandSubtitle: {
-    marginTop: spacing.md,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.text.secondary,
-  },
-  brandSubtitleAccent: {
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  brandSubtitleAccentGreen: {
-    color: colors.success.dark,
-    fontWeight: '600',
-  },
-  authCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(37, 99, 235, 0.12)',
-    overflow: 'hidden',
-    shadowColor: colors.primary.main,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-    padding: spacing.lg,
-    position: 'relative',
-  },
-  cardStripeRow: {
-    flexDirection: 'row',
-    marginHorizontal: -spacing.lg,
-    marginTop: -spacing.lg,
-    marginBottom: spacing.md,
-    height: 4,
-  },
-  cardStripeBlue: {
-    flex: 1,
-    backgroundColor: colors.primary.main,
-  },
-  cardStripeGreen: {
-    flex: 1,
-    backgroundColor: colors.success.main,
-  },
   statusContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
@@ -185,92 +233,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     lineHeight: 24,
   },
-  progressContainer: {
-    marginBottom: spacing.lg,
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDotActive: {
-    backgroundColor: colors.primary.main,
-  },
-  progressDotText: {
-    ...typography.small,
-    color: colors.text.primary,
-    fontWeight: '700',
-  },
-  progressLine: {
-    height: 3,
-    width: 70,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.sm,
-    borderRadius: 2,
-  },
-  progressLineActive: {
-    backgroundColor: colors.primary.main,
-  },
-  stepHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  stepHeaderTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginBottom: spacing.md,
-  },
-  arrowButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowButtonDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.5,
-  },
-  floatingArrow: {
-    position: 'absolute',
-    right: spacing.sm,
-    bottom: spacing.sm,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  floatingArrowDisabled: {
-    backgroundColor: colors.text.muted,
-    opacity: 0.5,
-  },
-  floatingBack: {
-    position: 'absolute',
-    left: spacing.sm,
-    bottom: spacing.sm,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary.main,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // backPill/backPillText removed; using floatingBack arrow instead
-  // refreshButton + refreshButtonText removed (no pending page in new flow)
-  // dashboardButton + dashboardButtonText removed (no approved page)
   resubmitButton: {
     borderColor: colors.error.main,
   },
@@ -298,14 +260,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   formContainer: {
-    position: 'relative',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: 0,
     width: '100%',
-    paddingBottom: spacing.xl + 54,
   },
   stepBlock: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  compactInput: {
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+  otpSlideContainer: {
+    overflow: 'hidden',
   },
   referralIntro: {
     ...typography.body,
@@ -323,50 +288,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     marginTop: spacing.sm,
   },
-  referralSkipText: {
-    ...typography.body,
-    color: colors.primary.main,
-    fontWeight: '600',
-  },
-  stepTitle: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing.sm,
-    fontWeight: '600',
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(37, 99, 235, 0.35)',
-    borderRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: colors.text.primary,
-    backgroundColor: colors.primary.light,
-    minHeight: 48,
-  },
-  inputDisabled: {
-    backgroundColor: '#F1F5F9',
-    borderColor: colors.inputBorder,
-    color: colors.text.primary,
-  },
-  secondaryButton: {
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.primary.main,
-    borderRadius: spacing.borderRadius.button,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  secondaryButtonText: {
-    ...typography.button,
-    color: colors.primary.main,
-  },
-  secondaryButtonTextSuccess: {
-    ...typography.button,
-    color: colors.success.main,
-  },
   inlineButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,15 +298,11 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: spacing.sm,
   },
-  verifiedInline: {
-    ...typography.body,
-    color: colors.success.main,
-    marginTop: spacing.sm,
-  },
   mismatchInline: {
-    ...typography.body,
+    fontSize: 13,
     color: colors.error.main,
     marginTop: spacing.sm,
+    lineHeight: 18,
   },
   // Terms & Conditions styles moved to FaceVerification screen
   errorContainer: {
@@ -490,6 +407,7 @@ const Verification = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const clearSuccessMessage = useCallback(() => setSuccessMessage(''), []);
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showResubmitForm, setShowResubmitForm] = useState(false); // Control form visibility for rejected status
@@ -501,6 +419,7 @@ const Verification = ({ navigation }) => {
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarOtp, setAadhaarOtp] = useState('');
   const [aadhaarRefId, setAadhaarRefId] = useState(null);
+  const [otpRevealKey, setOtpRevealKey] = useState(0);
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
   const [aadhaarOtpCooldown, setAadhaarOtpCooldown] = useState(0); // seconds
   const [aadhaarMobileMatchesSignup, setAadhaarMobileMatchesSignup] = useState(null);
@@ -555,7 +474,9 @@ const Verification = ({ navigation }) => {
       if (!resp?.success || !resp?.refId) {
         throw new Error(resp?.error || 'Failed to send OTP');
       }
+      LayoutAnimation.configureNext(OTP_SLIDE_LAYOUT);
       setAadhaarRefId(resp.refId);
+      setOtpRevealKey((k) => k + 1);
       setAadhaarOtpCooldown(60);
       setIsSubmitted(true);
       setStatus(VERIFICATION_STATUS.PENDING);
@@ -704,24 +625,31 @@ const Verification = ({ navigation }) => {
     const aadhaarDone = aadhaarVerified === true;
     const panDone = panVerified === true && panNameMatchOk !== false;
     const referralDone = !referralRequiredValid ? true : referralApplied === true;
-    // Face step is completed on the next screen; we show it as the final step indicator here.
+    const dotLabel = (done, num) =>
+      done ? (
+        <MaterialIcons name="check" size={14} color="#fff" />
+      ) : (
+        <Text style={[auth.progressDotText, (step === num - 1 || done) && auth.progressDotTextActive]}>
+          {num}
+        </Text>
+      );
     return (
-      <View style={styles.progressContainer}>
-        <View style={styles.progressRow}>
-          <View style={[styles.progressDot, (step === 0 || aadhaarDone) && styles.progressDotActive]}>
-            {aadhaarDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>1</Text>}
+      <View style={auth.progressContainer}>
+        <View style={auth.progressRow}>
+          <View style={[auth.progressDot, (step === 0 || aadhaarDone) && auth.progressDotActive]}>
+            {dotLabel(aadhaarDone, 1)}
           </View>
-          <View style={[styles.progressLine, (aadhaarDone || step > 0) && styles.progressLineActive]} />
-          <View style={[styles.progressDot, (step === 1 || panDone) && styles.progressDotActive]}>
-            {panDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>2</Text>}
+          <View style={[auth.progressLine, (aadhaarDone || step > 0) && auth.progressLineActive]} />
+          <View style={[auth.progressDot, (step === 1 || panDone) && auth.progressDotActive]}>
+            {dotLabel(panDone, 2)}
           </View>
-          <View style={[styles.progressLine, panDone && styles.progressLineActive]} />
-          <View style={[styles.progressDot, (step === 2 || referralDone) && styles.progressDotActive]}>
-            {referralDone ? <MaterialIcons name="check" size={14} color="#fff" /> : <Text style={styles.progressDotText}>3</Text>}
+          <View style={[auth.progressLine, panDone && auth.progressLineActive]} />
+          <View style={[auth.progressDot, (step === 2 || referralDone) && auth.progressDotActive]}>
+            {dotLabel(referralDone, 3)}
           </View>
-          <View style={[styles.progressLine, referralDone && styles.progressLineActive]} />
-          <View style={styles.progressDot}>
-            <Text style={styles.progressDotText}>4</Text>
+          <View style={[auth.progressLine, referralDone && auth.progressLineActive]} />
+          <View style={auth.progressDot}>
+            <Text style={auth.progressDotText}>4</Text>
           </View>
         </View>
       </View>
@@ -754,130 +682,140 @@ const Verification = ({ navigation }) => {
     return () => clearTimeout(tmr);
   }, [referralCode]);
 
-  const renderAadhaarStep = () => (
-    <View>
-      <View style={styles.stepHeaderRow}>
-        <Text style={styles.stepHeaderTitle}>Aadhaar verification</Text>
-      </View>
+  const renderAadhaarStep = () => {
+    const aadhaarLocked = aadhaarVerified || !!aadhaarRefId;
+    const showOtpSection = !!aadhaarRefId || aadhaarVerified;
+    const canSendOtp =
+      !submitting && !aadhaarVerified && aadhaarNumber.length === 12 && aadhaarOtpCooldown <= 0;
+    const canVerifyOtp =
+      !submitting && !aadhaarVerified && !!aadhaarRefId && aadhaarOtp.length === 6;
 
-      <View style={styles.stepBlock}>
-        <Text style={styles.stepTitle}>Aadhaar number</Text>
-        <TextInput
-          value={aadhaarNumber}
-          onChangeText={(v) => setAadhaarNumber(String(v || '').replace(/\D/g, '').slice(0, 12))}
-          placeholder="12-digit Aadhaar"
-          placeholderTextColor={colors.text.muted}
-          keyboardType="number-pad"
-          editable={!aadhaarVerified && !submitting && !aadhaarRefId}
-          style={[styles.input, (aadhaarVerified || aadhaarRefId) && styles.inputDisabled]}
-        />
-        {aadhaarVerified ? <Text style={styles.verifiedInline}>Aadhaar verified successfully</Text> : null}
-        <TouchableOpacity
-          onPress={sendAadhaarOtp}
-          disabled={submitting || aadhaarVerified || aadhaarNumber.length !== 12 || aadhaarOtpCooldown > 0}
-          style={[
-            styles.secondaryButton,
-            (submitting || aadhaarVerified || aadhaarNumber.length !== 12 || aadhaarOtpCooldown > 0) && styles.submitButtonDisabled,
-          ]}
-          activeOpacity={0.7}
-        >
-          {isSendingAadhaarOtp ? (
-            <ActivityIndicator color={colors.primary.main} size="small" />
-          ) : (
-            <Text style={styles.secondaryButtonText}>
-              {aadhaarRefId ? 'Resend OTP' : 'Send OTP'}
-              {aadhaarOtpCooldown > 0 ? ` (${aadhaarOtpCooldown}s)` : ''}
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.stepBlock}>
-        <Text style={styles.stepTitle}>Aadhaar OTP</Text>
-        <TextInput
-          value={aadhaarOtp}
-          onChangeText={(v) => setAadhaarOtp(String(v || '').replace(/\D/g, '').slice(0, 6))}
-          placeholder="6-digit OTP"
-          placeholderTextColor={colors.text.secondary}
-          keyboardType="number-pad"
-          editable={!aadhaarVerified && !submitting && !!aadhaarRefId}
-          style={[styles.input, (aadhaarVerified || !aadhaarRefId) && styles.inputDisabled]}
-        />
-        <TouchableOpacity
-          onPress={verifyAadhaar}
-          disabled={submitting || aadhaarVerified || !aadhaarRefId || aadhaarOtp.length !== 6}
-          style={[
-            styles.secondaryButton,
-            (submitting || aadhaarVerified || !aadhaarRefId || aadhaarOtp.length !== 6) && styles.submitButtonDisabled,
-          ]}
-          activeOpacity={0.7}
-        >
+    return (
+      <View>
+        <View style={styles.stepBlock}>
+          <Text style={auth.fieldLabel}>Aadhaar number</Text>
+          <TextInput
+            value={aadhaarNumber}
+            onChangeText={(v) => setAadhaarNumber(String(v || '').replace(/\D/g, '').slice(0, 12))}
+            placeholder="12-digit Aadhaar"
+            placeholderTextColor={colors.text.muted}
+            keyboardType="number-pad"
+            editable={!aadhaarVerified && !submitting && !aadhaarRefId}
+            style={[
+              auth.textInput,
+              styles.compactInput,
+              aadhaarLocked && auth.textInputDisabled,
+            ]}
+          />
+          <View style={[auth.inputLine, aadhaarLocked && auth.inputLineDisabled]} />
           {aadhaarVerified ? (
-            <View style={styles.inlineButtonContent}>
-              <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
-              <Text style={styles.secondaryButtonTextSuccess}>Verified</Text>
-            </View>
-          ) : isVerifyingAadhaar ? (
-            <ActivityIndicator color={colors.primary.main} size="small" />
+            <Text style={auth.successText}>Aadhaar verified successfully</Text>
           ) : (
-            <Text style={styles.secondaryButtonText}>Verify Aadhaar</Text>
+            <Text style={auth.fieldHint}>OTP will be sent to your Aadhaar-linked mobile</Text>
           )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+          <TouchableOpacity
+            onPress={sendAadhaarOtp}
+            disabled={!canSendOtp}
+            style={[
+              auth.outlineButton,
+              auth.outlineButtonCenter,
+              !canSendOtp && auth.outlineButtonDisabled,
+            ]}
+            activeOpacity={0.85}
+          >
+            {isSendingAadhaarOtp ? (
+              <ActivityIndicator color={ACCENT_BLUE} size="small" />
+            ) : (
+              <Text style={[auth.outlineButtonText, !canSendOtp && auth.outlineButtonTextDisabled]}>
+                {aadhaarRefId ? 'Resend OTP' : 'Send OTP'}
+                {aadhaarOtpCooldown > 0 ? ` (${aadhaarOtpCooldown}s)` : ''}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-  const renderPanStep = () => (
-    <View>
-      <Text style={styles.stepHeaderTitle}>PAN verification</Text>
-
-      <View style={styles.stepBlock}>
-        <TextInput
-          value={panNumber}
-          onChangeText={(v) => setPanNumber(String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
-          placeholder="PAN Number (ABCDE1234F)"
-          placeholderTextColor={colors.text.muted}
-          autoCapitalize="characters"
-          editable={!panVerified && !submitting}
-          style={[styles.input, panVerified && styles.inputDisabled]}
-        />
-        {panVerified && !!panRegisteredName && (
-          <Text style={styles.panNameText}>{panRegisteredName}</Text>
-        )}
-        {panVerified ? <Text style={styles.verifiedInline}>PAN verified successfully</Text> : null}
-        {panVerified && panNameMatchOk === false ? (
-          <Text style={styles.mismatchInline}>
-            Name mismatch: Aadhaar & PAN should match (score {panNameMatchScore ?? 0}%)
-          </Text>
+        {showOtpSection ? (
+          <AadhaarOtpVerifyBlock
+            key={otpRevealKey}
+            revealKey={otpRevealKey}
+            aadhaarOtp={aadhaarOtp}
+            setAadhaarOtp={setAadhaarOtp}
+            aadhaarVerified={aadhaarVerified}
+            submitting={submitting}
+            canVerifyOtp={canVerifyOtp}
+            canContinue={aadhaarVerified === true}
+            isVerifyingAadhaar={isVerifyingAadhaar}
+            onVerify={verifyAadhaar}
+            onContinue={() => setStep(1)}
+          />
         ) : null}
-        <TouchableOpacity
-          onPress={verifyPan}
-          disabled={submitting || panVerified || !aadhaarVerified || panNumber.length !== 10}
-          style={[
-            styles.secondaryButton,
-            (submitting || panVerified || !aadhaarVerified || panNumber.length !== 10) && styles.submitButtonDisabled,
-          ]}
-          activeOpacity={0.7}
-        >
-          {panVerified ? (
-            <View style={styles.inlineButtonContent}>
-              <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
-              <Text style={styles.secondaryButtonTextSuccess}>Verified</Text>
-            </View>
-          ) : isVerifyingPan ? (
-            <ActivityIndicator color={colors.primary.main} size="small" />
-          ) : (
-            <Text style={styles.secondaryButtonText}>Verify PAN</Text>
-          )}
-        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderPanStep = () => {
+    const canVerifyPan =
+      !submitting && !panVerified && aadhaarVerified && panNumber.length === 10;
+
+    return (
+      <View>
+        <View style={styles.stepBlock}>
+          <Text style={auth.fieldLabel}>PAN number</Text>
+          <TextInput
+            value={panNumber}
+            onChangeText={(v) =>
+              setPanNumber(String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
+            }
+            placeholder="ABCDE1234F"
+            placeholderTextColor={colors.text.muted}
+            autoCapitalize="characters"
+            editable={!panVerified && !submitting}
+            style={[auth.textInput, styles.compactInput, panVerified && auth.textInputDisabled]}
+          />
+          <View style={[auth.inputLine, panVerified && auth.inputLineDisabled]} />
+          {panVerified && !!panRegisteredName ? (
+            <Text style={auth.fieldHint}>{panRegisteredName}</Text>
+          ) : (
+            <Text style={auth.fieldHint}>Must match the name on your Aadhaar</Text>
+          )}
+          {panVerified ? <Text style={auth.successText}>PAN verified successfully</Text> : null}
+          {panVerified && panNameMatchOk === false ? (
+            <Text style={styles.mismatchInline}>
+              Name mismatch: Aadhaar & PAN should match (score {panNameMatchScore ?? 0}%)
+            </Text>
+          ) : null}
+          <TouchableOpacity
+            onPress={verifyPan}
+            disabled={!canVerifyPan}
+            style={[
+              auth.outlineButton,
+              auth.outlineButtonCenter,
+              !canVerifyPan && auth.outlineButtonDisabled,
+            ]}
+            activeOpacity={0.85}
+          >
+            {panVerified ? (
+              <View style={styles.inlineButtonContent}>
+                <MaterialIcons name="check-circle" size={18} color={colors.success.main} />
+                <Text style={[auth.outlineButtonText, { color: colors.success.main }]}>Verified</Text>
+              </View>
+            ) : isVerifyingPan ? (
+              <ActivityIndicator color={ACCENT_BLUE} size="small" />
+            ) : (
+              <Text style={[auth.outlineButtonText, !canVerifyPan && auth.outlineButtonTextDisabled]}>
+                Verify PAN
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   const renderReferralStep = () => (
     <View>
-      <Text style={styles.stepHeaderTitle}>{t('referral.enterTitle')}</Text>
-      <Text style={styles.referralIntro}>{t('referral.stepIntro')}</Text>
+      <Text style={auth.fieldLabel}>{t('referral.enterTitle')}</Text>
+      <Text style={auth.fieldHint}>{t('referral.stepIntro')}</Text>
 
       <View style={styles.stepBlock}>
         <TextInput
@@ -896,15 +834,16 @@ const Verification = ({ navigation }) => {
           placeholderTextColor={colors.text.muted}
           autoCapitalize="characters"
           editable={!submitting && !referralApplied}
-          style={[styles.input, referralApplied && styles.inputDisabled]}
+          style={[auth.textInput, styles.compactInput, referralApplied && auth.textInputDisabled]}
         />
+        <View style={[auth.inputLine, referralApplied && auth.inputLineDisabled]} />
         <Text style={styles.referralFormatHint}>{t('referral.stepFormatHint')}</Text>
 
         {referralCode.trim().length > 0 ? (
           <View style={{ marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
             {referralValidating ? (
               <>
-                <ActivityIndicator color={colors.primary.main} size="small" />
+                <ActivityIndicator color={ACCENT_BLUE} size="small" />
                 <Text style={{ ...typography.small, color: colors.text.secondary }}>{t('referral.validating')}</Text>
               </>
             ) : referralValid === true ? (
@@ -932,10 +871,45 @@ const Verification = ({ navigation }) => {
         style={styles.referralSkipTouch}
         activeOpacity={0.7}
       >
-        <Text style={styles.referralSkipText}>{t('referral.skipForNow')}</Text>
+        <Text style={auth.linkText}>{t('referral.skipForNow')}</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const handleContinue = async () => {
+    if (step === 0) {
+      setStep(1);
+      return;
+    }
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+    const code = referralCode.trim();
+    if (!code) {
+      navigation.navigate('FaceVerification');
+      return;
+    }
+    if (referralValid !== true) return;
+    if (referralApplied) {
+      navigation.navigate('FaceVerification');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const resp = await verificationAPI.applyReferralCode(code);
+      if (!resp?.success) throw new Error(resp?.error || 'Failed to apply referral code');
+      setReferralApplied(true);
+      navigation.navigate('FaceVerification');
+    } catch (e) {
+      showErrorModal('Referral code', e?.response?.data?.error || e?.message || 'Failed to apply referral code');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const canContinue =
+    step === 0 ? canGoNextFromAadhaar : step === 1 ? canGoNextFromPan : canGoNextFromReferral;
 
   // Verification Form – SecureID Option B (Aadhaar + OTP + PAN only)
   const renderVerificationForm = () => (
@@ -943,58 +917,30 @@ const Verification = ({ navigation }) => {
       {renderProgress()}
       {step === 0 ? renderAadhaarStep() : step === 1 ? renderPanStep() : renderReferralStep()}
 
-      {/* Bottom-right Next arrow */}
-      <TouchableOpacity
-        onPress={async () => {
-          if (step === 0) {
-            setStep(1);
-            return;
-          }
-          if (step === 1) {
-            setStep(2);
-            return;
-          }
-          // step === 2 (Referral - optional)
-          const code = referralCode.trim();
-          if (!code) {
-            navigation.navigate('FaceVerification');
-            return;
-          }
-          if (referralValid !== true) return;
-          if (referralApplied) {
-            navigation.navigate('FaceVerification');
-            return;
-          }
-          try {
-            setSubmitting(true);
-            const resp = await verificationAPI.applyReferralCode(code);
-            if (!resp?.success) throw new Error(resp?.error || 'Failed to apply referral code');
-            setReferralApplied(true);
-            navigation.navigate('FaceVerification');
-          } catch (e) {
-            showErrorModal('Referral code', e?.response?.data?.error || e?.message || 'Failed to apply referral code');
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-        disabled={step === 0 ? !canGoNextFromAadhaar : step === 1 ? !canGoNextFromPan : !canGoNextFromReferral}
-        style={[
-          styles.floatingArrow,
-          (step === 0 ? !canGoNextFromAadhaar : step === 1 ? !canGoNextFromPan : !canGoNextFromReferral) && styles.floatingArrowDisabled,
-        ]}
-        activeOpacity={0.85}
-      >
-        <MaterialIcons name="arrow-forward" size={22} color="#fff" />
-      </TouchableOpacity>
+      {step > 0 ? (
+        <TouchableOpacity
+          onPress={handleContinue}
+          disabled={!canContinue || submitting}
+          style={[auth.primaryButton, (!canContinue || submitting) && auth.primaryButtonDisabled]}
+          activeOpacity={0.9}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={auth.primaryButtonText}>
+              {step === 2 ? 'Continue to face verification' : 'Continue'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      ) : null}
 
-      {/* Bottom-left Back arrow (PAN -> Aadhaar) */}
       {step > 0 ? (
         <TouchableOpacity
           onPress={() => setStep((s) => Math.max(0, s - 1))}
-          style={styles.floatingBack}
-          activeOpacity={0.85}
+          style={auth.backStepTouch}
+          activeOpacity={0.7}
         >
-          <MaterialIcons name="arrow-back" size={22} color="#fff" />
+          <Text style={auth.backStepText}>Back</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -1002,12 +948,8 @@ const Verification = ({ navigation }) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.screenRoot} edges={['top', 'bottom']}>
-        <View style={styles.colorWash} pointerEvents="none">
-          <View style={styles.blobBlue} />
-          <View style={styles.blobGreen} />
-        </View>
-        <View style={[styles.flex, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView style={auth.screenRoot} edges={['top', 'bottom']}>
+        <View style={[auth.flex, { justifyContent: 'center', alignItems: 'center' }]}>
           <LoadingSpinner />
         </View>
       </SafeAreaView>
@@ -1021,13 +963,6 @@ const Verification = ({ navigation }) => {
   const showRejectedOnly =
     status === VERIFICATION_STATUS.REJECTED && !showResubmitForm;
 
-  const cardStripe = (
-    <View style={styles.cardStripeRow}>
-      <View style={styles.cardStripeBlue} />
-      <View style={styles.cardStripeGreen} />
-    </View>
-  );
-
   const alertsBlock = (
     <>
       {error ? (
@@ -1037,83 +972,46 @@ const Verification = ({ navigation }) => {
         </View>
       ) : null}
       {successMessage ? (
-        <View style={styles.successContainer}>
-          <MaterialIcons name="check-circle" size={20} color={colors.success.main} />
-          <Text style={styles.successText}>{successMessage}</Text>
-        </View>
+        <AutoDismissSuccessMessage
+          message={successMessage}
+          onDismiss={clearSuccessMessage}
+        />
       ) : null}
     </>
   );
 
+  const subtitleText = isNewUser
+    ? 'Verify your Aadhaar and PAN to create your freelancer account.'
+    : 'Complete Aadhaar and PAN verification to continue.';
+
   return (
-    <SafeAreaView style={styles.screenRoot} edges={['top', 'bottom']}>
-      <View style={styles.colorWash} pointerEvents="none">
-        <View style={styles.blobBlue} />
-        <View style={styles.blobGreen} />
-      </View>
+    <SafeAreaView style={auth.screenRoot} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={auth.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={auth.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.page}>
-            <TouchableOpacity
-              onPress={() => navigation.replace('Login')}
-              style={styles.backToLoginRow}
-              activeOpacity={0.7}
-            >
-              <MaterialIcons name="arrow-back" size={18} color={colors.primary.main} />
-              <Text style={styles.backToLoginText}>Back to Login</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.replace('Login')}
+            style={auth.backBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="arrow-back" size={22} color={ACCENT_BLUE} />
+          </TouchableOpacity>
 
-            {showForm ? (
-              <>
-                <View style={styles.brandBlock}>
-                  <Text style={styles.brandTitle}>Verification required</Text>
-                  <View style={styles.brandAccent}>
-                    <View style={styles.brandAccentBlue} />
-                    <View style={styles.brandAccentGreen} />
-                  </View>
-                  <Text style={styles.brandSubtitle}>
-                    {isNewUser ? (
-                      <>
-                        You don’t have an existing account. Verify{' '}
-                        <Text style={styles.brandSubtitleAccent}>Aadhaar</Text>
-                        {' & '}
-                        <Text style={styles.brandSubtitleAccentGreen}>PAN</Text>
-                        {' to create your account.'}
-                      </>
-                    ) : (
-                      <>
-                        Complete <Text style={styles.brandSubtitleAccent}>Aadhaar</Text>
-                        {' & '}
-                        <Text style={styles.brandSubtitleAccentGreen}>PAN</Text>
-                        {' verification to continue.'}
-                      </>
-                    )}
-                  </Text>
-                </View>
-                <View style={styles.authCard}>
-                  {cardStripe}
-                  {alertsBlock}
-                  {renderVerificationForm()}
-                </View>
-              </>
-            ) : null}
+          <Text style={auth.screenTitle}>Verification required</Text>
+          <Text style={auth.helperText}>{subtitleText}</Text>
 
-            {showRejectedOnly ? (
-              <View style={styles.authCard}>
-                {cardStripe}
-                {alertsBlock}
-                {renderRejectedStatus()}
-              </View>
-            ) : null}
-          </View>
+          {alertsBlock}
+
+          {showForm ? renderVerificationForm() : null}
+          {showRejectedOnly ? renderRejectedStatus() : null}
         </ScrollView>
       </KeyboardAvoidingView>
       {/* Error Modal */}

@@ -105,6 +105,18 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  /** Freelancer-only: main category for job alert preference (e.g. Delivery). */
+  jobCategoryPreference: {
+    type: String,
+    default: null,
+    trim: true,
+  },
+  /** Count of new matching jobs since preference set; notify every 3rd post. */
+  jobPreferencePostedCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

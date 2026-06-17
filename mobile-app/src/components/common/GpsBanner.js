@@ -10,9 +10,12 @@ import { colors, spacing, typography } from '../../theme';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
 
-export default function GpsBanner() {
+export default function GpsBanner({ variant = 'freelancer' }) {
   const { t } = useLanguage();
   const { gpsDenied, requestPermission } = useLocation();
+
+  const messageKey =
+    variant === 'client' ? 'permissions.locationBannerClient' : 'permissions.locationBanner';
 
   const showBanner = gpsDenied === true;
 
@@ -23,7 +26,7 @@ export default function GpsBanner() {
       <View style={styles.banner}>
         <MaterialIcons name="location-off" size={18} color={colors.background} />
         <Text style={styles.text} numberOfLines={3}>
-          {t('permissions.locationBanner')}
+          {t(messageKey)}
         </Text>
         <TouchableOpacity
           style={styles.settingsButton}

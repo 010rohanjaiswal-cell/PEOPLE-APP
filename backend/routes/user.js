@@ -158,7 +158,10 @@ router.get('/profile', authenticate, async (req, res) => {
         averageRating,
         ratingCount,
         ...(user.role === 'freelancer'
-          ? { freelancerPickupBlockedUntil }
+          ? {
+              freelancerPickupBlockedUntil,
+              jobCategoryPreference: user.jobCategoryPreference || null,
+            }
           : {}),
       }
     });

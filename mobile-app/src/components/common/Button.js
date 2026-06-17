@@ -71,13 +71,13 @@ const Button = ({
     switch (size) {
       case 'sm':
         return {
-          height: 36,
+          minHeight: 36,
           paddingHorizontal: spacing.md,
           paddingVertical: spacing.sm,
         };
       case 'lg':
         return {
-          height: 44,
+          minHeight: 44,
           paddingHorizontal: spacing.xxl,
           paddingVertical: spacing.md,
         };
@@ -89,7 +89,7 @@ const Button = ({
         };
       default:
         return {
-          height: 40,
+          minHeight: 40,
           paddingHorizontal: spacing.buttonPadding.horizontal,
           paddingVertical: spacing.buttonPadding.vertical,
         };
@@ -123,7 +123,9 @@ const Button = ({
       {loading ? (
         <ActivityIndicator color={getTextColor()} size="small" />
       ) : (
-        <Text style={textStyles}>{children}</Text>
+        <Text style={textStyles} textAlign="center">
+          {children}
+        </Text>
       )}
     </TouchableOpacity>
   );

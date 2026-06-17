@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  PixelRatio,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -25,6 +26,7 @@ import { clientJobsAPI } from '../../api/clientJobs';
 
 const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const { t } = useLanguage();
+  const footerStacked = PixelRatio.getFontScale() >= 1.2;
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -202,11 +204,24 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
-            <Button variant="outline" onPress={handlePayCash} style={styles.cancelButton} size="lg" textStyle={styles.footerButtonText} disabled={processing}>
+          <View style={[styles.footer, footerStacked && styles.footerStacked]}>
+            <Button
+              variant="outline"
+              onPress={handlePayCash}
+              style={[styles.footerActionButton, footerStacked && styles.footerActionButtonStacked]}
+              size="lg"
+              textStyle={styles.footerButtonText}
+              disabled={processing}
+            >
               Pay Cash
             </Button>
-            <Button onPress={handlePay} style={styles.payButton} disabled={processing} size="lg" textStyle={styles.footerButtonText}>
+            <Button
+              onPress={handlePay}
+              style={[styles.payButton, footerStacked && styles.footerActionButtonStacked]}
+              disabled={processing}
+              size="lg"
+              textStyle={styles.footerButtonText}
+            >
               {processing ? <ActivityIndicator color="#fff" size="small" /> : 'Pay'}
             </Button>
           </View>
@@ -425,20 +440,27 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     alignItems: 'stretch',
   },
-  /** Taller tap targets; avoids label clipping on Android (font padding). */
-  cancelButton: {
+  footerStacked: {
+    flexDirection: 'column',
+  },
+  footerActionButton: {
     flex: 1,
     minHeight: 52,
-    height: 52,
+    paddingVertical: spacing.md,
+  },
+  footerActionButtonStacked: {
+    flex: 0,
+    width: '100%',
   },
   payButton: {
     flex: 1,
     minHeight: 52,
-    height: 52,
+    paddingVertical: spacing.md,
     backgroundColor: colors.success.main,
   },
   footerButtonText: {
-    lineHeight: 22,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   modalOverlay: {
     flex: 1,

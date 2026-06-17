@@ -3,7 +3,7 @@
  * Main navigation structure
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -15,11 +15,16 @@ import {
   normalizeExpoPushData,
   resolvePushActionFromNotificationData,
 } from './pushNotificationRoutes';
+import { clientNeedsProfileSetup } from '../utils/clientProfileGate';
+import { hasSeenIntro } from '../utils/introSeen';
+import { resolveAuthenticatedRoute } from '../utils/resolveAuthenticatedRoute';
 
 // Auth Screens
+import AuthWelcomeScreen from '../screens/auth/AuthWelcome';
 import LoginScreen from '../screens/auth/Login';
 import OTPScreen from '../screens/auth/OTP';
 import ProfileSetupScreen from '../screens/auth/ProfileSetup';
+import { hasSeenAuthWelcome } from '../utils/authWelcomeSeen';
 
 // Dashboard Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
@@ -35,6 +40,11 @@ const AppNavigator = () => {
   const { isAuthenticated, user, loading } = useAuth();
   const { isDark, colors: themeColors } = useTheme();
   const navigationRef = useRef(null);
+  const [navReady, setNavReady] = useState(false);
+  const [authEntryRoute, setAuthEntryRoute] = useState('AuthWelcome');
+  const [authBootstrapped, setAuthBootstrapped] = useState(false);
+  /** Avoid racing ClientDashboard mount + dashboard intro reset on first login. */
+  const [introGate, setIntroGate] = useState({ ready: true, showIntro: false });
 
   const navigationTheme = useMemo(
     () => ({
@@ -52,63 +62,84 @@ const AppNavigator = () => {
     [isDark, themeColors]
   );
 
-  // Determine initial route based on auth state and user data
-  const getInitialRouteName = () => {
-    if (!isAuthenticated) {
-      return 'Login';
+  useEffect(() => {
+    if (loading || isAuthenticated) {
+      setAuthBootstrapped(true);
+      return;
     }
-
-    // Freelancer:
-    // - If verification approved: go to FreelancerDashboard
-    // - Otherwise: go to Verification flow (handles pending/rejected/new)
-    if (user?.role === 'freelancer') {
-      if (user?.verificationStatus === 'approved') {
-        return 'FreelancerDashboard';
+    let cancelled = false;
+    (async () => {
+      const seen = await hasSeenAuthWelcome();
+      if (!cancelled) {
+        setAuthEntryRoute(seen ? 'Login' : 'AuthWelcome');
+        setAuthBootstrapped(true);
       }
-      return 'Verification';
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.role) {
+      setIntroGate({ ready: true, showIntro: false });
+      return;
     }
 
-    // Client: require profile setup if fullName missing
-    if (user?.role === 'client' && !user?.fullName) {
-      return 'ProfileSetup';
+    const role = user.role;
+    const needsIntroCheck =
+      (role === 'client' && !clientNeedsProfileSetup(user)) ||
+      (role === 'freelancer' && user.verificationStatus === 'approved');
+
+    if (!needsIntroCheck) {
+      setIntroGate({ ready: true, showIntro: false });
+      return;
     }
 
-    if (user?.role === 'client') {
-      return 'ClientDashboard';
-    }
+    let cancelled = false;
+    setIntroGate({ ready: false, showIntro: false });
+    (async () => {
+      const seen = await hasSeenIntro(user, role);
+      if (!cancelled) {
+        setIntroGate({ ready: true, showIntro: !seen });
+      }
+    })();
 
-    // Fallback
-    return 'Login';
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isAuthenticated,
+    user?._id,
+    user?.id,
+    user?.role,
+    user?.verificationStatus,
+    user?.fullName,
+    user?.profilePhoto,
+  ]);
 
   // Navigate when auth state changes
   useEffect(() => {
-    if (!loading && navigationRef.current?.isReady()) {
+    if (!loading && navReady && introGate.ready && navigationRef.current?.isReady()) {
       const currentRoute = navigationRef.current.getCurrentRoute()?.name;
       let targetRoute = null;
 
       if (!isAuthenticated) {
-        targetRoute = 'Login';
-      } else if (user?.role === 'freelancer') {
-        // Freelancer routing based on verification status
-        if (user?.verificationStatus === 'approved') {
-          targetRoute = 'FreelancerDashboard';
-        } else {
-          targetRoute = 'Verification';
-        }
-      } else if (user?.role === 'client' && !user?.fullName) {
-        targetRoute = 'ProfileSetup';
-      } else if (user?.role === 'client') {
-        targetRoute = 'ClientDashboard';
+        targetRoute = authEntryRoute;
+      } else {
+        targetRoute = resolveAuthenticatedRoute(user, introGate);
       }
 
+      const clientIncomplete = user?.role === 'client' && clientNeedsProfileSetup(user);
+
       const isAllowedToStay =
-        (!isAuthenticated && (currentRoute === 'Login' || currentRoute === 'OTP')) ||
+        (!isAuthenticated &&
+          (currentRoute === 'AuthWelcome' || currentRoute === 'Login' || currentRoute === 'OTP')) ||
         (isAuthenticated &&
           user?.role === 'client' &&
-          (currentRoute === 'ClientDashboard' ||
-            currentRoute === 'ClientIntro' ||
-            (currentRoute === 'ProfileSetup' && !user?.fullName))) ||
+          ((!clientIncomplete &&
+            (currentRoute === 'ClientDashboard' || currentRoute === 'ClientIntro')) ||
+            (clientIncomplete && currentRoute === 'ProfileSetup'))) ||
         (isAuthenticated &&
           user?.role === 'freelancer' &&
           user?.verificationStatus !== 'approved' &&
@@ -128,7 +159,7 @@ const AppNavigator = () => {
         });
       }
     }
-  }, [isAuthenticated, user, loading]);
+  }, [isAuthenticated, user, loading, navReady, authEntryRoute, introGate.ready, introGate.showIntro]);
 
   // Push tap: route by notification type (tabs / modals); unmapped types open root dashboard only
   useEffect(() => {
@@ -137,6 +168,13 @@ const AppNavigator = () => {
       const normalized = normalizeExpoPushData(rawData || {});
       const action = resolvePushActionFromNotificationData(normalized, user?.role);
       if (user?.role === 'client') {
+        if (clientNeedsProfileSetup(user)) {
+          navigationRef.current.reset({
+            index: 0,
+            routes: [{ name: 'ProfileSetup' }],
+          });
+          return;
+        }
         if (action) {
           navigationRef.current.navigate('ClientDashboard', { pushAction: action });
         } else {
@@ -162,19 +200,32 @@ const AppNavigator = () => {
     });
 
     return () => sub.remove();
-  }, [user?.role, user?._id, user?.id]);
+  }, [user]);
 
-  if (loading) {
+  if (loading || (!isAuthenticated && !authBootstrapped)) {
     return <LoadingSpinner />;
   }
 
+  if (isAuthenticated && !introGate.ready) {
+    return <LoadingSpinner />;
+  }
+
+  const initialRouteName = isAuthenticated
+    ? resolveAuthenticatedRoute(user, introGate)
+    : authEntryRoute;
+
   return (
-    <NavigationContainer theme={navigationTheme} ref={navigationRef}>
+    <NavigationContainer
+      theme={navigationTheme}
+      ref={navigationRef}
+      onReady={() => setNavReady(true)}
+    >
       <Stack.Navigator 
         screenOptions={{ headerShown: false }}
-        initialRouteName={getInitialRouteName()}
+        initialRouteName={initialRouteName}
       >
         {/* Auth Screens - Always available */}
+        <Stack.Screen name="AuthWelcome" component={AuthWelcomeScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="OTP" component={OTPScreen} />
         {user?.role === 'client' && (
