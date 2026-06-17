@@ -20,6 +20,9 @@ const EXPO_PUSH_SOUND = 'new_sound.wav';
 /** Must match `NOTIFICATION_CHANNEL_ID` + app.json `expo-notifications` → `android.defaultChannel`. */
 const EXPO_PUSH_CHANNEL_ID = 'people-alerts-v2';
 
+/** Must match `PREFERENCE_NOTIFICATION_CHANNEL_ID` in mobile pushNotifications.js */
+const EXPO_PUSH_PREFERENCE_CHANNEL_ID = 'people-preference-alerts-v1';
+
 function toUserIdString(userId) {
   if (userId == null) return '';
   try {
@@ -55,6 +58,7 @@ async function sendExpoPush(userId, title, body, data = {}) {
     }
 
     const flatData = stringifyPushData(data);
+    const isPreferenceAlert = flatData.type === 'job_preference_alert';
 
     const messages = tokens.map((t) => ({
       to: t.expoPushToken,
@@ -64,7 +68,7 @@ async function sendExpoPush(userId, title, body, data = {}) {
       // iOS: custom sound filename in app bundle (Expo Push API).
       sound: EXPO_PUSH_SOUND,
       // Android: sound + vibration come from the client channel with this id; high priority improves delivery.
-      channelId: EXPO_PUSH_CHANNEL_ID,
+      channelId: isPreferenceAlert ? EXPO_PUSH_PREFERENCE_CHANNEL_ID : EXPO_PUSH_CHANNEL_ID,
       priority: 'high',
     }));
 

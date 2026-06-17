@@ -956,7 +956,11 @@ const FreelancerDashboard = () => {
       {/* Tab Content */}
       <View style={styles.tabContent} {...(!activeDrawerScreen ? panResponder.panHandlers : {})}>
         {activeDrawerScreen ? (
-          <ActiveScreen />
+          activeDrawerScreen === 'Settings' ? (
+            <SettingsScreen showToast={showGlobalToast} />
+          ) : (
+            <ActiveScreen />
+          )
         ) : (
           <Animated.View
             style={{

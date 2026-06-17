@@ -2242,7 +2242,7 @@ router.post('/pay-dues', authenticate, async (req, res) => {
  * For PhonePe integration, use /api/payment/create-dues-order instead.
  */
 
-const { MAIN_CATEGORIES, isValidPreferenceCategory } = require('../utils/jobCategories');
+const { MAIN_CATEGORIES, isValidPreferenceCategory, normalizePreferenceCategory } = require('../utils/jobCategories');
 
 /**
  * GET /api/freelancer/preferences/job-category
@@ -2255,7 +2255,7 @@ router.get('/preferences/job-category', authenticate, async (req, res) => {
     }
     return res.json({
       success: true,
-      category: user.jobCategoryPreference || null,
+      category: normalizePreferenceCategory(user.jobCategoryPreference) || null,
       categories: MAIN_CATEGORIES,
     });
   } catch (error) {
@@ -2282,6 +2282,7 @@ router.put('/preferences/job-category', authenticate, async (req, res) => {
       if (!isValidPreferenceCategory(category)) {
         return res.status(400).json({ success: false, error: 'Invalid job category' });
       }
+      category = normalizePreferenceCategory(category);
     }
 
     user.jobCategoryPreference = category;

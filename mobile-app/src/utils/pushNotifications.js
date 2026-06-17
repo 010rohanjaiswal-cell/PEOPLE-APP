@@ -18,8 +18,50 @@ export const NOTIFICATION_SOUND = 'new_sound.wav';
  */
 export const NOTIFICATION_CHANNEL_ID = 'people-alerts-v2';
 
+/** Android channel for job preference batch alerts — distinct double-vibration pattern. */
+export const PREFERENCE_NOTIFICATION_CHANNEL_ID = 'people-preference-alerts-v1';
+
 /** Pattern: wait, vibrate, pause, vibrate (ms) — keep first pulse short so it does not mask notification sound start on some devices */
 export const NOTIFICATION_VIBRATION_PATTERN = [0, 90, 120, 90];
+
+/** Stronger double pulse for preferred-category job alerts. */
+export const PREFERENCE_JOB_VIBRATION_PATTERN = [0, 140, 160, 140];
+
+const recentVibrationKeys = new Set();
+const VIBRATION_DEDUPE_MS = 4000;
+
+function scheduleVibration(pattern, iosPreferenceDouble = false) {
+  const delay = 120;
+  if (Platform.OS === 'android') {
+    setTimeout(() => Vibration.vibrate(pattern), delay);
+    return;
+  }
+  setTimeout(() => {
+    if (iosPreferenceDouble) {
+      Vibration.vibrate();
+      setTimeout(() => Vibration.vibrate(), 180);
+      return;
+    }
+    Vibration.vibrate(400);
+  }, delay);
+}
+
+/**
+ * Foreground / in-app vibration keyed by notification type. Dedupes push + socket for the same alert.
+ */
+export function vibrateForNotificationType(type, notificationId) {
+  const key = notificationId ? String(notificationId) : `${type || 'unknown'}-${Date.now()}`;
+  if (recentVibrationKeys.has(key)) return;
+  recentVibrationKeys.add(key);
+  setTimeout(() => recentVibrationKeys.delete(key), VIBRATION_DEDUPE_MS);
+
+  const isPreference = type === 'job_preference_alert';
+  if (isPreference) {
+    scheduleVibration(PREFERENCE_JOB_VIBRATION_PATTERN, true);
+    return;
+  }
+  scheduleVibration(NOTIFICATION_VIBRATION_PATTERN, false);
+}
 
 // Show notification when app is in foreground (banner + sound + system can vibrate via channel when background)
 Notifications.setNotificationHandler({
@@ -53,6 +95,23 @@ export async function ensureNotificationChannelAsync() {
       },
     },
   });
+  await Notifications.setNotificationChannelAsync(PREFERENCE_NOTIFICATION_CHANNEL_ID, {
+    name: 'Job preference alerts',
+    importance: Notifications.AndroidImportance.MAX,
+    sound: NOTIFICATION_SOUND,
+    vibrationPattern: PREFERENCE_JOB_VIBRATION_PATTERN,
+    enableVibrate: true,
+    enableLights: true,
+    showBadge: true,
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.NOTIFICATION,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+      flags: {
+        enforceAudibility: true,
+        requestHardwareAudioVideoSynchronization: false,
+      },
+    },
+  });
 }
 
 /**
@@ -60,15 +119,9 @@ export async function ensureNotificationChannelAsync() {
  * Background/killed delivery still uses the channel vibration on Android.
  */
 export function subscribeForegroundNotificationVibration() {
-  return Notifications.addNotificationReceivedListener(() => {
-    if (Platform.OS === 'android') {
-      // Let the bundled notification sound start first; immediate heavy vibration can delay or duck sound on some OEMs
-      setTimeout(() => {
-        Vibration.vibrate(NOTIFICATION_VIBRATION_PATTERN);
-      }, 120);
-    } else {
-      Vibration.vibrate(400);
-    }
+  return Notifications.addNotificationReceivedListener((notification) => {
+    const data = notification.request.content.data || {};
+    vibrateForNotificationType(data.type, data.notificationId);
   });
 }
 

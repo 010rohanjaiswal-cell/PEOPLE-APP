@@ -41,13 +41,24 @@ function getParentCategory(category) {
   return 'Other';
 }
 
+function normalizePreferenceCategory(category) {
+  const s = String(category || '').trim();
+  if (!s) return null;
+  if (s === 'Other') return null;
+  if (isValidMainCategory(s)) return s;
+  const lower = s.toLowerCase();
+  if (DELIVERY_SUB_SET.has(lower)) return 'Delivery';
+  if (MECHANIC_SUB_SET.has(lower)) return 'Mechanic';
+  return s;
+}
+
 function jobMatchesPreference(jobCategory, preferenceCategory) {
-  const pref = String(preferenceCategory || '').trim();
+  const pref = normalizePreferenceCategory(preferenceCategory);
   if (!pref) return false;
   const job = String(jobCategory || '').trim();
   if (!job) return false;
   if (job.toLowerCase() === pref.toLowerCase()) return true;
-  if (isValidMainCategory(pref)) {
+  if (isValidMainCategory(pref) && pref !== 'Other') {
     return getParentCategory(job) === pref;
   }
   return false;
@@ -74,6 +85,7 @@ function preferenceDisplayName(category) {
 function isValidPreferenceCategory(category) {
   const s = String(category || '').trim();
   if (!s) return false;
+  if (s === 'Other') return false;
   if (isValidMainCategory(s)) return true;
   const lower = s.toLowerCase();
   if (DELIVERY_SUB_SET.has(lower) || MECHANIC_SUB_SET.has(lower)) return true;
@@ -87,6 +99,7 @@ module.exports = {
   MECHANIC_SUBCATEGORIES,
   getParentCategory,
   jobMatchesPreference,
+  normalizePreferenceCategory,
   isValidMainCategory,
   isValidPreferenceCategory,
   isDeliverySubcategory,

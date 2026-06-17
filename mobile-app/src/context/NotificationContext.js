@@ -7,6 +7,7 @@ import React, { createContext, useState, useEffect, useContext, useCallback, use
 import { useAuth } from './AuthContext';
 import { useSocket } from './SocketContext';
 import { notificationsAPI } from '../api';
+import { vibrateForNotificationType } from '../utils/pushNotifications';
 
 const NotificationContext = createContext();
 
@@ -208,6 +209,10 @@ export const NotificationProvider = ({ children }) => {
         setUnreadCount(prev => {
           return prev + 1;
         });
+      }
+
+      if (newNotification.type === 'job_preference_alert') {
+        vibrateForNotificationType(newNotification.type, newNotification._id);
       }
     };
 

@@ -3,7 +3,7 @@
  * Settings and preferences for freelancers
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
   TextInput,
   FlatList,
   Platform,
+  Animated,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { spacing, typography } from '../../theme';
@@ -31,14 +32,14 @@ import About from '../common/About';
 import RefundPolicy from '../common/RefundPolicy';
 import HelpAndSupport from '../common/HelpAndSupport';
 import { APP_VERSION_DISPLAY } from '../../constants/appVersion';
-import { labelForJobCategory } from '../../constants/categorySubcategories';
+import { labelForJobCategory, normalizePreferenceCategory } from '../../constants/categorySubcategories';
 import {
   buildJobCategoryPreferenceList,
   filterJobCategoryPreferenceList,
 } from '../../constants/jobCategoryPreferenceList';
 import { freelancerJobsAPI } from '../../api/freelancerJobs';
 
-function buildSettingsStyles(colors) {
+function buildSettingsStyles(colors, isDark) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -81,11 +82,9 @@ function buildSettingsStyles(colors) {
       ...typography.small,
       color: colors.text.secondary,
     },
-    settingValue: {
-      ...typography.small,
+    settingLabelSelected: {
       color: colors.primary.main,
       fontWeight: '700',
-      marginTop: 2,
     },
     versionText: {
       ...typography.body,
@@ -156,6 +155,11 @@ function buildSettingsStyles(colors) {
       paddingHorizontal: spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      overflow: 'hidden',
+    },
+    categoryRowOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: isDark ? '#FFFFFF' : '#000000',
     },
     categoryRowSub: {
       paddingLeft: spacing.lg,
@@ -181,11 +185,69 @@ function buildSettingsStyles(colors) {
   });
 }
 
-const Settings = ({ onNavigate }) => {
+function PreferenceCategoryRow({
+  item,
+  active,
+  disabled,
+  isDark,
+  label,
+  onPress,
+  styles,
+  colors,
+}) {
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  const animateOverlay = (toValue) => {
+    Animated.timing(overlayOpacity, {
+      toValue,
+      duration: toValue ? 70 : 140,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => animateOverlay(1)}
+      onPressOut={() => animateOverlay(0)}
+      disabled={disabled}
+      android_ripple={{ color: 'rgba(0,0,0,0.14)' }}
+    >
+      <View
+        style={[
+          styles.categoryRow,
+          item.isSub && styles.categoryRowSub,
+          active && styles.categoryRowActive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.categoryRowText,
+            item.isSub && { fontWeight: '500' },
+            !item.isSub && item.section && { fontWeight: '700' },
+          ]}
+          numberOfLines={2}
+        >
+          {label}
+        </Text>
+        {active ? <MaterialIcons name="check" size={22} color={colors.primary.main} /> : null}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.categoryRowOverlay, { opacity: overlayOpacity.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, isDark ? 0.12 : 0.1],
+          }) }]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+const Settings = ({ onNavigate, showToast }) => {
   const { t } = useLanguage();
   const { colors, isDark, setDarkMode } = useTheme();
   const { user, mergeUser } = useAuth();
-  const styles = useMemo(() => buildSettingsStyles(colors), [colors]);
+  const styles = useMemo(() => buildSettingsStyles(colors, isDark), [colors, isDark]);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [showTermsAndConditions, setShowTermsAndConditions] = useState(false);
   const [showRefundPolicy, setShowRefundPolicy] = useState(false);
@@ -196,6 +258,7 @@ const Settings = ({ onNavigate }) => {
   const [preferenceLoading, setPreferenceLoading] = useState(false);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [preferenceSearch, setPreferenceSearch] = useState('');
+  const saveInFlightRef = useRef(false);
 
   const categoryLabel = useCallback((cat) => (cat ? labelForJobCategory(t, cat) : ''), [t]);
   const preferenceList = useMemo(() => buildJobCategoryPreferenceList(), []);
@@ -210,7 +273,6 @@ const Settings = ({ onNavigate }) => {
   };
 
   const closePreferenceModal = () => {
-    if (preferenceSaving) return;
     setPreferenceSearch('');
     setPreferenceModalVisible(false);
   };
@@ -220,8 +282,9 @@ const Settings = ({ onNavigate }) => {
       setPreferenceLoading(true);
       const res = await freelancerJobsAPI.getJobCategoryPreference();
       if (res?.success) {
-        setJobCategoryPreference(res.category || null);
-        mergeUser({ jobCategoryPreference: res.category || null });
+        const next = normalizePreferenceCategory(res.category) || null;
+        setJobCategoryPreference(next);
+        mergeUser({ jobCategoryPreference: next });
       }
     } catch (err) {
       console.error('Failed to load job preference:', err);
@@ -235,26 +298,43 @@ const Settings = ({ onNavigate }) => {
   }, [loadPreference]);
 
   const savePreference = async (category) => {
+    if (saveInFlightRef.current) return;
+
+    const normalized = category ? normalizePreferenceCategory(category) : null;
+    const previous = jobCategoryPreference;
+
+    setPreferenceModalVisible(false);
+    setPreferenceSearch('');
+    setJobCategoryPreference(normalized);
+    mergeUser({ jobCategoryPreference: normalized });
+
+    saveInFlightRef.current = true;
+    setPreferenceSaving(true);
+
     try {
-      setPreferenceSaving(true);
-      const res = await freelancerJobsAPI.setJobCategoryPreference(category);
+      const res = await freelancerJobsAPI.setJobCategoryPreference(normalized);
       if (!res?.success) {
-        Alert.alert(t('common.error'), res?.error || t('common.error'));
+        setJobCategoryPreference(previous);
+        mergeUser({ jobCategoryPreference: previous });
+        const msg = res?.error || t('common.error');
+        if (showToast) showToast(msg);
+        else Alert.alert(t('common.error'), msg);
         return;
       }
-      const next = res.category || null;
+      const next = normalizePreferenceCategory(res.category) || null;
       setJobCategoryPreference(next);
       mergeUser({ jobCategoryPreference: next });
-      setPreferenceModalVisible(false);
-      setPreferenceSearch('');
-      Alert.alert(
-        t('common.success') || 'Success',
-        next ? t('settings.preferenceSaved') : t('settings.preferenceCleared')
-      );
+      const msg = next ? t('settings.preferenceSaved') : t('settings.preferenceCleared');
+      if (showToast) showToast(msg);
     } catch (err) {
       console.error('Failed to save job preference:', err);
-      Alert.alert(t('common.error'), err.response?.data?.error || t('common.error'));
+      setJobCategoryPreference(previous);
+      mergeUser({ jobCategoryPreference: previous });
+      const msg = err.response?.data?.error || t('common.error');
+      if (showToast) showToast(msg);
+      else Alert.alert(t('common.error'), msg);
     } finally {
+      saveInFlightRef.current = false;
       setPreferenceSaving(false);
     }
   };
@@ -316,13 +396,18 @@ const Settings = ({ onNavigate }) => {
               <View style={styles.settingInfo}>
                 <MaterialIcons name="notifications-active" size={24} color={colors.text.primary} />
                 <View style={styles.settingText}>
-                  <Text style={styles.settingLabel}>{t('settings.selectPreference')}</Text>
-                  <Text style={styles.settingDescription}>{t('settings.selectPreferenceDesc')}</Text>
                   {preferenceLoading ? (
-                    <ActivityIndicator size="small" color={colors.primary.main} style={{ marginTop: 6 }} />
-                  ) : jobCategoryPreference ? (
-                    <Text style={styles.settingValue}>{categoryLabel(jobCategoryPreference)}</Text>
-                  ) : null}
+                    <ActivityIndicator size="small" color={colors.primary.main} style={{ marginBottom: spacing.xs }} />
+                  ) : (
+                    <Text
+                      style={[styles.settingLabel, jobCategoryPreference && styles.settingLabelSelected]}
+                    >
+                      {jobCategoryPreference
+                        ? categoryLabel(jobCategoryPreference)
+                        : t('settings.selectPreference')}
+                    </Text>
+                  )}
+                  <Text style={styles.settingDescription}>{t('settings.selectPreferenceDesc')}</Text>
                 </View>
               </View>
               <MaterialIcons name="expand-more" size={24} color={colors.text.secondary} />
@@ -467,35 +552,18 @@ const Settings = ({ onNavigate }) => {
                   )}
                 </TouchableOpacity>
               }
-              renderItem={({ item }) => {
-                const active = jobCategoryPreference === item.value;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryRow,
-                      item.isSub && styles.categoryRowSub,
-                      active && styles.categoryRowActive,
-                    ]}
-                    onPress={() => savePreference(item.value)}
-                    disabled={preferenceSaving}
-                    activeOpacity={0.75}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryRowText,
-                        item.isSub && { fontWeight: '500' },
-                        !item.isSub && item.section && { fontWeight: '700' },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {categoryLabel(item.value)}
-                    </Text>
-                    {active ? (
-                      <MaterialIcons name="check" size={22} color={colors.primary.main} />
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              }}
+              renderItem={({ item }) => (
+                <PreferenceCategoryRow
+                  item={item}
+                  active={jobCategoryPreference === item.value}
+                  disabled={preferenceSaving}
+                  isDark={isDark}
+                  label={categoryLabel(item.value)}
+                  onPress={() => savePreference(item.value)}
+                  styles={styles}
+                  colors={colors}
+                />
+              )}
             />
           </View>
         </View>

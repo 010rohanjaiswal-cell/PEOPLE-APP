@@ -6,7 +6,7 @@ import { JOB_CATEGORIES } from './jobCategories';
 import { getSubcategoriesForParent } from './categorySubcategories';
 import { OTHER_SUBCATEGORIES } from './otherWorkOptions';
 
-const PARENTS_WITH_SUBS = new Set(['Delivery', 'Mechanic', 'Other']);
+const PARENTS_WITH_SUBS = new Set(['Delivery', 'Mechanic']);
 
 export function buildJobCategoryPreferenceList() {
   const items = [];
@@ -14,9 +14,14 @@ export function buildJobCategoryPreferenceList() {
   for (const cat of JOB_CATEGORIES) {
     if (PARENTS_WITH_SUBS.has(cat)) {
       items.push({ value: cat, isSub: false, section: cat });
-      const subs = cat === 'Other' ? OTHER_SUBCATEGORIES : getSubcategoriesForParent(cat);
-      for (const sub of subs) {
+      for (const sub of getSubcategoriesForParent(cat)) {
         items.push({ value: sub, isSub: true, section: cat });
+      }
+      continue;
+    }
+    if (cat === 'Other') {
+      for (const sub of OTHER_SUBCATEGORIES) {
+        items.push({ value: sub, isSub: false, section: null });
       }
       continue;
     }

@@ -63,6 +63,15 @@ export function getSubcategoryParent(category) {
   return null;
 }
 
+/** Parent categories with subcategories save as the parent so alerts cover all subs. */
+export function normalizePreferenceCategory(category) {
+  const s = String(category || '').trim();
+  if (!s) return null;
+  const subParent = getSubcategoryParent(s);
+  if (subParent) return subParent;
+  return s;
+}
+
 export function isParentCategoryWithSubs(category) {
   return PARENT_CATEGORIES_WITH_SUBS.includes(String(category || '').trim());
 }
