@@ -30,6 +30,12 @@ const {
   notifyApplicationReceived,
 } = require('../services/notificationService');
 const { afterApplicationSubmitted } = require('../services/autoPickApplications');
+const {
+  requireVerifiedFreelancer,
+  resolveFreelancerVerificationStatus,
+  isCompleteApprovedVerification,
+  findLatestFreelancerVerification,
+} = require('../utils/freelancerVerification');
 
 function isDeliveryCategory(category) {
   return String(category || '').trim().toLowerCase() === 'delivery';
@@ -259,20 +265,7 @@ router.get('/verification/status', authenticate, async (req, res) => {
       });
     }
 
-    // Get verification details from FreelancerVerification collection
-    // Use .lean() to get plain JavaScript object (faster and ensures all fields are accessible)
-    let verification = await FreelancerVerification.findOne({ user: user._id })
-      .select('fullName dob gender address status rejectionReason createdAt updatedAt')
-      .lean() // Convert to plain object
-      .sort({ createdAt: -1 }); // Get the most recent verification
-    
-    // If not found, try with string ID as fallback
-    if (!verification) {
-      verification = await FreelancerVerification.findOne({ user: user._id.toString() })
-        .select('fullName dob gender address status rejectionReason createdAt updatedAt')
-        .lean() // Convert to plain object
-        .sort({ createdAt: -1 });
-    }
+    const verification = await findLatestFreelancerVerification(user._id);
     
     // Log detailed query info for debugging
     if (!verification) {
@@ -306,7 +299,9 @@ router.get('/verification/status', authenticate, async (req, res) => {
       })));
     }
     
-    const verificationStatus = verification?.status || user.verificationStatus || null;
+    const verificationStatus = isCompleteApprovedVerification(verification)
+      ? 'approved'
+      : verification?.status || null;
 
     console.log('📋 Freelancer verification data:', {
       userId: user._id,
@@ -955,7 +950,7 @@ router.post('/verification/face-match', authenticate, upload.single('image'), as
  * Get (or generate) my referral code
  * GET /api/freelancer/referral/my-code
  */
-router.get('/referral/my-code', authenticate, async (req, res) => {
+router.get('/referral/my-code', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('role referralCode referredBy referralLockedAt').lean();
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
@@ -1183,7 +1178,7 @@ router.post('/verification/complete', authenticate, async (req, res) => {
  * GET /api/freelancer/jobs/available?lat=28.6139&lng=77.2090
  * Requires authentication as freelancer
  */
-router.get('/jobs/available', authenticate, async (req, res) => {
+router.get('/jobs/available', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1305,7 +1300,7 @@ router.get('/jobs/available', authenticate, async (req, res) => {
  * GET /api/freelancer/jobs/assigned
  * Requires authentication as freelancer
  */
-router.get('/jobs/assigned', authenticate, async (req, res) => {
+router.get('/jobs/assigned', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1383,7 +1378,7 @@ router.get('/jobs/assigned', authenticate, async (req, res) => {
  * GET /api/freelancer/orders
  * Requires authentication as freelancer
  */
-router.get('/orders', authenticate, async (req, res) => {
+router.get('/orders', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1465,7 +1460,7 @@ router.get('/orders', authenticate, async (req, res) => {
  * POST /api/freelancer/jobs/:id/pickup
  * Requires authentication as freelancer
  */
-router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
+router.post('/jobs/:id/pickup', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1589,7 +1584,7 @@ router.post('/jobs/:id/pickup', authenticate, async (req, res) => {
  * Apply to a non-delivery job (client must accept; cannot re-apply while pending)
  * POST /api/freelancer/jobs/:id/apply
  */
-router.post('/jobs/:id/apply', authenticate, async (req, res) => {
+router.post('/jobs/:id/apply', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1747,7 +1742,7 @@ router.post('/jobs/:id/apply', authenticate, async (req, res) => {
  * POST /api/freelancer/jobs/:id/offer
  * Requires authentication as freelancer
  */
-router.post('/jobs/:id/offer', authenticate, async (req, res) => {
+router.post('/jobs/:id/offer', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1903,7 +1898,7 @@ router.post('/jobs/:id/offer', authenticate, async (req, res) => {
  * POST /api/freelancer/jobs/:id/complete
  * Requires authentication as freelancer
  */
-router.post('/jobs/:id/complete', authenticate, async (req, res) => {
+router.post('/jobs/:id/complete', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -1971,7 +1966,7 @@ router.post('/jobs/:id/complete', authenticate, async (req, res) => {
  * POST /api/freelancer/jobs/:id/fully-complete
  * Requires authentication as freelancer
  */
-router.post('/jobs/:id/fully-complete', authenticate, async (req, res) => {
+router.post('/jobs/:id/fully-complete', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -2026,7 +2021,7 @@ router.post('/jobs/:id/fully-complete', authenticate, async (req, res) => {
  * GET /api/freelancer/wallet
  * Requires authentication as freelancer
  */
-router.get('/wallet', authenticate, async (req, res) => {
+router.get('/wallet', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -2154,7 +2149,7 @@ router.get('/wallet', authenticate, async (req, res) => {
  * POST /api/freelancer/pay-dues
  * NOTE: PhonePe integration will be added later.
  */
-router.post('/pay-dues', authenticate, async (req, res) => {
+router.post('/pay-dues', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = req.user;
 
@@ -2247,7 +2242,7 @@ const { MAIN_CATEGORIES, isValidPreferenceCategory, normalizePreferenceCategory 
 /**
  * GET /api/freelancer/preferences/job-category
  */
-router.get('/preferences/job-category', authenticate, async (req, res) => {
+router.get('/preferences/job-category', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = await User.findById(req.user.id || req.user._id).select('role jobCategoryPreference').lean();
     if (!user || user.role !== 'freelancer') {
@@ -2268,7 +2263,7 @@ router.get('/preferences/job-category', authenticate, async (req, res) => {
  * PUT /api/freelancer/preferences/job-category
  * Body: { category: string | null } — null or "" clears preference
  */
-router.put('/preferences/job-category', authenticate, async (req, res) => {
+router.put('/preferences/job-category', authenticate, requireVerifiedFreelancer, async (req, res) => {
   try {
     const user = await User.findById(req.user.id || req.user._id);
     if (!user || user.role !== 'freelancer') {

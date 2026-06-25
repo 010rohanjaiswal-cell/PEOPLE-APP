@@ -28,6 +28,7 @@ const RotatingSubcategoryTile = ({
   selectedLabel,
   onSelect,
   onSelectOriginal,
+  getDisplayLabel,
   styles,
 }) => {
   const originalOpacity = useRef(new Animated.Value(1)).current;
@@ -45,6 +46,7 @@ const RotatingSubcategoryTile = ({
 
   const safeLen = Math.max(categories.length, 1);
   const currentLabel = categories.length ? categories[index % safeLen] : '';
+  const currentDisplayLabel = getDisplayLabel ? getDisplayLabel(currentLabel) : currentLabel;
   const isOriginalSelected = selectedLabel === originalCategory;
   const isRotatingSelected = !!currentLabel && selectedLabel === currentLabel;
   const rotatingIconSrc = currentLabel ? iconForOtherSubcategory(currentLabel) : OTHER_SUBCATEGORY_DEFAULT_ICON;
@@ -172,7 +174,7 @@ const RotatingSubcategoryTile = ({
           >
             <Image source={rotatingIconSrc} style={styles.categoryTileIconImage} resizeMode="contain" />
             <Text style={styles.categoryTileLabel} numberOfLines={2}>
-              {currentLabel}
+              {currentDisplayLabel}
             </Text>
           </Animated.View>
         ) : null}

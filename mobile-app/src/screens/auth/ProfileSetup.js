@@ -64,8 +64,7 @@ const ProfileSetup = () => {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [9, 16],
+        allowsEditing: false,
         quality: 0.8,
         cameraType: ImagePicker.CameraType.front,
       });

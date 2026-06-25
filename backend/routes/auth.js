@@ -17,6 +17,7 @@ const axios = require('axios');
 const User = require('../models/User');
 const FreelancerVerification = require('../models/FreelancerVerification');
 const { generateJWT } = require('../utils/jwt');
+const { syncUserFreelancerVerificationStatus, resolveFreelancerVerificationStatus } = require('../utils/freelancerVerification');
 const bcrypt = require('bcryptjs');
 
 // Temporary storage for OTP requests (use Redis in production)
@@ -70,6 +71,14 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
     }
   }
 
+  if (user.role === 'freelancer') {
+    await syncUserFreelancerVerificationStatus(user);
+  } else if (user.role === 'client' && user.verificationStatus) {
+    user.verificationStatus = null;
+    user.updatedAt = new Date();
+    await user.save();
+  }
+
   if (role === 'client' && !user.fullName) {
     const freelancerVerification = await FreelancerVerification.findOne({ user: user._id })
       .sort({ createdAt: -1 })
@@ -117,6 +126,11 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
     displayFullName = freelancerVerification.fullName;
   }
 
+  const verificationStatus =
+    user.role === 'freelancer'
+      ? await resolveFreelancerVerificationStatus(user._id)
+      : null;
+
   return {
     success: true,
     token,
@@ -128,7 +142,7 @@ async function performPhoneLogin(formattedPhone, role, deviceId, forceLogin) {
       fullName: displayFullName,
       profilePhoto: profilePhoto,
       email: user.email || null,
-      verificationStatus: user.verificationStatus || null,
+      verificationStatus,
       ...(user.role === 'freelancer'
         ? {
             freelancerPickupBlockedUntil: user.freelancerPickupBlockedUntil || null,

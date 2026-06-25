@@ -36,6 +36,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
   const [ratingValue, setRatingValue] = useState(null);
   const [ratingReason, setRatingReason] = useState(null);
   const [submittingRating, setSubmittingRating] = useState(false);
+  const [cashConfirmVisible, setCashConfirmVisible] = useState(false);
 
   const freelancer = job?.assignedFreelancer || {};
   const amount = job?.budget || 0;
@@ -79,6 +80,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
 
   const handlePayCash = async () => {
     if (!job?._id) return;
+    setCashConfirmVisible(false);
     setProcessing(true);
     setErrorMessage('');
     try {
@@ -207,7 +209,7 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
           <View style={[styles.footer, footerStacked && styles.footerStacked]}>
             <Button
               variant="outline"
-              onPress={handlePayCash}
+              onPress={() => setCashConfirmVisible(true)}
               style={[styles.footerActionButton, footerStacked && styles.footerActionButtonStacked]}
               size="lg"
               textStyle={styles.footerButtonText}
@@ -230,6 +232,51 @@ const BillModal = ({ visible, job, onClose, onPaymentSuccess }) => {
     </Modal>
 
     {/* Cashfree native SDK handles UI */}
+
+    {/* Cash payment confirmation */}
+    <Modal
+      visible={cashConfirmVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setCashConfirmVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.cashConfirmModal}>
+          <Text style={styles.cashConfirmTitle} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}>
+            {t('bill.confirmPayment')}
+          </Text>
+          <Text style={styles.cashConfirmMessage} numberOfLines={5}>
+            {t('bill.confirmPaymentMessage').replace('{amount}', String(amount))}
+          </Text>
+          <View style={styles.cashConfirmActions}>
+            <TouchableOpacity
+              style={[styles.cashConfirmButton, styles.cashConfirmButtonSecondary]}
+              onPress={() => setCashConfirmVisible(false)}
+              disabled={processing}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.cashConfirmButtonSecondaryText} numberOfLines={2}>
+                {t('bill.notYet')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cashConfirmButton, styles.cashConfirmButtonPrimary]}
+              onPress={handlePayCash}
+              disabled={processing}
+              activeOpacity={0.85}
+            >
+              {processing ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.cashConfirmButtonPrimaryText} numberOfLines={2}>
+                  {t('bill.paid')}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
 
     {/* Payment Success Modal */}
     <Modal
@@ -467,13 +514,75 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
   },
-  modalContent: {
-    width: '90%',
+  cashConfirmModal: {
+    width: '100%',
+    maxWidth: 400,
     backgroundColor: colors.cardBackground,
     borderRadius: spacing.md,
     padding: spacing.lg,
+    alignSelf: 'center',
+  },
+  cashConfirmTitle: {
+    ...typography.h2,
+    color: colors.text.primary,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  cashConfirmMessage: {
+    ...typography.body,
+    color: colors.text.secondary,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    flexShrink: 1,
+    lineHeight: 22,
+  },
+  cashConfirmActions: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.md,
+    width: '100%',
+  },
+  cashConfirmButton: {
+    flex: 1,
+    minHeight: 56,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cashConfirmButtonSecondary: {
+    backgroundColor: colors.background,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  cashConfirmButtonPrimary: {
+    backgroundColor: colors.success.main,
+  },
+  cashConfirmButtonSecondaryText: {
+    ...typography.body,
+    color: colors.text.primary,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  cashConfirmButtonPrimaryText: {
+    ...typography.body,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    textAlign: 'center',
+    fontSize: 16,
+  },
+  modalContent: {
+    width: '100%',
     maxWidth: 400,
+    backgroundColor: colors.cardBackground,
+    borderRadius: spacing.md,
+    padding: spacing.lg,
+    alignSelf: 'center',
   },
   modalTitle: {
     ...typography.h2,

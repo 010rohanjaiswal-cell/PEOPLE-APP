@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 const PushToken = require('../models/PushToken');
 const FreelancerVerification = require('../models/FreelancerVerification');
+const { resolveFreelancerVerificationStatus } = require('../utils/freelancerVerification');
 const FreelancerRating = require('../models/FreelancerRating');
 const multer = require('multer');
 const streamifier = require('streamifier');
@@ -144,6 +145,11 @@ router.get('/profile', authenticate, async (req, res) => {
       }
     }
 
+    const verificationStatus =
+      user.role === 'freelancer'
+        ? await resolveFreelancerVerificationStatus(user._id)
+        : null;
+
     res.json({
       success: true,
       user: {
@@ -153,7 +159,7 @@ router.get('/profile', authenticate, async (req, res) => {
         fullName: displayFullName,
         profilePhoto: profilePhoto,
         email: user.email || null,
-        verificationStatus: user.verificationStatus || null,
+        verificationStatus,
         verification: verificationData,
         averageRating,
         ratingCount,
@@ -202,6 +208,10 @@ router.put('/profile', authenticate, upload.single('image'), async (req, res) =>
 
     // Return profile in the same shape as GET /profile
     const profilePhoto = await getUserProfilePhoto(userId);
+    const verificationStatus =
+      user.role === 'freelancer'
+        ? await resolveFreelancerVerificationStatus(user._id)
+        : null;
     return res.json({
       success: true,
       user: {
@@ -211,7 +221,7 @@ router.put('/profile', authenticate, upload.single('image'), async (req, res) =>
         fullName: user.fullName || null,
         profilePhoto,
         email: user.email || null,
-        verificationStatus: user.verificationStatus || null,
+        verificationStatus,
         averageRating: user.averageRating ?? 0,
         ratingCount: user.ratingCount ?? 0,
       },

@@ -255,8 +255,9 @@ export default {
     offeredAmount: 'ऑफर की राशि',
   },
   bill: {
-    confirmPayment: 'भुगतान की पुष्टि करें',
-    confirmPaymentMessage: '₹{amount} का भुगतान पूर्ण के रूप में मार्क करें?',
+    confirmPayment: 'क्या आपने भुगतान किया?',
+    confirmPaymentMessage: 'क्या आपने फ्रीलांसर को ₹{amount} नकद में दिया?',
+    notYet: 'अभी नहीं',
     paid: 'भुगतान हो गया',
     paymentSuccessful: 'भुगतान सफल',
     paymentRecordedSuccess: 'भुगतान सफलतापूर्वक रिकॉर्ड किया गया!',

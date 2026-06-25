@@ -36,7 +36,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useLocation } from '../../context/LocationContext';
 import { translateJobToHindi } from '../../utils/translate';
-import { translateToHindi } from '../../utils/translate';
+import { useOtherWorkHindiTranslations } from '../../hooks/useOtherWorkHindiTranslations';
 import { isDeliveryJob } from '../../utils/jobDisplay';
 import { JobLocationBlock, JobMetaGenderOrDeliveryPins } from '../../components/job/JobLocationBlock';
 import { buildGoogleMapsBikeDirectionsUrl } from '../../utils/mapsDirections';
@@ -842,7 +842,7 @@ const AvailableJobs = ({
   const categoryModalShift = useRef(new Animated.Value(0)).current; // 0 = main categories, 1 = Other list
   const [categoryModalPage, setCategoryModalPage] = useState('grid'); // 'grid' | 'other' | 'delivery' | 'mechanic'
   const [otherQuery, setOtherQuery] = useState('');
-  const [otherTranslated, setOtherTranslated] = useState({});
+  const { otherTranslated, labelForOtherWork } = useOtherWorkHindiTranslations(locale);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [hasActiveJob, setHasActiveJob] = useState(false);
   const effectiveHasActiveJob = hasActiveAssignedJob || hasActiveJob;
@@ -1505,33 +1505,11 @@ const AvailableJobs = ({
     const s = String(cat || '').trim();
     if (!s) return '';
     if (locale === 'hi') {
-      // Show cached Hindi translation for "Other" options when available.
-      if (otherTranslated[s]) return otherTranslated[s];
+      const hiLabel = labelForOtherWork(s);
+      if (hiLabel !== s) return hiLabel;
     }
     return categoryLabel(s);
   };
-
-  useEffect(() => {
-    if (!categoryModalVisible) return;
-    if (locale !== 'hi') return;
-    let cancelled = false;
-    const toTranslate = filteredOtherOptions.filter((opt) => otherTranslated[opt] == null).slice(0, 20);
-    if (toTranslate.length === 0) return;
-    (async () => {
-      const results = await Promise.all(toTranslate.map((s) => translateToHindi(s)));
-      if (cancelled) return;
-      setOtherTranslated((prev) => {
-        const next = { ...prev };
-        toTranslate.forEach((k, idx) => {
-          next[k] = results[idx] || k;
-        });
-        return next;
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [categoryModalVisible, locale, filteredOtherOptions, otherTranslated]);
 
   useEffect(() => {
     if (!categoryModalVisible) return;
@@ -2531,7 +2509,7 @@ const AvailableJobs = ({
                             const active =
                               categoryFilters.includes(opt) ||
                               (opt === 'Others' && categoryFilters.includes('Other'));
-                            const displayText = locale === 'hi' ? otherTranslated[opt] || opt : opt;
+                            const displayText = labelForOtherWork(opt);
                             return (
                               <TouchableOpacity
                                 key={opt}

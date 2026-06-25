@@ -251,6 +251,11 @@ const FaceVerification = ({ navigation }) => {
       const profileResp = await userAPI.getProfile();
       if (profileResp?.success && profileResp?.user) {
         await updateUser(profileResp.user);
+        if (profileResp.user.verificationStatus !== 'approved') {
+          throw new Error('Freelancer verification is not approved yet.');
+        }
+      } else {
+        throw new Error('Could not confirm verification status.');
       }
 
       navigation.replace('FreelancerDashboard');

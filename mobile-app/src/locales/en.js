@@ -254,8 +254,9 @@ export default {
     offeredAmount: 'Offered amount',
   },
   bill: {
-    confirmPayment: 'Confirm Payment',
-    confirmPaymentMessage: 'Mark payment of ₹{amount} as completed?',
+    confirmPayment: 'Confirm if you paid',
+    confirmPaymentMessage: 'Have you paid ₹{amount} to the freelancer in cash?',
+    notYet: 'Not yet',
     paid: 'Paid',
     paymentSuccessful: 'Payment Successful',
     paymentRecordedSuccess: 'Payment recorded successfully!',

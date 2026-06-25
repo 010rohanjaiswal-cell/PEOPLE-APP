@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
 });
 
 const Verification = ({ navigation }) => {
-  const { isNewUser } = useAuth();
+  const { isNewUser, mergeUser } = useAuth();
   const { t } = useLanguage();
 
 
@@ -565,6 +565,16 @@ const Verification = ({ navigation }) => {
       } else {
         // No verification submitted yet
         setStatus(null);
+      }
+
+      const approvedStatus =
+        response.status === VERIFICATION_STATUS.APPROVED ||
+        response.verificationStatus === VERIFICATION_STATUS.APPROVED ||
+        response.verification?.status === VERIFICATION_STATUS.APPROVED;
+      if (approvedStatus) {
+        mergeUser({ verificationStatus: 'approved' });
+        navigation.replace('FreelancerDashboard');
+        return;
       }
       // We no longer have "admin review pending" screen in SecureID flow.
       // Still keep isSubmitted for controlling resubmit UX in rejected case.

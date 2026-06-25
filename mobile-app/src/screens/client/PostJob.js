@@ -42,7 +42,6 @@ import { clientJobsAPI } from '../../api/clientJobs';
 import { useLocation } from '../../context/LocationContext';
 import { useLanguage } from '../../context/LanguageContext';
 import {
-  getSubcategoryParent,
   iconForSubcategory,
   isParentCategoryWithSubs,
   labelForJobCategory,
@@ -57,7 +56,7 @@ import {
 import RotatingSubcategoryTile, { shuffleSubcategories } from '../../components/client/RotatingSubcategoryTile';
 import { iconForOtherSubcategory } from '../../constants/otherSubcategoryIcons';
 import { OTHER_WORK_OPTIONS, OTHER_SUBCATEGORIES } from '../../constants/otherWorkOptions';
-import { translateToHindi } from '../../utils/translate';
+import { useOtherWorkHindiTranslations } from '../../hooks/useOtherWorkHindiTranslations';
 
 const { height: SCREEN_H, width: SCREEN_W } = require('react-native').Dimensions.get('window');
 const PAGE_W = SCREEN_W;
@@ -672,7 +671,6 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
   const [subcategoryModalVisible, setSubcategoryModalVisible] = useState(false);
   const [subcategoryModalParent, setSubcategoryModalParent] = useState(null); // 'Delivery' | 'Mechanic'
   const [otherQuery, setOtherQuery] = useState('');
-  const [otherTranslated, setOtherTranslated] = useState({});
   const [activeRotationSlots, setActiveRotationSlots] = useState([false, false, false]);
   const [rotatingSubcategories, setRotatingSubcategories] = useState([]);
   const rotationSlotTimersRef = useRef([]);
@@ -775,6 +773,11 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
   const lastRowRotationActive =
     isScreenActive && postJobStep === 'categories' && rotatingSubcategories.length > 0;
 
+  const { otherTranslated, labelForOtherWork } = useOtherWorkHindiTranslations(locale, {
+    enabled: isScreenActive,
+    priorityTexts: rotatingSubcategories,
+  });
+
   const focusScrollToField = (ref) => scrollFieldIntoView(ref);
   const [formData, setFormData] = useState({
     title: '',
@@ -850,33 +853,6 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
     });
   }, [otherQuery, otherTranslated]);
 
-  useEffect(() => {
-    if (postJobStep !== 'other') return;
-    if (locale !== 'hi') return;
-    let cancelled = false;
-
-    const toTranslate = filteredOtherOptions.filter((opt) => otherTranslated[opt] == null);
-    if (toTranslate.length === 0) return;
-
-    (async () => {
-      // Translate a limited batch to avoid spamming the API if user scrolls a lot.
-      const batch = toTranslate.slice(0, 20);
-      const results = await Promise.all(batch.map((s) => translateToHindi(s)));
-      if (cancelled) return;
-      setOtherTranslated((prev) => {
-        const next = { ...prev };
-        batch.forEach((k, idx) => {
-          next[k] = results[idx] || k;
-        });
-        return next;
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [postJobStep, locale, filteredOtherOptions, otherTranslated]);
-
   const stepIndex = (step) => {
     if (step === 'categories') return 0;
     if (step === 'other') return 1;
@@ -935,12 +911,6 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
 
   const openCategoryPickerForCurrent = () => {
     const cat = String(formData.category || '').trim();
-    const parent = getSubcategoryParent(cat);
-    if (parent) {
-      setSubcategoryModalParent(parent);
-      setSubcategoryModalVisible(true);
-      return;
-    }
     animateToStep(getCategoryPickerStep(cat));
   };
 
@@ -958,12 +928,6 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
       }
       if (postJobStep === 'form') {
         const cat = String(formData.category || '').trim();
-        const parent = getSubcategoryParent(cat);
-        if (parent) {
-          setSubcategoryModalParent(parent);
-          setSubcategoryModalVisible(true);
-          return true;
-        }
         const shouldGoOther = OTHER_WORK_OPTIONS.includes(cat) || cat === 'Other';
         animateToStep(shouldGoOther ? 'other' : 'categories');
         return true;
@@ -1351,6 +1315,7 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
                         selectedLabel={formData.category}
                         onSelect={selectOtherWorkAndOpenForm}
                         onSelectOriginal={selectMainCategory}
+                        getDisplayLabel={labelForOtherWork}
                         styles={styles}
                       />
                     );
@@ -1413,7 +1378,7 @@ const PostJob = ({ onJobPosted, isScreenActive = true }) => {
                     onPress={() => selectOtherWorkAndOpenForm(opt)}
                   >
                     <Text style={styles.otherItemText}>
-                      {locale === 'hi' ? otherTranslated[opt] || opt : opt}
+                      {labelForOtherWork(opt)}
                     </Text>
                   </TouchableOpacity>
                 ))}

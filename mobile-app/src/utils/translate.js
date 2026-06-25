@@ -38,6 +38,18 @@ function storageKeyFor(cacheKey) {
   return `${PERSIST_PREFIX}${cacheKey}`;
 }
 
+function uniqueTrimmedTexts(texts) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of texts || []) {
+    const text = String(raw || '').trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
 /**
  * @returns {Promise<string|null>} null if no key, error, or empty response
  */
@@ -99,6 +111,98 @@ async function openaiTranslateToHindi(trimmed) {
     console.warn('OpenAI translate error:', e?.message || e);
     return null;
   }
+}
+
+/**
+ * Read Hindi translations from in-memory + AsyncStorage only (no API).
+ * @param {string[]} texts
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function readHindiTranslationsFromCache(texts) {
+  const unique = uniqueTrimmedTexts(texts);
+  const out = {};
+  const needStorage = [];
+
+  for (const text of unique) {
+    const key = cacheKeyFor(text);
+    if (CACHE[key] !== undefined) {
+      out[text] = CACHE[key];
+      continue;
+    }
+    if (/^\d{4,8}$/.test(text)) {
+      CACHE[key] = text;
+      out[text] = text;
+      continue;
+    }
+    needStorage.push(text);
+  }
+
+  if (needStorage.length === 0) return out;
+
+  try {
+    const storageKeys = needStorage.map((t) => storageKeyFor(cacheKeyFor(t)));
+    const pairs = await AsyncStorage.multiGet(storageKeys);
+    pairs.forEach(([storageKey, value]) => {
+      const idx = storageKeys.indexOf(storageKey);
+      const text = needStorage[idx];
+      if (!text || value == null || value === '') return;
+      const key = cacheKeyFor(text);
+      CACHE[key] = value;
+      out[text] = value;
+    });
+  } catch (_) {
+    // Ignore storage read errors.
+  }
+
+  return out;
+}
+
+/**
+ * Load Hindi translations: cache first, then translate missing strings in batches.
+ * @param {string[]} texts
+ * @param {{ onPartial?: (partial: Record<string, string>) => void, batchSize?: number, priorityTexts?: string[] }} [opts]
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function ensureHindiTranslations(texts, opts = {}) {
+  const { onPartial, batchSize = 8, priorityTexts = [] } = opts;
+  const unique = uniqueTrimmedTexts(texts);
+  const out = await readHindiTranslationsFromCache(unique);
+
+  if (onPartial && Object.keys(out).length > 0) {
+    onPartial(out);
+  }
+
+  const prioritySet = new Set(uniqueTrimmedTexts(priorityTexts));
+  const missing = unique.filter((t) => out[t] == null);
+  const ordered = [
+    ...missing.filter((t) => prioritySet.has(t)),
+    ...missing.filter((t) => !prioritySet.has(t)),
+  ];
+
+  for (let i = 0; i < ordered.length; i += batchSize) {
+    const batch = ordered.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map((t) => translateToHindi(t)));
+    const partial = {};
+    batch.forEach((t, idx) => {
+      partial[t] = results[idx];
+      out[t] = results[idx];
+    });
+    if (onPartial) onPartial(partial);
+  }
+
+  missing.forEach((t) => {
+    if (out[t] == null) out[t] = t;
+  });
+
+  return out;
+}
+
+/**
+ * Warm persistent + in-memory translation cache in the background (no UI callback).
+ * @param {string[]} texts
+ */
+export function warmHindiTranslationCache(texts) {
+  ensureHindiTranslations(texts).catch(() => {});
 }
 
 /**

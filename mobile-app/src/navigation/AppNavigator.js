@@ -17,7 +17,7 @@ import {
 } from './pushNotificationRoutes';
 import { clientNeedsProfileSetup } from '../utils/clientProfileGate';
 import { hasSeenIntro } from '../utils/introSeen';
-import { resolveAuthenticatedRoute } from '../utils/resolveAuthenticatedRoute';
+import { resolveAuthenticatedRoute, isFreelancerVerified, freelancerNeedsVerification } from '../utils/resolveAuthenticatedRoute';
 
 // Auth Screens
 import AuthWelcomeScreen from '../screens/auth/AuthWelcome';
@@ -89,7 +89,7 @@ const AppNavigator = () => {
     const role = user.role;
     const needsIntroCheck =
       (role === 'client' && !clientNeedsProfileSetup(user)) ||
-      (role === 'freelancer' && user.verificationStatus === 'approved');
+      isFreelancerVerified(user);
 
     if (!needsIntroCheck) {
       setIntroGate({ ready: true, showIntro: false });
@@ -142,11 +142,10 @@ const AppNavigator = () => {
             (clientIncomplete && currentRoute === 'ProfileSetup'))) ||
         (isAuthenticated &&
           user?.role === 'freelancer' &&
-          user?.verificationStatus !== 'approved' &&
+          freelancerNeedsVerification(user) &&
           (currentRoute === 'Verification' || currentRoute === 'FaceVerification')) ||
         (isAuthenticated &&
-          user?.role === 'freelancer' &&
-          user?.verificationStatus === 'approved' &&
+          isFreelancerVerified(user) &&
           (currentRoute === 'FreelancerDashboard' || currentRoute === 'FreelancerIntro'));
 
       // Only navigate if we have a target and we're not already there,
@@ -183,6 +182,13 @@ const AppNavigator = () => {
         return;
       }
       if (user?.role === 'freelancer') {
+        if (!isFreelancerVerified(user)) {
+          navigationRef.current.reset({
+            index: 0,
+            routes: [{ name: 'Verification' }],
+          });
+          return;
+        }
         if (action) {
           navigationRef.current.navigate('FreelancerDashboard', { pushAction: action });
         } else {

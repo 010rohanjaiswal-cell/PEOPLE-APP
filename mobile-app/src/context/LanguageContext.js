@@ -7,6 +7,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { OTHER_WORK_OPTIONS } from '../constants/otherWorkOptions';
+import { warmHindiTranslationCache } from '../utils/translate';
 import en from '../locales/en';
 import hi from '../locales/hi';
 import { useAuth } from './AuthContext';
@@ -59,6 +61,12 @@ export function LanguageProvider({ children }) {
     });
     return () => { cancelled = true; };
   }, [storageKey]);
+
+  // Preload Hindi translations for long "Other" work lists so Post Job / filters feel instant.
+  useEffect(() => {
+    if (locale !== 'hi') return;
+    warmHindiTranslationCache(OTHER_WORK_OPTIONS);
+  }, [locale]);
 
   const setLocale = useCallback((newLocale) => {
     if (!locales[newLocale]) return;

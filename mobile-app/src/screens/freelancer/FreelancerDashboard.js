@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { freelancerNeedsVerification } from '../../utils/resolveAuthenticatedRoute';
 import { useLanguage } from '../../context/LanguageContext';
 import { spacing, typography } from '../../theme';
 import { useTheme } from '../../context/ThemeContext';
@@ -608,6 +609,14 @@ const FreelancerDashboard = () => {
       console.error('Error refreshing user profile:', error);
     }
   }, [mergeUser]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (freelancerNeedsVerification(user)) {
+        navigation.reset({ index: 0, routes: [{ name: 'Verification' }] });
+      }
+    }, [user, navigation])
+  );
 
   useFocusEffect(
     useCallback(() => {
